@@ -15,8 +15,11 @@
 # ---------------------------------------------------------------------------
 # Einzige Definition der Build-Matrix; PHP_LATEST wird abgeleitet, nicht
 # gepflegt (in den Bestands-Repos war das zweimal unterschiedlich gelöst).
-# Mindestversion ist 8.2 (ab dort ist JIT stabil).
-PHP_VERSIONS ?= 8.2 8.3 8.4
+#
+# 8.2 wurde am 2026-07-25 auf Anweisung des Users gestrichen, 8.5 aufgenommen.
+# Die Reihe ist damit 8.3 / 8.4 / 8.5; PHP_LATEST wird zu 8.5 und treibt den
+# :latest-Tag. Die Bestands-Repos bauten 8.2/8.3/8.4.
+PHP_VERSIONS ?= 8.3 8.4 8.5
 PHP_LATEST   := $(lastword $(PHP_VERSIONS))
 
 # ---------------------------------------------------------------------------

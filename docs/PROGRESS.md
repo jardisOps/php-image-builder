@@ -673,6 +673,79 @@ verbindlich:** jeder OPcache-Test muss diese Frist abwarten und
 
 ---
 
+## Versions-Matrix umgestellt: 8.2 raus, 8.5 rein (Anweisung Rolf, 2026-07-25)
+
+`PHP_VERSIONS` ist jetzt **8.3 / 8.4 / 8.5** (vorher 8.2 / 8.3 / 8.4). `PHP_LATEST`
+leitet daraus 8.5 ab und treibt damit den `:latest`-Tag. Die Umstellung hat zwei
+echte Baufehler aufgedeckt, die beide **nicht** an PHP 8.5 lagen, sondern an
+überflüssigen Bauschritten, die der Bestand mitschleppte.
+
+### Nachweis — base, cli und fpm gegen alle drei Versionen
+
+| | 8.3 | 8.4 | 8.5 |
+|---|---|---|---|
+| `base` baut | ✅ **130 MB** | ✅ 135 MB | ✅ 145 MB |
+| PHP-Fassung | 8.3.32 | 8.4.23 | **8.5.8** |
+| alle 20 Extensions | ✅ | ✅ | ✅ |
+| Zend OPcache aktiv | ✅ | ✅ | ✅ |
+| PECL-Pins aus der `.env` | ✅ alle sechs | ✅ | ✅ |
+| conf.d-Reihenfolge | `00-opcache` → `50-xdebug-defaults` → `99-runtime-config` | ebenso | `50-xdebug-defaults` → `99-runtime-config` (OPcache statisch, s.u.) |
+
+`cli` und `fpm` gegen 8.5 gebaut: `PHP 8.5.8 (cli)`, FPM `healthy` mit 2 Workern
+als `appuser`. hadolint ×3, shellcheck, 33/33 und 27/27 grün.
+
+Die gepinnten PECL-Versionen tragen **unverändert** bis 8.5 — apcu 5.1.28,
+redis 6.3.0, xdebug 3.5.1, pcov 1.0.12, amqp 2.2.0, rdkafka 6.0.5. Eine
+versionsabhängige Pin-Struktur ist nicht nötig. Die Notiz in
+`phpcli/.claude/CLAUDE.md` („PHP 8.5 support planned once PECL extensions have
+stable releases") ist damit überholt.
+
+### B12 — `curl`, `dom` und `mbstring` wurden überflüssig nachgebaut
+
+Alle drei sind im offiziellen `php:X-fpm-alpine` **statisch einkompiliert** —
+geprüft für 8.3 und 8.5: `php -m` meldet sie ohne unser Zutun, und keine der drei
+erzeugt eine `conf.d`-INI. Beide Bestands-Dockerfiles bauten sie dennoch nach;
+das Ergebnis wanderte ungenutzt in den Müll.
+
+Ab **8.5 bricht `dom` den Build**: `ext/dom` bringt dort einen HTML5-Parser mit,
+der lexbor voraussetzt (`fatal error: lexbor/html/parser.h: No such file or
+directory`). Statt `lexbor-dev` als Build-Abhängigkeit nachzurüsten, entfällt der
+überflüssige Bauschritt. `PHP_EXT_CORE` schrumpft von 14 auf **11** Einträge, und
+`PHP_EXT_CORE_SERIAL` samt der `-j1`-Sonderbehandlung entfällt **ganz** — `dom`
+war ihr einziger Eintrag. Nebeneffekt: das 8.3-Image ist 2 MB kleiner als vorher.
+
+### B13 — `docker-php-ext-enable opcache` war immer schon überflüssig
+
+OPcache ist im offiziellen Image bereits aktiv: bis 8.4 über die mitgelieferte
+`docker-php-ext-opcache.ini`, ab 8.5 **statisch einkompiliert** (keine
+`opcache.so` mehr, keine INI, `php -m` meldet `Zend OPcache` trotzdem). Bei 8.5
+bricht der Aufruf deshalb ab: `error: 'opcache' does not exist`. Der Aufruf ist
+ersatzlos gestrichen.
+
+**Folge für den INI-Umbenenner:** `mv docker-php-ext-opcache.ini 00-opcache.ini`
+braucht ab 8.5 eine Bedingung, weil die Datei dort nicht existiert. Damit kehrt
+das `if [ -f ... ]` zurück, das P3-Entscheidung 4 bewusst entfernt hatte — aber
+**nicht** in seiner alten, wortlosen Form: der `else`-Zweig prüft jetzt
+ausdrücklich `extension_loaded("Zend OPcache")` und lässt den Build scheitern,
+wenn OPcache weder als INI noch statisch da ist. P3-Entscheidung 4 gilt insoweit
+korrigiert — die Bedingung war berechtigt, nur ihre Begründung im Bestand war es
+nicht.
+
+Dass die Ladereihenfolge bei 8.5 ohne `00-opcache.ini` stimmt, ist kein Zufall:
+eine statisch einkompilierte zend_extension ist immer vor jeder dynamisch
+geladenen aktiv. Das Problem ist gelöst, nicht verschoben.
+
+### Noch nicht nachgezogen
+
+- **`amd64` ist weiterhin ungeprüft.** Alle Builds liefen nativ auf arm64. Die
+  Matrix über beide Plattformen kommt mit P6/P11.
+- Die apk-Build-Abhängigkeiten `curl-dev` und `oniguruma-dev` werden seit B12
+  vermutlich nicht mehr gebraucht (sie dienten curl bzw. mbstring). Sie liegen in
+  der Build-Stage und wirken sich nicht auf das Ergebnis aus; ein Rückbau wäre
+  Kosmetik und braucht je einen Build-Test. Vorgemerkt für P12.
+
+---
+
 ## Offene Punkte / Risiken
 
 | # | Punkt | Fällig in | Kritikalität |

@@ -63,7 +63,13 @@ COPY src/shared/php-extensions.env /tmp/php-extensions.env
 # PECL_NAMES wird aus PHP_EXT_PECL abgeleitet statt zweitgepflegt (A2.1):
 # `pecl install` will `name-version`, `docker-php-ext-enable` will `name`.
 #
-# SC2086 ist hier kein Versehen, sondern der Zweck: die drei Extension-Listen
+# `opcache` steht bewusst NICHT in der enable-Liste (anders als im Bestand): es
+# ist im offiziellen Image bereits aktiv — bis 8.4 ueber die mitgelieferte
+# docker-php-ext-opcache.ini, ab 8.5 statisch einkompiliert. Bei 8.5 bricht der
+# Aufruf sogar ab ("error: 'opcache' does not exist"), weil es dort keine
+# opcache.so mehr gibt. Geprueft am 2026-07-25 fuer 8.3, 8.4 und 8.5.
+#
+# SC2086 ist hier kein Versehen, sondern der Zweck: die Extension-Listen
 # MUESSEN wortweise aufgespalten werden. Gequotet bekaeme docker-php-ext-install
 # die ganze Liste als EIN Argument und suchte nach einer Extension namens
 # "bcmath curl exif ...". Die Werte stammen aus einer versionierten Datei im
@@ -80,13 +86,12 @@ RUN set -eu; \
     export LC_ALL=C; \
     docker-php-ext-configure gd --with-freetype --with-jpeg; \
     docker-php-ext-install -j"$(nproc)" ${PHP_EXT_CORE}; \
-    docker-php-ext-install -j1 ${PHP_EXT_CORE_SERIAL}; \
     pecl channel-update pecl.php.net; \
     pecl config-set preferred_state stable; \
     yes '' | pecl install -o -f ${PHP_EXT_PECL}; \
     PECL_NAMES=''; \
     for ext in ${PHP_EXT_PECL}; do PECL_NAMES="${PECL_NAMES} ${ext%-*}"; done; \
-    docker-php-ext-enable ${PECL_NAMES} opcache
+    docker-php-ext-enable ${PECL_NAMES}
 
 # ---------------------------------------------------------------------------
 # Runtime-Stage
@@ -174,12 +179,21 @@ COPY --from=build /usr/local/lib/php/extensions/ /usr/local/lib/php/extensions/
 COPY --from=build /usr/local/etc/php/conf.d/     /usr/local/etc/php/conf.d/
 
 # OPcache muss als zend_extension VOR Xdebug laden. conf.d wird alphabetisch
-# gelesen, deshalb bekommt die Datei ein 00-Praefix. Das `if [ -f ... ]` des
-# Bestands entfaellt: die Datei ist im offiziellen Image nachweislich vorhanden
-# (verifiziert 2026-07-25), und fiele sie je weg, soll der Build sichtbar
-# scheitern statt still ohne OPcache-Vorrang zu bauen.
-RUN mv /usr/local/etc/php/conf.d/docker-php-ext-opcache.ini \
-       /usr/local/etc/php/conf.d/00-opcache.ini
+# gelesen, deshalb bekommt die Datei ein 00-Praefix.
+#
+# Ab PHP 8.5 gibt es diese Datei nicht mehr: OPcache ist dort statisch
+# einkompiliert und damit ohnehin vor jeder dynamisch geladenen zend_extension
+# aktiv — die Ladereihenfolge ist dann von selbst richtig. Der else-Zweig laesst
+# das nicht stillschweigend durchgehen, sondern belegt es: fehlt die INI UND ist
+# OPcache nicht geladen, bricht der Build ab. Das ist der Unterschied zum
+# `if [ -f ... ]` des Bestands, das beide Faelle wortlos verschluckte.
+RUN set -eux; \
+    if [ -f /usr/local/etc/php/conf.d/docker-php-ext-opcache.ini ]; then \
+        mv /usr/local/etc/php/conf.d/docker-php-ext-opcache.ini \
+           /usr/local/etc/php/conf.d/00-opcache.ini; \
+    else \
+        php -r 'exit(extension_loaded("Zend OPcache") ? 0 : 1);'; \
+    fi
 
 COPY src/shared/php-ini/50-xdebug-defaults.ini /usr/local/etc/php/conf.d/50-xdebug-defaults.ini
 
