@@ -10,6 +10,35 @@ Vorläuferdokumente unter `devops/image/`.
 
 ---
 
+## Wiedereinstieg — Stand am Abend des 2026-07-25
+
+**Noch offen sind drei Phasen: P10, P11, P12.** Acht sind abgeschlossen (P1–P6,
+P8, P9), P7 ist gestrichen (E11) und die Nummer bleibt frei.
+
+| Punkt | Stand |
+|---|---|
+| Arbeitsbaum | **sauber**, alles committet (14 Commits, kein Remote, nie gepusht) |
+| Prüflauf | `make test-all` war zuletzt **grün**, Exit 0, für PHP 8.3 |
+| Test-Images | `php-image-builder-test/phpcli:8.3` und `…/phpfpm:8.3` liegen **lokal** — `make test-all` startet damit ohne Neubau |
+| Aufgeräumt | keine Testcontainer, -volumes oder -netze übrig; `headgent/*` unberührt |
+| Wartet auf Entscheidung | **O6** (zwei Einzeiler an der nginx-Vorlage, B24/B25) — nicht blockierend |
+| Wartet auf Freigabe | **N6** (erster Push, Tag-Strategie), kein GitHub-Repo, kein Remote, keine Archivierung |
+
+Einstieg morgen: `docs/PROMPT-NEUER-KONTEXT.md` ist bereits auf **P10** umgestellt
+und in einen neuen Kontext kopierbar. Kurzform, falls es ohne gehen soll:
+
+```sh
+cd /Users/Rolf/Development/headgent/devops/docker/php-image-builder
+make test-all          # Ausgangslage bestätigen (grün)
+make help              # Bedienoberfläche
+```
+
+P10 liefert `compose/demo-stack.yml` (mysql/mariadb + `fpm` + offizielles nginx
+mit der P9-Vorlage). Den Aufbau fährt `support/tests/check-nginx-template.sh`
+schon einmal vor — Netz, gemeinsames `/app`, fpm vor nginx (Befund **B23**).
+
+---
+
 ## Die vier Dokumente — in dieser Reihenfolge lesen
 
 | Datei | Inhalt | Vorrang |
@@ -26,11 +55,12 @@ vollständig mit Fundstellen.
 
 ## Stand
 
-**Dreizehn Commits, 35 Dateien.** Das Repo hat **kein Remote** und ist nie
+**Vierzehn Commits, 35 Dateien.** Das Repo hat **kein Remote** und ist nie
 gepusht worden.
 
 ```
-(HEAD)   docs: update commit count in the handover
+(HEAD)   docs: Wiedereinstiegs-Block und Phasenzaehlung
+c455ca4  docs: update commit count in the handover
 cbc3d62  docs: Code-Review-Befunde zu P9 (B24, B25, offener Punkt O6)
 b8a4405  docs: hand over at end of P9
 d4e89e6  feat: nginx-Vorlage als Asset, vollstaendig parametrisiert (P9)
