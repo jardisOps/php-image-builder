@@ -26,11 +26,13 @@ vollständig mit Fundstellen.
 
 ## Stand
 
-**Elf Commits, 35 Dateien.** Das Repo hat **kein Remote** und ist nie gepusht
-worden.
+**Dreizehn Commits, 35 Dateien.** Das Repo hat **kein Remote** und ist nie
+gepusht worden.
 
 ```
-(HEAD)   docs: hand over at end of P9
+(HEAD)   docs: update commit count in the handover
+cbc3d62  docs: Code-Review-Befunde zu P9 (B24, B25, offener Punkt O6)
+b8a4405  docs: hand over at end of P9
 d4e89e6  feat: nginx-Vorlage als Asset, vollstaendig parametrisiert (P9)
 9d2f171  docs: hand over at end of P8
 a473405  feat: test.mk — ein Prueflauf loest die Handarbeit ab (P8)
