@@ -1,0 +1,190 @@
+###############################################################################
+# nginx-vhost fuer PHP-FPM — Vorlage fuer das UNVERAENDERTE offizielle Image
+#
+# nginx ist kein Build-Target dieses Repos (E9). Diese Datei ist ein
+# versioniertes Asset: sie wird vom offiziellen Image ueber dessen eingebaute
+# Substitution verarbeitet (/docker-entrypoint.d/20-envsubst-on-templates.sh
+# ersetzt jeden Platzhalter aus der Umgebung und schreibt das Ergebnis nach
+# /etc/nginx/conf.d/). Kein eigener Entrypoint, kein eigener Build (A6.3).
+#
+# Einbindung (Pfade wie aus compose/demo-stack.yml, P10):
+#
+#   services:
+#     webserver:
+#       image: nginx:1.28-alpine                   # NGINX_VERSION der .env
+#       env_file:
+#         - ./nginx/nginx-defaults.env               # Defaults (A6.4)
+#       environment:
+#         HOST: example.com                          # schlaegt die Defaults
+#       volumes:
+#         - ./nginx/templates:/etc/nginx/templates:ro
+#         - ../:/app:ro                              # nginx liest nur (E9)
+#
+# Alle Variablen, ihre Defaults und ihre Wirkung stehen in nginx-defaults.env.
+# envsubst kennt keine Defaults und keine Validierung — eine Variable, die in
+# der Umgebung fehlt, bleibt unersetzt stehen und laesst nginx beim Start
+# sichtbar scheitern. Deshalb ist die Defaults-Datei Teil der Auslieferung.
+# (In dieser Datei steht deshalb auch in Kommentaren kein Platzhalter, den die
+# Substitution nicht aufloesen kann — check-nginx-template.sh prueft das.)
+###############################################################################
+
+###############################################################################
+# HTTPS-Annahme — ein Schalter (A6.2)
+#
+# Der Bestand setzte HTTPS und REQUEST_SCHEME fest auf https, gemuenzt auf
+# TLS-Terminierung durch Traefik. Ohne vorgelagerten Proxy ist das falsch: die
+# Anwendung baut https-URLs, die niemand bedienen kann. Beide fastcgi-Werte
+# folgen jetzt aus REQUEST_SCHEME (http|https) und koennen deshalb nicht
+# auseinanderlaufen.
+#
+#   http   HTTPS wird gar nicht uebergeben (if_not_empty) — genau das tut das
+#          offizielle fastcgi_params ohne TLS auch.
+#   https  HTTPS=on, wie hinter einem TLS-Proxy erforderlich.
+###############################################################################
+map "${REQUEST_SCHEME}" $fastcgi_https {
+    "https"  on;
+    default  "";
+}
+
+server {
+    listen 80 default_server;
+    listen [::]:80 default_server;
+
+    server_name ${HOST};
+
+    ###############
+    # Basis-Setup #
+    ###############
+    root   ${APP_ROOT}${DOCUMENT_ROOT};
+    index  ${INDEX_FILE} index.html;
+    charset UTF-8;
+
+    client_max_body_size ${CLIENT_MAX_BODY_SIZE};
+    send_timeout         600;
+    keepalive_timeout    70;
+    server_tokens        off;
+
+    ########
+    # Gzip #
+    ########
+    gzip on;
+    gzip_comp_level 6;
+    gzip_min_length 1000;
+    gzip_proxied any;
+    gzip_vary on;
+    gzip_types
+        application/javascript
+        application/json
+        application/xml
+        application/rss+xml
+        application/atom+xml
+        text/css
+        text/xml
+        text/javascript
+        text/plain
+        image/svg+xml;
+
+    #################
+    # Security-Header
+    #################
+    add_header Referrer-Policy           "no-referrer-when-downgrade";
+    add_header X-XSS-Protection          "1; mode=block";
+    add_header X-Content-Type-Options    "nosniff";
+    add_header X-Frame-Options           "SAMEORIGIN";
+    add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
+    add_header Content-Security-Policy   "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'";
+
+    ##############################
+    # Real-IP (Docker / Traefik) #
+    ##############################
+    real_ip_header X-Forwarded-For;
+    set_real_ip_from 172.16.0.0/12;  # Docker-Netzwerk
+    set_real_ip_from 10.0.0.0/8;     # Weitere private Netze
+    real_ip_recursive on;
+
+    ##############################
+    # Static Assets & verborgene #
+    ##############################
+    location ~* \.(?:css|js|gif|jpe?g|png|webp|svg|ico|woff2?|woff|ttf)$ {
+        expires 1y;
+        add_header Cache-Control "public";
+        try_files $uri =404;
+    }
+
+    location ~ /\.(ht|svn|git|env) {
+        deny all;
+        return 404;
+    }
+
+    ###############################################################
+    # 1. Genereller Request-Eingang → Front-Controller /index.php #
+    ###############################################################
+    location / {
+        # 1. existiert Datei/Ordner? → direkt ausliefern
+        # 2. sonst interner Redirect auf  /index.php/<original-Pfad>
+        try_files $uri $uri/ /${INDEX_FILE}?$args;
+    }
+
+    ################################################################
+    # 2. Spezielle Location: /index.php + alles dahinterliegende   #
+    #    – sorgt für korrektes $_SERVER['PATH_INFO']               #
+    ################################################################
+    location ~ ^/${INDEX_FILE}(/.*)?$ {
+        include fastcgi_params;
+        fastcgi_pass   ${FASTCGI_UPSTREAM}:${PHP_PORT};
+
+        fastcgi_param  SCRIPT_FILENAME $realpath_root/${INDEX_FILE};
+        fastcgi_param  DOCUMENT_ROOT   $realpath_root;
+
+        # entscheidend
+        fastcgi_param  PATH_INFO       $1;
+        fastcgi_param  PATH_TRANSLATED $document_root$1;
+
+        fastcgi_param  HTTPS                  $fastcgi_https if_not_empty;
+        fastcgi_param  REQUEST_SCHEME         ${REQUEST_SCHEME};
+        fastcgi_param  HTTP_X_FORWARDED_PROTO ${REQUEST_SCHEME};
+        fastcgi_param  HTTP_X_FORWARDED_FOR   $proxy_add_x_forwarded_for;
+        fastcgi_param  HTTP_X_REAL_IP         $remote_addr;
+
+        fastcgi_read_timeout    ${FASTCGI_READ_TIMEOUT};
+        fastcgi_send_timeout    ${FASTCGI_SEND_TIMEOUT};
+        fastcgi_connect_timeout ${FASTCGI_CONNECT_TIMEOUT};
+
+        fastcgi_buffer_size      128k;
+        fastcgi_buffers          4 256k;
+        fastcgi_busy_buffers_size 256k;
+    }
+
+    ###############################################################
+    # 3. Fallback: wirkliche *.php-Dateien (z. B. /info.php)       #
+    ###############################################################
+    location ~ \.php$ {
+        include fastcgi_params;
+        fastcgi_pass   ${FASTCGI_UPSTREAM}:${PHP_PORT};
+        fastcgi_index  ${INDEX_FILE};
+
+        fastcgi_param  SCRIPT_FILENAME $realpath_root$fastcgi_script_name;
+        fastcgi_param  DOCUMENT_ROOT   $realpath_root;
+
+        fastcgi_param  HTTPS                  $fastcgi_https if_not_empty;
+        fastcgi_param  REQUEST_SCHEME         ${REQUEST_SCHEME};
+        fastcgi_param  HTTP_X_FORWARDED_PROTO ${REQUEST_SCHEME};
+        fastcgi_param  HTTP_X_FORWARDED_FOR   $proxy_add_x_forwarded_for;
+        fastcgi_param  HTTP_X_REAL_IP         $remote_addr;
+
+        fastcgi_read_timeout    ${FASTCGI_READ_TIMEOUT};
+        fastcgi_send_timeout    ${FASTCGI_SEND_TIMEOUT};
+        fastcgi_connect_timeout ${FASTCGI_CONNECT_TIMEOUT};
+
+        fastcgi_buffer_size      128k;
+        fastcgi_buffers          4 256k;
+        fastcgi_busy_buffers_size 256k;
+    }
+
+    ##############################
+    # Versteckte Dateien sperren #
+    ##############################
+    location ~ /\.(?!well-known).* {
+        deny all;
+    }
+}

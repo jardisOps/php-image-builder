@@ -97,6 +97,10 @@ test-uid: test-images ## UID/GID gegen echte Docker-Volumes (AK4, soweit ohne Li
 	@bash $(TESTS_DIR)/check-uid-image.sh $(CLI_TEST_IMAGE)
 .PHONY: test-uid
 
+test-nginx: test-images ## nginx-Vorlage gegen das UNVERAENDERTE offizielle Image (A6/AK7)
+	@bash $(TESTS_DIR)/check-nginx-template.sh $(FPM_TEST_IMAGE) nginx:$(NGINX_VERSION)-alpine
+.PHONY: test-nginx
+
 test-boot: test-images ## cli und fpm starten; fpm wird healthy (FastCGI-Ping)
 	@echo ">>> Start von cli und fpm"
 	@docker run --rm --entrypoint php $(CLI_TEST_IMAGE) --version >/dev/null \
@@ -122,7 +126,7 @@ test-boot: test-images ## cli und fpm starten; fpm wird healthy (FastCGI-Ping)
 # ---------------------------------------------------------------------------
 # Reihenfolge nach Laufzeit: was ohne Image auskommt, laeuft zuerst und faellt
 # damit frueh durch, statt erst nach einem Build.
-test-all: test-lint test-phpini test-user test-boot test-extensions test-app-env test-uid test-opcache ## Alle Pruefungen
+test-all: test-lint test-phpini test-user test-boot test-extensions test-app-env test-uid test-opcache test-nginx ## Alle Pruefungen
 	@echo ""
 	@echo "✅ Alle Pruefungen bestanden — PHP $(PHP_VERSION)"
 .PHONY: test-all
