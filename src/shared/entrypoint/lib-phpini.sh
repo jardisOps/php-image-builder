@@ -227,13 +227,30 @@ enforce_pcov_xdebug_exclusion() {
 # Wert waere technisch wirkungslos, und ihn stehen zu lassen wuerde genau die
 # Warnung zurueckbringen, die A10.3 beseitigt. Der Vorgang wird gemeldet.
 enforce_jit_policy() {
-    xdebug_is_active || return 0
+    # Der Grund ist nicht "Xdebug", sondern "eine Extension uebernimmt
+    # zend_execute_ex()". Das trifft auf Xdebug UND auf PCOV zu — PHP schaltet
+    # JIT in beiden Faellen selbst ab und warnt bei jedem Aufruf.
+    #
+    # Dass PCOV dazugehoert, kostete P2 einen blinden Fleck: die JIT-Automatik
+    # kannte nur Xdebug, und ausgerechnet das test-Profil (XDEBUG_MODE=off,
+    # PCOV_ENABLED=1, JIT=1254) warnte damit bei JEDEM Aufruf — genau die
+    # Warnung, die A10.3/L-A beseitigen soll. Aufgedeckt vom P8-Test am
+    # gebauten Image (Befund B18); im Prueffall der Bibliothek war es nicht
+    # sichtbar, weil dort kein PHP laeuft.
+    _jit_blocker=''
+    if xdebug_is_active; then
+        _jit_blocker="Xdebug (XDEBUG_MODE=$XDEBUG_MODE)"
+    elif [ "$PCOV_ENABLED" = '1' ]; then
+        _jit_blocker='PCOV (PCOV_ENABLED=1)'
+    else
+        return 0
+    fi
 
     case "$OPCACHE_JIT" in
         off|disable) return 0 ;;
     esac
 
-    log_info "Xdebug ist aktiv (XDEBUG_MODE=$XDEBUG_MODE) — opcache.jit wird von '$OPCACHE_JIT' auf 'off' gesetzt. PHP wuerde JIT sonst selbst deaktivieren und bei jedem Aufruf warnen."
+    log_info "$_jit_blocker ist aktiv — opcache.jit wird von '$OPCACHE_JIT' auf 'off' gesetzt. PHP wuerde JIT sonst selbst deaktivieren und bei jedem Aufruf warnen."
     OPCACHE_JIT='off'
     OPCACHE_JIT_BUFFER_SIZE='0'
 }

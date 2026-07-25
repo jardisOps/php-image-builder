@@ -96,6 +96,8 @@ check    "appuser NICHT umnummeriert" "$(id -u appuser)" "1000"
 
 echo "=== Fall 5: Container von aussen mit --user gestartet (A4.4) ==="
 reset_ids; chown 1234:1234 /app
+# SC2016 wie oben: Quelltext fuer die Subshell, bewusst unexpandiert.
+# shellcheck disable=SC2016
 O=$(su-exec 4711:4711 sh -c '
   log_info() { printf "INFO %s\n" "$1"; }
   log_warn() { printf "WARN %s\n" "$1"; }

@@ -1,7 +1,7 @@
 # Handover — Konsolidierung des PHP-Docker-Image-Builders
 
-**Stand:** 2026-07-25, Ende der dritten Umsetzungs-Session. **P1–P6 abgeschlossen
-und committet**, **P7 ist entfallen** (E11) — nächste Phase ist **P8**.
+**Stand:** 2026-07-25, Ende der dritten Umsetzungs-Session. **P1–P6 und P8
+abgeschlossen und committet**, **P7 ist entfallen** (E11) — nächste Phase ist **P9**.
 
 Arbeitsverzeichnis: `/Users/Rolf/Development/headgent/devops/docker/php-image-builder/`
 Projekt- und künftiger Repo-Name: **`php-image-builder`**.
@@ -14,7 +14,7 @@ Vorläuferdokumente unter `devops/image/`.
 
 | Datei | Inhalt | Vorrang |
 |---|---|---|
-| `docs/PROGRESS.md` | **Maßgeblich.** Laufender Zustand: P1–P6 mit Nachweisen, alle Umsetzungsentscheidungen, Befunde B1–B16, offene Punkte, nächste Phase | geht bei Widersprüchen vor |
+| `docs/PROGRESS.md` | **Maßgeblich.** Laufender Zustand: P1–P6 und P8 mit Nachweisen, alle Umsetzungsentscheidungen, Befunde B1–B20, offene Punkte, nächste Phase | geht bei Widersprüchen vor |
 | `docs/PRD.md` | Anforderungen A1–A10, Entscheidungen E1–**E11**, Nicht-Ziele N1–**N8**, Akzeptanzkriterien AK1–AK15, vollständiger Ist-Zustand (Drift D1–D16, UID-Defekte U1–U3, Xdebug/JIT-Lücken L-A–L-G) mit Datei- und Zeilenangaben | bestätigt |
 | `docs/PLAN.md` | Bauform, Zielstruktur, 12 Phasen mit Abhängigkeiten | freigegeben |
 | `docs/HANDOVER.md` | diese Datei — Vorgeschichte und Einstieg | — |
@@ -48,8 +48,9 @@ ea450dc  feat: docker-bake.hcl drives base/cli/fpm in one run (P6)
 | P5 `fpm`-Target | ✅ |
 | P6 `docker-bake.hcl` + Make-Targets | ✅ |
 | ~~P7 `frankenphp`-Target~~ | **entfallen (E11)** — Nummer bleibt frei, P8–P12 rücken nicht nach |
-| **P8 Tests** | **← hier weiter** (hängt jetzt an P6) |
-| P9–P12 | offen |
+| P8 Tests | ✅ `make test-all` grün |
+| **P9 nginx-Config als Asset** | **← hier weiter** (hängt nur an P1) |
+| P10–P12 | offen |
 
 Gebaut und geprüft: `base`, `cli` und `fpm` gegen PHP **8.3, 8.4 und 8.5** — in
 **einem** `bake`-Lauf, nativ auf arm64. **amd64 ist seit P6 belegt** (PHP 8.3,
@@ -73,30 +74,29 @@ entsprechend Plattenplatz (Befund B15).
 
 ---
 
-## Die vier Prüfungen, die grün bleiben müssen
+## Der Prüflauf, der grün bleiben muss
 
-Aus dem Repo-Root. Sie sind in P8 in `test.mk` einzubinden.
+Seit P8 ein Aufruf aus dem Repo-Root — die Handarbeit der Phasen P2–P6 ist damit
+abgelöst:
 
 ```sh
-# hadolint — für alle drei Dockerfiles, je Exit 0
-for f in src/base/Dockerfile src/cli/Dockerfile src/fpm/Dockerfile; do
-  docker run --rm -i -v "$PWD/.hadolint.yaml:/.hadolint.yaml:ro" \
-    hadolint/hadolint:latest hadolint --config /.hadolint.yaml - < "$f"; done
-
-# shellcheck — alle vier Shell-Dateien
-docker run --rm -v "$PWD:/mnt" -w /mnt koalaman/shellcheck:stable \
-  --external-sources --source-path=src/shared/entrypoint \
-  src/shared/entrypoint/*.sh src/shared/php-extensions.env src/fpm/fpm-pool.sh
-
-bash support/tests/check-phpini.sh          # 33/33
-docker run --rm --platform linux/amd64 \
-  -v "$PWD/src/shared/entrypoint/lib-user.sh:/lib-user.sh:ro" \
-  -v "$PWD/support/tests/check-user-alignment.sh:/check.sh:ro" \
-  alpine:3.23 sh /check.sh                  # 27/27
+make test-all          # baut Test-Images fuer PHP_VERSION und prueft alles
 ```
 
-Das Ad-hoc-Build-Skript aus P3/P4 ist mit P6 **entfallen** — `make build` löst es
-ab. Die damit erzeugten `php-image-builder-*:test`-Images sind entfernt.
+| Target | Umfang |
+|---|---|
+| `test-lint` | hadolint ×3, shellcheck über 11 Shell-Dateien |
+| `test-phpini` | 34 Fälle gegen `lib-phpini.sh`, ohne Container |
+| `test-user` | 27 Fälle gegen `lib-user.sh`, in `alpine:3.23` |
+| `test-boot` | cli startet, fpm wird `healthy` |
+| `test-extensions` | 21 Extensions in cli **und** fpm |
+| `test-app-env` | 15 Fälle: AK13, AK14/L-F, A10.2, A10.5, A10.7 |
+| `test-uid` | 5 Fälle gegen echte Docker-Volumes (AK4) |
+| `test-opcache` | 14 Fälle inkl. **AK15** im laufenden FPM |
+
+Die Test-Images entstehen unter `php-image-builder-test/` und überschreiben die
+lokalen `headgent/*`-Images nicht. Eine andere Version prüfen:
+`PHP_VERSION=8.5 make test-all`.
 
 ---
 
@@ -120,12 +120,18 @@ ab. Die damit erzeugten `php-image-builder-*:test`-Images sind entfernt.
 - **B12/B13 — zwei überflüssige Bauschritte im Bestand**: `curl`/`dom`/`mbstring`
   wurden nachgebaut, obwohl einkompiliert; `docker-php-ext-enable opcache` war
   immer ein No-op. Beide brachen erst bei 8.5 auf.
-- **B11 — Testfallstrick `opcache.file_update_protection` (2 s).** Jeder
-  OPcache-Test muss die Frist abwarten und `num_cached_scripts`/`hits` mitprüfen,
-  sonst misst er nichts. **Verbindlich für P8.**
-- **B16 — zweiter Testfallstrick, gleiche Klasse:** unter Rosetta-Emulation heißt
-  ein FPM-Worker nicht `php-fpm: pool www`. Ein Test, der darauf grept, misst auf
-  emulierter Fremdarchitektur nichts — über Benutzer und `/ping` prüfen.
+- **B18 — echter Defekt, gefunden von den P8-Tests: PCOV blockiert JIT genauso
+  wie Xdebug.** Die JIT-Automatik kannte nur Xdebug, also warnte ausgerechnet das
+  `test`-Profil bei jedem Aufruf („JIT is incompatible…") — L-A wortwörtlich, nur
+  mit anderer Extension. In `lib-phpini.sh` behoben.
+- **Vier Testfallstricke derselben Klasse „der Test misst nichts und meldet
+  trotzdem grün".** Alle vier haben in diesem Vorhaben schon einmal zugeschlagen:
+  **B11** (`opcache.file_update_protection`, 2 s abwarten und
+  `num_cached_scripts`/`hits` mitprüfen), **B16** (unter Emulation trägt ein
+  FPM-Worker keinen `pool www`-Titel), **B19** (`--entrypoint php` umgeht den
+  Entrypoint — dann gibt es keine Laufzeit-INI und man misst Extension-Defaults),
+  **B20** (ein leeres Named Volume bekommt beim ersten Mount die Ownership des
+  Image-Verzeichnisses zurück). B20 ist für P11 relevant.
 - **B15 — `bake` baut die Matrix parallel.** `make build-all` übersetzt drei
   PHP-Versionen gleichzeitig; auf einer vollen Docker-VM bricht das mit
   „No space left on device" ab. Kein Designfehler, eine Betriebsbedingung.

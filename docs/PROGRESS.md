@@ -21,7 +21,7 @@ Repo und sind mitversioniert. Bestandscode unverändert unter
 - [x] **P5  `fpm`-Target** — abgeschlossen 2026-07-25
 - [x] **P6  `docker-bake.hcl` + Make-Targets** — abgeschlossen 2026-07-25
 - [~] ~~P7  `frankenphp`-Target~~ — **entfallen 2026-07-25 (E11)**
-- [ ] P8  Tests
+- [x] **P8  Tests** — abgeschlossen 2026-07-25
 - [ ] P9  nginx-Config als Asset
 - [ ] P10 Demo-Stack
 - [ ] P11 CI-Pipeline + Härtung
@@ -979,6 +979,126 @@ ausgelagert.
 
 ---
 
+## P8 — abgeschlossen
+
+### Geliefert
+
+| Datei | Inhalt |
+|---|---|
+| `support/makefiles/test.mk` | **neu.** Neun Targets; `make test-all` ist der eine Einstieg |
+| `support/tests/check-extensions.sh` | **neu.** Sollmenge aus `php-extensions.env` abgeleitet, ein Containerstart |
+| `support/tests/check-app-env.sh` | **neu.** AK13/AK14/A10.2/A10.5/A10.7 am gebauten Image |
+| `support/tests/check-opcache.sh` | **neu.** OPcache/JIT je Profil **und AK15** im laufenden FPM |
+| `support/tests/check-uid-image.sh` | **neu.** AK4 gegen echte Docker-Volumes |
+| `support/tests/check-phpini.sh` | **geändert:** Pfad abgeleitet (B17), Erwartung im test-Profil korrigiert (B18), shellcheck-Ausnahmen begründet |
+| `support/tests/check-user-alignment.sh` | **geändert:** shellcheck-Ausnahme begründet |
+| `src/shared/entrypoint/lib-phpini.sh` | **geändert:** JIT-Automatik deckt jetzt auch PCOV ab (**Befund B18**) |
+| `Makefile` | **geändert:** `include` von `test.mk` |
+
+### Akzeptanz — nachgewiesen
+
+`make test-all` läuft mit **Exit 0** durch. Damit ist die Handarbeit der Phasen
+P2–P6 abgelöst: die „vier Prüfungen" sind jetzt drei Make-Targets, und alles
+Weitere kommt dazu.
+
+| Target | Ergebnis |
+|---|---|
+| `test-lint` | hadolint ×3 Exit 0, shellcheck über **11** Shell-Dateien Exit 0 |
+| `test-phpini` | **34/34** (war 33 — eine Zusicherung kam mit B18 dazu) |
+| `test-user` | **27/27** |
+| `test-boot` | cli startet, fpm wird `healthy` (FastCGI-Ping) |
+| `test-extensions` | **21/21** in cli **und** fpm |
+| `test-app-env` | **15/15** |
+| `test-uid` | **5/5** |
+| `test-opcache` | **14/14**, davon 4 für AK15 |
+
+**AK15 ist damit automatisiert** — bisher nur von Hand erbracht (P5). Der Test
+belegt beide Richtungen und prüft die B11-Gegenprobe mit: `dev` liefert nach der
+Dateiänderung FASSUNG-2, `prod` weiterhin FASSUNG-1, und in **beiden** Fällen ist
+nachgewiesen, dass überhaupt etwas gecacht war und getroffen wurde.
+
+**AK4 ist so weit erbracht, wie es ohne Linux-Host geht** — und das ist mehr als
+erwartet: alle drei von `PLAN.md` geforderten Bedingungen sind am echten Image
+belegt, weil ein Named Volume in der Docker-VM echte Unix-Eigentümer trägt.
+Offen bleibt allein der Bind-Mount von einem Linux-Host (P11).
+
+### Umsetzungsentscheidungen
+
+1. **Make orchestriert, Skripte behaupten.** Im Bestand standen die Zusicherungen
+   als PHP-Einzeiler mitten im Makefile, mit `\$$`-Maskierung über mehrere Ebenen
+   — unlesbar und außerhalb von `make` nicht ausführbar. Die Skripte liegen in
+   `support/tests/` (das Muster steht seit P2) und laufen auch einzeln.
+2. **Test-Images über dieselbe `docker-bake.hcl`**, nur mit `DOCKER_HUB` auf ein
+   Testpräfix. Ein Testlauf überschreibt damit **nie** die lokal liegenden
+   `headgent/*`-Images und prüft trotzdem exakt das Artefakt, das gepusht würde.
+3. **Eine PHP-Version je Lauf.** `build-all` übersetzt drei Versionen gleichzeitig
+   (B15) — das soll ein Testlauf nicht nebenbei auslösen. Die Matrix fährt die CI
+   (P11), dort baut ohnehin ein Job je Version.
+4. **Die Extension-Sollmenge wird abgeleitet, nicht zweitgepflegt.** Genau diese
+   Doppelpflege war im Bestand die Ursache von D1: `phpcli/test.mk` listete
+   `pcntl`, `phpfpm/test.mk` nicht. Dazu kommt eine **eigene** Zusicherung für
+   `curl`, `dom` und `mbstring`: die werden seit B12 bewusst nicht mehr gebaut,
+   müssen aber vorhanden sein — fiele eine im Basis-Image weg, merkte es sonst
+   niemand.
+5. **`check-app-env.sh` baut die 33 Fälle nicht nach.** `check-phpini.sh` prüft
+   die Logik in Isolation, das Image-Skript nur, was allein das gebaute Image
+   zeigen kann. Beides zu führen wäre Doppelpflege.
+6. **Die shellcheck-Ausnahmen stehen inline mit Begründung**, nicht in einer
+   Konfiguration — dieselbe Linie wie P3-Entscheidung 7 und P4-Entscheidung 2.
+
+### Befunde aus P8
+
+**B17 — `check-phpini.sh` trug einen absoluten Pfad auf genau einen Rechner.**
+`LIB=/Users/Rolf/Development/.../lib-phpini.sh`. Der Test wäre auf jedem anderen
+System und auf dem CI-Runner (P11) gescheitert — und zwar mit einer Meldung, die
+nach kaputter Bibliothek ausgesehen hätte, nicht nach kaputtem Testaufbau. Der
+Pfad wird jetzt aus dem Ort der Datei abgeleitet.
+
+**B18 — echter Defekt: PCOV blockiert JIT genauso wie Xdebug, die Automatik
+kannte nur Xdebug.** Der Grund für A10.3/L-A ist nicht „Xdebug", sondern „eine
+Extension übernimmt `zend_execute_ex()`" — und das tut PCOV auch. Folge: das
+**`test`-Profil** (`XDEBUG_MODE=off`, `PCOV_ENABLED=1`, `JIT=1254`) warnte bei
+**jedem** Aufruf:
+
+```
+Warning: JIT is incompatible with third party extensions that override
+zend_execute_ex(). JIT disabled. in Unknown on line 0
+```
+
+Also ausgerechnet in dem Profil, das für Testläufe gedacht ist. Das ist L-A
+wortwörtlich, nur mit einer anderen Extension — im Prüffall der Bibliothek war es
+nicht sichtbar, weil dort kein PHP läuft. `enforce_jit_policy` deckt jetzt beide
+ab und benennt im Log, welche Extension JIT blockiert. Die Erwartung in
+`check-phpini.sh` folgt dem korrigierten Verhalten (mit Kommentar an der
+Fundstelle), nicht umgekehrt.
+
+**B19 — dritter Fall der Klasse „der Test misst nichts": `--entrypoint` umgeht die
+Prüfung.** `docker run --entrypoint php <image> -r ...` ersetzt den Entrypoint —
+`lib-phpini.sh` läuft nie, es entsteht keine Laufzeit-INI, und der Test liest die
+Defaults der Extensions statt unserer Profile. Beim ersten Lauf meldete
+`check-app-env.sh` deshalb 12 Fehlschläge, die alle keine waren: `xdebug.mode`
+kam als `develop` (Xdebugs Default), `pcov.enabled` als `1`. Richtig ist, das
+Kommando **als Argument** zu übergeben: `docker run <image> php -r ...`. Der
+Entrypoint protokolliert nach stderr, `2>/dev/null` genügt für einen sauberen
+Messwert. Reihe mit B11 und B16.
+
+**B20 — ein leeres Named Volume bekommt beim ersten Mount die Eigentümer des
+Image-Verzeichnisses.** Mountet man ein leeres Volume auf einen Pfad, den das
+Image kennt, kopiert Docker dessen Inhalt samt Ownership hinein — und überschreibt
+damit genau die Eigentümerangabe, die ein UID-Test vorgeben will. Der Test meldete
+dreimal `1000:1000` und hätte, andersherum erwartet, eine Angleichung „belegt",
+die nie stattfand. Abhilfe: eine Markierungsdatei macht das Volume nicht-leer,
+dann lässt Docker es unangetastet. **Für P11 relevant**, wenn dort dieselben
+Fälle auf dem Linux-Runner laufen.
+
+**Zwei PHP-Eigenarten, die eine Zusicherung sonst falsch machen** (in den Skripten
+kommentiert): `ini_get('display_errors')` liefert `"1"` für On und einen
+**Leerstring** für Off; `ini_get('xdebug.mode')` liefert bei `off` ebenfalls einen
+Leerstring — maßgeblich ist dort die Umgebungsvariable, der Xdebug 3 ohnehin
+Vorrang gibt (A10.5).
+
+---
+
 ## Offene Punkte / Risiken
 
 | # | Punkt | Fällig in | Kritikalität |
@@ -1079,26 +1199,19 @@ UID/GID-Neubau (A4/E7 gegen U1–U3). **L-B ist mit dem `test`-Profil erledigt:*
 
 ## Nächste Phase
 
-**P8 — Tests.** Liefert `support/makefiles/test.mk`. Hängt seit E11 an **P6**,
-nicht mehr an P7. Akzeptanz nach Plan: `make test-all` grün; der UID-Test deckt
-Host-UID ≠ 1000, belegte Ziel-GID und frisches Named Volume ab.
+**P9 — nginx-Config als Asset.** Liefert
+`compose/nginx/templates/default.conf.template`. Hängt nur an P1.
 
-Einzubinden sind die vier Prüfungen, die seit P2/P3 von Hand laufen (hadolint ×3,
-shellcheck über vier Shell-Dateien, 33 `APP_ENV`-Fälle, 27 UID-Fälle) — die
-Aufrufe stehen in `docs/HANDOVER.md`.
+Akzeptanz nach Plan: vollständig parametrisiert (A6.1–A6.2) und lauffähig mit dem
+**unveränderten** offiziellen nginx-Image über dessen eingebaute Substitution
+(`NGINX_ENVSUBST_TEMPLATE_DIR`), ohne eigenen Entrypoint und ohne eigenen Build
+(A6.3). Alle Variablen brauchen dokumentierte Defaults (A6.4).
 
-**Zwei Testfallstricke sind verbindlich**, beide derselben Fehlerklasse „der Test
-misst nichts und meldet trotzdem grün":
+Der Ist-Zustand ist im PRD Abschnitt 1.3 mit Fundstellen belegt — hartkodiert
+sind heute der Upstream-Host `app:`, `client_max_body_size 100m`, sämtliche
+fastcgi-Timeouts und die feste HTTPS-Annahme (`fastcgi_param HTTPS on`,
+`REQUEST_SCHEME https`). Letztere muss schaltbar werden, sonst ist der Betrieb
+ohne vorgelagerten TLS-Proxy schlicht falsch (A6.2).
 
-- **B11 — `opcache.file_update_protection` (2 s).** Jeder OPcache-Test muss die
-  Frist abwarten und `num_cached_scripts`/`hits` mitprüfen. Genau daran ist ein
-  Nachweis in P5 schon einmal gescheitert.
-- **B16 — kein `pool www`-Titel unter Emulation.** Ein FPM-Test darf nicht auf den
-  Prozesstitel grepen, sondern muss über den Benutzer und `/ping` gehen.
-
-Weiter zu beachten:
-
-- **B15 — `bake` baut die Matrix parallel.** Tests, die vorher bauen, brauchen
-  Plattenplatz; `make build` je Version ist der sparsame Weg.
-- **AK4 ist auf macOS prinzipiell nicht vollständig führbar.** P8 liefert den
-  Test, P11 den Nachweis auf dem Linux-Runner.
+Danach P10 (Demo-Stack, seit E11 nur noch eine Ausprägung), P11 (CI + Härtung),
+P12 (Doku + Abschluss).

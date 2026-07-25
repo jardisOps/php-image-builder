@@ -50,6 +50,7 @@ $(foreach k,$(ENV_SET_KEYS),$(eval $(k) := $(SAVED_$(k))))
 include ./support/makefiles/docker.helper.mk
 include ./support/makefiles/docker.build.local.mk
 include ./support/makefiles/docker.build.push.mk
+include ./support/makefiles/test.mk
 
 # ---------------------------------------------------------------------------
 # Setup

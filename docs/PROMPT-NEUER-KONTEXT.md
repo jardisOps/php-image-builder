@@ -1,8 +1,8 @@
 # Prompt für einen neuen Kontext
 
-Stand 2026-07-25, nach Abschluss von P6 und der Streichung von P7. Der Text unten
-ist zum Kopieren gedacht — er zeigt nur auf die Dokumente, statt Inhalte zu
-wiederholen, damit es eine einzige Wahrheitsquelle gibt.
+Stand 2026-07-25, nach Abschluss von P8. Der Text unten ist zum Kopieren gedacht —
+er zeigt nur auf die Dokumente, statt Inhalte zu wiederholen, damit es eine
+einzige Wahrheitsquelle gibt.
 
 ---
 
@@ -10,12 +10,11 @@ Arbeitsverzeichnis: `/Users/Rolf/Development/headgent/devops/docker/php-image-bu
 
 Lies zuerst, in dieser Reihenfolge:
 
-1. `docs/PROGRESS.md` — trägt den laufenden Zustand: was P1–P6 geliefert und
-   nachgewiesen haben, warum P7 entfallen ist, alle Umsetzungsentscheidungen mit
-   Begründung, die Befunde B1–B16, die offenen Punkte und die nächste Phase. Das
-   ist die maßgebliche Datei; sie geht bei Widersprüchen vor.
-2. `docs/HANDOVER.md` — Einstieg, Stand, Bedienung, die vier Prüfungen,
-   Arbeitsweise.
+1. `docs/PROGRESS.md` — trägt den laufenden Zustand: was P1–P6 und P8 geliefert
+   und nachgewiesen haben, warum P7 entfallen ist, alle Umsetzungsentscheidungen
+   mit Begründung, die Befunde B1–B20, die offenen Punkte und die nächste Phase.
+   Das ist die maßgebliche Datei; sie geht bei Widersprüchen vor.
+2. `docs/HANDOVER.md` — Einstieg, Stand, Bedienung, Prüflauf, Arbeitsweise.
 3. `docs/PRD.md` — Anforderungen A1–A10, Entscheidungen E1–E11, Nicht-Ziele
    N1–N8, Akzeptanzkriterien AK1–AK15 und der vollständige, verifizierte
    Ist-Zustand des Bestands (Drift D1–D16, UID-Defekte U1–U3, Xdebug/JIT-Lücken
@@ -26,36 +25,36 @@ Analysiere den Bestandscode nicht neu — das PRD trägt ihn mit Fundstellen. De
 Bestand liegt unter `/Users/Rolf/Development/headgent/devops/image/phpcli/` und
 `.../phpfpm/` und bleibt unverändert.
 
-**Stand:** P1–P6 sind abgeschlossen und committet, **P7 (`frankenphp`) ist
-gestrichen** (E11). `base`, `cli` und `fpm` bauen in **einem** `bake`-Lauf gegen
-PHP 8.3, 8.4 und 8.5; amd64 ist seit P6 belegt, der Nachweis auf einem echten
-Linux-Runner bleibt P11. Das Repo hat kein Remote und ist nie gepusht worden.
+**Stand:** P1–P6 und P8 sind abgeschlossen und committet, **P7 (`frankenphp`) ist
+gestrichen** (E11). `base`, `cli` und `fpm` bauen in einem `bake`-Lauf gegen PHP
+8.3, 8.4 und 8.5; amd64 ist belegt, der Nachweis auf einem echten Linux-Runner
+bleibt P11. `make test-all` läuft grün. Das Repo hat kein Remote und ist nie
+gepusht worden.
 
-**Beginne mit P8** (Tests, `support/makefiles/test.mk`). Die Phase hängt seit E11
-an P6. Es ist nichts blockierend offen. Die Phasennummern P8–P12 rücken trotz der
-Lücke bei P7 **nicht** nach — Befunde und Akzeptanzkriterien verweisen namentlich
-auf sie.
+**Beginne mit P9** (nginx-Config als Asset). Die Phase hängt nur an P1, es ist
+nichts blockierend offen. Die Phasennummern rücken trotz der Lücke bei P7 **nicht**
+nach — Befunde und Akzeptanzkriterien verweisen namentlich auf sie.
 
-Einzulösen:
+Einzulösen in P9:
 
-- Die vier Prüfungen, die bisher von Hand laufen, gehören in `test.mk`. Die
-  vollständigen Aufrufe stehen in `docs/HANDOVER.md`.
-- **Zwei Testfallstricke sind verbindlich**, beide derselben Fehlerklasse „der
-  Test misst nichts und meldet trotzdem grün": **B11**
-  (`opcache.file_update_protection`, 2 s abwarten und
-  `num_cached_scripts`/`hits` mitprüfen — daran ist ein Nachweis in P5 schon
-  einmal gescheitert) und **B16** (unter Emulation trägt ein FPM-Worker keinen
-  `pool www`-Titel; über Benutzer und `/ping` prüfen).
-- **B15:** `bake` baut die Matrix parallel und braucht dabei spürbar
-  Plattenplatz. Tests, die vorher bauen, sollten `make build` je Version nutzen.
-- **AK4 ist auf macOS nicht vollständig führbar.** P8 liefert den Test, P11 den
-  Nachweis auf dem Linux-Runner.
+- `compose/nginx/templates/default.conf.template`, vollständig parametrisiert.
+- Der Ist-Zustand steht im PRD Abschnitt 1.3 **mit Fundstellen**: hartkodiert
+  sind heute der Upstream-Host `app:`, `client_max_body_size 100m`, sämtliche
+  fastcgi-Timeouts und die feste HTTPS-Annahme (`fastcgi_param HTTPS on`,
+  `REQUEST_SCHEME https`). Die letzte muss schaltbar werden — ohne vorgelagerten
+  TLS-Proxy ist sie schlicht falsch (A6.2).
+- Es läuft mit dem **unveränderten** offiziellen nginx-Image über dessen
+  eingebaute Substitution (`NGINX_ENVSUBST_TEMPLATE_DIR`), ohne eigenen
+  Entrypoint und ohne eigenen Build (A6.3). Der eigene Entrypoint des Bestands
+  dupliziert nur, was das offizielle Image seit 1.19 selbst kann (E9).
+- Alle Variablen brauchen dokumentierte Defaults, damit das Ergebnis ohne
+  Konfiguration lauffähig ist (A6.4).
 
-Danach P9 (nginx-Config als Asset), P10 (Demo-Stack, seit E11 nur noch eine
-Ausprägung), P11 (CI + Härtung), P12 (Doku + Abschluss).
+Danach P10 (Demo-Stack, seit E11 nur noch eine Ausprägung), P11 (CI + Härtung),
+P12 (Doku + Abschluss).
 
 Halte `docs/PROGRESS.md` nach jeder abgeschlossenen Phase fort — in derselben
-Form wie die Abschnitte zu P1–P6 (Geliefert, Akzeptanz mit Nachweis,
+Form wie die Abschnitte zu P1–P6 und P8 (Geliefert, Akzeptanz mit Nachweis,
 Umsetzungsentscheidungen, Befunde).
 
 Wichtig:
@@ -64,8 +63,13 @@ Wichtig:
 - Die Bauform der Bestands-Repos bleibt erhalten und wird nur optimiert:
   Makefile-Struktur mit `support/makefiles/`, `##@`-Hilfesystem, `.env` als
   Single Source of Truth. Details in `PLAN.md`, Abschnitt „Bauform".
-- **Die vier Prüfungen müssen grün bleiben** (hadolint über drei Dockerfiles,
-  shellcheck über vier Shell-Dateien, 33 APP_ENV-Fälle, 27 UID-Fälle).
+- **`make test-all` muss grün bleiben.** Ein Aufruf, seit P8; der Umfang steht
+  in `docs/HANDOVER.md`. Wer eine Extension, ein Profil oder einen Laufzeitwert
+  ändert, zieht dort nach.
+- **Vier Testfallstricke derselben Klasse „der Test misst nichts und meldet
+  trotzdem grün" haben in diesem Vorhaben bereits zugeschlagen** — B11, B16, B19
+  und B20 in `PROGRESS.md`. Wer einen neuen Test schreibt, prüft ihn gegen diese
+  vier, bevor er ihn für grün hält.
 - Keine nach außen wirkenden Aktionen ohne ausdrückliche Freigabe: kein
   GitHub-Repo anlegen, kein Remote setzen, nichts archivieren, **nicht pushen**.
   Commits sind freigegeben; frag im Zweifel.

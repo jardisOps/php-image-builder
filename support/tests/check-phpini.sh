@@ -1,10 +1,21 @@
 #!/bin/bash
 # Prueft lib-phpini.sh gegen die A10-Anforderungen, ohne Container.
-LIB=/Users/Rolf/Development/headgent/devops/docker/php-image-builder/src/shared/entrypoint/lib-phpini.sh
+#
+# Der Pfad wird aus dem Ort DIESER Datei abgeleitet, nicht absolut gepflegt: der
+# vorherige Wert zeigte auf ein Verzeichnis auf genau einem Rechner und haette
+# den Test auf jedem anderen System und auf dem CI-Runner (P11) scheitern
+# lassen. Befund B17.
+REPO_ROOT=$(CDPATH='' cd -- "$(dirname -- "$0")/../.." && pwd)
+LIB="$REPO_ROOT/src/shared/entrypoint/lib-phpini.sh"
+[ -r "$LIB" ] || { echo "❌ lib-phpini.sh nicht gefunden unter $LIB" >&2; exit 2; }
 PASS=0; FAIL=0
 
 # Ruft apply_php_configuration in einer Subshell mit gesetzter Umgebung auf.
 # Gibt die aufgeloesten Werte als KEY=VALUE aus, oder "DIE: <meldung>".
+# SC2016 ist hier der Zweck, kein Versehen: der Rumpf unten ist Quelltext fuer
+# die Subshell und darf NICHT vorher expandiert werden — sonst setzte die
+# aufrufende Shell ihre eigenen Werte ein, statt die der Bibliothek zu messen.
+# shellcheck disable=SC2016
 run_case() {
   env -i PATH="$PATH" TMPDIR="$(mktemp -d)" APP_USER="$(id -un)" "$@" bash -c '
     log_info() { :; }
@@ -19,6 +30,9 @@ run_case() {
   ' 2>&1
 }
 
+# SC2001: die Ersetzung setzt JEDER Zeile einen Einzug voran. Das leistet
+# ${var//muster/ersatz} nicht — es kennt keinen Zeilenanfang.
+# shellcheck disable=SC2001
 check() { # name, output, expected-substring
   if grep -qF "$3" <<<"$2"; then echo "  ✅ $1"; PASS=$((PASS+1))
   else echo "  ❌ $1 — erwartet: '$3'"; echo "$2" | sed 's/^/       /'; FAIL=$((FAIL+1)); fi
@@ -53,7 +67,14 @@ echo "AK13 — APP_ENV=test (L-B: kein Abschalten im Testaufruf mehr noetig)"
 O=$(run_case "${IMG[@]}" APP_ENV=test)
 check "xdebug aus"                   "$O" "XDEBUG_MODE=off"
 check "pcov an"                      "$O" "PCOV_ENABLED=1"
-check "jit aktiv"                    "$O" "OPCACHE_JIT=1254"
+# GEAENDERT 2026-07-25 (Befund B18): erwartet war hier bis P8 OPCACHE_JIT=1254.
+# Das war falsch — PCOV uebernimmt zend_execute_ex() genau wie Xdebug, PHP
+# schaltet JIT deshalb selbst ab UND warnt bei jedem Aufruf. Im test-Profil ist
+# PCOV an, also warnte ausgerechnet jeder Testlauf. Die JIT-Automatik (A10.3)
+# deckt seither beide Extensions ab; die Erwartung folgt dem korrigierten
+# Verhalten, nicht umgekehrt.
+check "jit aus, weil PCOV aktiv (B18)" "$O" "OPCACHE_JIT=off"
+check "jit_buffer_size=0"              "$O" "OPCACHE_JIT_BUFFER_SIZE=0"
 
 echo "AK13 — APP_ENV=prod"
 O=$(run_case "${IMG[@]}" APP_ENV=prod)
