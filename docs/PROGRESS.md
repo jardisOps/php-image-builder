@@ -1242,6 +1242,54 @@ in der CI braucht entweder einen erreichbaren Upstream oder einen auflösbaren
 Ersatznamen. Im Prueffall ist genau dieses Verhalten die Gegenprobe, dass
 `FASTCGI_UPSTREAM` wirklich im `fastcgi_pass` landet.
 
+**B24 — der klassische `.jpg/x.php`-Angriff auf die Fallback-Location wird
+abgewehrt, aber nicht von uns.** Aus dem Code-Review nach der Codierung: die
+Location `~ \.php$` gibt jeden Pfad weiter, der auf `.php` endet, auch wenn die
+Datei nicht existiert (`fastcgi_param SCRIPT_FILENAME $realpath_root$fastcgi_script_name`
+ohne `try_files`). Bei `cgi.fix_pathinfo=1` loest PHP dann auf den laengsten
+existierenden Prefix auf — die klassische Kette zur Ausfuehrung einer
+hochgeladenen Datei. **Gemessen** am 2026-07-25 mit einer echten
+`/app/public/upload.jpg`, die PHP-Code enthaelt:
+
+| Aufruf | Ergebnis |
+|---|---|
+| `/upload.jpg/x.php` | **403**, kein Code ausgefuehrt |
+| `/gibtesnicht.php` | 404 |
+| `/upload.jpg` | 200, Quelltext als Text — korrekt, es ist eine statische Datei |
+
+Der Schutz kommt von `security.limit_extensions` des php-fpm (Default `.php`),
+nicht von der Vorlage. Fuer unseren Stack ist das Risiko damit gedeckt; wer die
+Vorlage mit einem anders konfigurierten fpm faehrt, hat den Schutz nicht.
+**Empfehlung fuer die Haertung (A7, P11/P12), nicht in P9 umgesetzt:** eine Zeile
+`try_files $uri =404;` in der Fallback-Location. Sie ist fuer legitime Requests
+wirkungsgleich (`/gibtesnicht.php` antwortet schon heute 404) und nimmt die
+Abhaengigkeit von der fpm-Einstellung heraus. Nicht eigenmaechtig gemacht, weil
+die Vorlage im Uebrigen verhaltensgleich zum Bestand bleiben soll.
+
+**B25 — statische Dateien bekommen keinen einzigen Security-Header.** Ebenfalls
+aus dem Review, ebenfalls ein Bestandsdefekt und **gemessen**:
+
+| Antwort auf | `X-Content-Type-Options` | `X-Frame-Options` | `Strict-Transport-Security` |
+|---|---|---|---|
+| `/index.php` | ✅ nosniff | ✅ SAMEORIGIN | ✅ gesetzt |
+| `/a.css` | ❌ fehlt | ❌ fehlt | ❌ fehlt |
+
+Ursache ist nginx-Semantik, kein Tippfehler: `add_header` wird von der
+uebergeordneten Ebene **nur dann** geerbt, wenn die eigene Ebene **kein**
+`add_header` traegt. Die Static-Location traegt eines
+(`add_header Cache-Control "public"`) und verliert damit alle fuenf
+Server-Header. Ausgerechnet `nosniff` wirkt bei statischen Dateien am meisten.
+Nebenbefund: die Antwort traegt `Cache-Control` doppelt (`max-age=31536000` aus
+`expires 1y` **und** `public` aus dem `add_header`).
+
+**Zur Entscheidung, nicht eigenmaechtig geaendert.** Drei Wege:
+(a) so lassen; (b) die Zeile `add_header Cache-Control "public";` **loeschen** —
+damit erbt die Location die fuenf Header wieder, und die doppelte Angabe
+verschwindet; verloren geht allein das Attribut `public`, das fuer Assets ohne
+Authentifizierung nichts aendert; (c) die fuenf Header in der Static-Location
+wiederholen — verhaltensgleich, aber Doppelpflege. **Empfehlung: (b)**, eine
+geloeschte Zeile.
+
 ---
 
 ## Offene Punkte / Risiken
@@ -1256,6 +1304,7 @@ Ersatznamen. Im Prueffall ist genau dieses Verhalten die Gegenprobe, dass
 | ~~N3~~ | ~~FrankenPHP-OS-Variante~~ — **entschieden 2026-07-25: Alpine**, wenige Minuten später mit dem ganzen Target gestrichen (E11). Der offene Default-Port ist im Abschnitt „P7 — entfallen" trotzdem belegt festgehalten | — | erledigt |
 | ~~O1~~ | ~~Image-Name für FrankenPHP~~ — **entschieden: `headgent/frankenphp`**, dann mit E11 gegenstandslos | — | erledigt |
 | AK4 | UID-Nachweis ist auf macOS prinzipiell nicht führbar. P8 liefert den Test, P11 den Nachweis auf dem Linux-Runner. | P8/P11 | bekannt |
+| **O6** | **Zwei Härtungen an der nginx-Vorlage warten auf Entscheidung** — beide sind Bestandsdefekte, beide belegt, keiner eigenmächtig geändert: `try_files $uri =404;` in der `.php`-Fallback-Location (**B24**) und die verlorenen Security-Header bei statischen Dateien (**B25**, Empfehlung: eine Zeile löschen). Beides ist je eine Zeile und gehört sachlich zu A7 | P11 oder P12 | niedrig |
 
 ### Wartet auf ausdrückliche Freigabe (nach außen wirkend)
 

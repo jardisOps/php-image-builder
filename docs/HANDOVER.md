@@ -141,6 +141,13 @@ lokalen `headgent/*`-Images nicht. Eine andere Version prüfen:
   Image-Verzeichnisses zurück), **B21** (busybox-`wget --post-file` setzt POST,
   sendet aber keinen Rumpf — ein Body-Size-Limit lässt sich damit nicht prüfen).
   B20 ist für P11 relevant.
+- **B24/B25 — zwei belegte Bestandsdefekte in der nginx-Vorlage, bewusst nicht
+  eigenmächtig geändert (O6).** Die `.php`-Fallback-Location hat kein
+  `try_files` — der klassische `/upload.jpg/x.php`-Pfad wird derzeit allein von
+  `security.limit_extensions` des php-fpm abgefangen (gemessen: 403, kein Code
+  ausgeführt). Und statische Dateien bekommen **keinen** Security-Header, weil
+  ein `add_header` in der Location die fünf Server-Header verdrängt (gemessen).
+  Beides ist je eine Zeile und gehört zur Härtung (A7).
 - **B15 — `bake` baut die Matrix parallel.** `make build-all` übersetzt drei
   PHP-Versionen gleichzeitig; auf einer vollen Docker-VM bricht das mit
   „No space left on device" ab. Kein Designfehler, eine Betriebsbedingung.

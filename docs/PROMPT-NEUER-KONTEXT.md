@@ -86,6 +86,11 @@ Wichtig:
   ist P7 gestrichen worden.
 - Kein Experten-Gremium, keine Subagenten, sofern ich sie nicht anfordere.
 
+Offen aus P9 (nicht blockierend, Entscheidung liegt bei mir): **O6** in
+`PROGRESS.md` — zwei belegte Bestandsdefekte der nginx-Vorlage, je eine Zeile,
+sachlich Härtung (A7): `try_files` in der `.php`-Fallback-Location (B24) und die
+bei statischen Dateien verlorenen Security-Header (B25).
+
 Zwei Dinge warten unverändert:
 
 - **Kein GitHub-Repo, kein Remote, keine Archivierung** der beiden
