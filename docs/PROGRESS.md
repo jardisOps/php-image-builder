@@ -19,7 +19,7 @@ Repo und sind mitversioniert. Bestandscode unverändert unter
 - [x] **P3  `base`-Target** — abgeschlossen 2026-07-25
 - [x] **P4  `cli`-Target** — abgeschlossen 2026-07-25
 - [x] **P5  `fpm`-Target** — abgeschlossen 2026-07-25
-- [ ] P6  `docker-bake.hcl` + Make-Targets
+- [x] **P6  `docker-bake.hcl` + Make-Targets** — abgeschlossen 2026-07-25
 - [ ] P7  `frankenphp`-Target
 - [ ] P8  Tests
 - [ ] P9  nginx-Config als Asset
@@ -737,12 +737,164 @@ geladenen aktiv. Das Problem ist gelöst, nicht verschoben.
 
 ### Noch nicht nachgezogen
 
-- **`amd64` ist weiterhin ungeprüft.** Alle Builds liefen nativ auf arm64. Die
-  Matrix über beide Plattformen kommt mit P6/P11.
+- ~~**`amd64` ist weiterhin ungeprüft.**~~ — **in P6 nachgeholt**, siehe dort.
 - Die apk-Build-Abhängigkeiten `curl-dev` und `oniguruma-dev` werden seit B12
   vermutlich nicht mehr gebraucht (sie dienten curl bzw. mbstring). Sie liegen in
   der Build-Stage und wirken sich nicht auf das Ergebnis aus; ein Rückbau wäre
   Kosmetik und braucht je einen Build-Test. Vorgemerkt für P12.
+
+---
+
+## P6 — abgeschlossen
+
+### Geliefert
+
+| Datei | Inhalt |
+|---|---|
+| `docker-bake.hcl` | **neu.** Matrix über `PHP_VERSIONS`, drei Targets, 35 Build-Args an genau einer Stelle |
+| `support/makefiles/docker.build.local.mk` | **neu.** `build`, `build-all`, `bake-print` — dünne Wrapper um `bake --load` |
+| `support/makefiles/docker.build.push.mk` | **neu.** `push`, `push-all` (multi-arch, `--push`, Attestations), `.check-docker-login`. **Geschrieben, nie ausgeführt** (N6) |
+| `support/makefiles/docker.helper.mk` | **geändert:** `PLATFORMS_CSV` — `bake` will die Plattformen kommasepariert, gepflegt sind sie leerzeichensepariert |
+| `Makefile` | **geändert:** `include` der beiden neuen Module |
+| `.gitignore` | **geändert:** `.buildx-cache/` (Ziel von `CACHE_BACKEND=local`, war bisher nur in `.dockerignore`) |
+
+Die vier duplizierten `--build-arg`-Blöcke des Bestands sind damit weg: dieselben
+~35 Zeilen standen dort in `phpfpm-build`, `phpfpm-build-all`, `phpfpm-push` und
+`phpfpm-push-all` nebeneinander (Plan-Optimierung 1). Jetzt steht jedes Build-Arg
+einmal in der HCL; die vier Make-Targets tragen zusammen **keine** einzige.
+
+### Akzeptanz — nachgewiesen
+
+**AK1 / A1.2 — ein Lauf baut alles.** `make build-all` erzeugte in **einem**
+`bake`-Aufruf sechs Images unter **14 Tags**, Exit 0:
+
+| | 8.3 | 8.4 | 8.5 |
+|---|---|---|---|
+| `cli` | 128 MB · 8.3.32 | 134 MB · 8.4.23 | 145 MB · 8.5.8 |
+| `fpm` | 128 MB · healthy nach 6 s | 134 MB · healthy nach 6 s | 146 MB · healthy nach 6 s |
+| 20 Extensions | ✅ 20/20 | ✅ 20/20 | ✅ 20/20 |
+| PECL-Pins aus der `.env` | ✅ | ✅ | ✅ alle sechs unverändert |
+
+`:latest` zeigt auf **8.5.8** (= `PHP_LATEST`), FPM-Worker laufen in allen drei
+Fassungen als `appuser` (2 = `pm.start_servers`).
+
+**A1.3 — ein Versionsstring treibt alle Tags.** Jedes publizierte Artefakt trägt
+`:<ver>` **und** `:<ver>-$(IMAGE_DATE)`; `:latest` nur die höchste Version:
+
+```
+phpcli:8.3  phpcli:8.3-20260725     phpfpm:8.3  phpfpm:8.3-20260725
+phpcli:8.4  phpcli:8.4-20260725     phpfpm:8.4  phpfpm:8.4-20260725
+phpcli:8.5  phpcli:8.5-20260725     phpfpm:8.5  phpfpm:8.5-20260725
+phpcli:latest                       phpfpm:latest
+```
+
+Gegenprobe für den reproduzierbaren Re-Tag: `IMAGE_DATE=20991231 make bake-print`
+setzt das Datum in **allen** Tags beider Images gleichzeitig um.
+
+**Die drei Vorgaben aus P3–P5 eingelöst**, belegt an `bake --print`:
+
+| Vorgabe | Nachweis |
+|---|---|
+| `contexts = { base = "target:base" }` (A1.2) | je Version aufgelöst: `cli-8-4` → `target:base-8-4` |
+| `base` nicht in der Default-Gruppe | `default` = `["cli","fpm"]`; `base-*` ohne Tag, `output: cacheonly` |
+| ARG-Zahlen je Target | `base` **27**, `cli` 1, `fpm` 7 — siehe Befund B14 |
+
+**amd64 erstmals gebaut** — die letzte offene Einschränkung aus P3–P5:
+
+| Prüfung | Ergebnis |
+|---|---|
+| `make build BUILD_PLATFORM=linux/amd64` | Exit 0 in **6:58** (emuliert auf arm64-Host) |
+| Image-Metadaten | `amd64/linux` für cli **und** fpm |
+| `uname -m` im Container | `x86_64` |
+| Extensions | 20/20, Xdebug 3.5.1, Zend OPcache 8.3.32 |
+| fpm | `healthy` nach 6 s, zwei Worker als `appuser` |
+
+**Vier Prüfungen grün** gegen den Endstand (hadolint ×3 Exit 0, shellcheck Exit 0,
+33/33, 27/27). Die Aufrufe sind unverändert; `docker-bake.hcl` und die `.mk`-Dateien
+fallen unter keinen der vier Prüfer.
+
+**Einschränkung:** `--push` ist **nicht** gelaufen (N6). Geprüft wurde die
+erzeugte Kommandozeile per `make -n push` — Plattformen, Attestations und
+Tag-Satz stehen korrekt, ausgeführt wurde sie nicht.
+
+### Umsetzungsentscheidungen
+
+1. **`bake` liest die `.env` nicht selbst** (belegt 2026-07-25 an einem
+   Minimalbeispiel: eine `.env` im Arbeitsverzeichnis blieb wirkungslos, der
+   HCL-Default gewann). Der einzige Weg der Werte ist deshalb der `export` des
+   Makefiles — und damit gilt die Vorrangregel A10.2 samt Befund B1
+   durchgehend bis ins Build-Arg. `PHP_VERSION=8.5 make build` wirkt.
+2. **`args = { X = null }` vererbt *nicht* aus der Umgebung.** Naheliegend, hätte
+   die HCL um 35 Zeilen verkürzt — und ist falsch: geprüft mit und ohne gesetzte
+   Umgebungsvariable, in beiden Fällen **verschwindet das Arg ganz** aus der
+   aufgelösten Definition. Deshalb trägt die Datei 35 ausgeschriebene
+   `variable`-Blöcke. Der Fehler wäre stumm gewesen, hätte A2.4 ihn nicht in einen
+   sichtbaren Build-Abbruch verwandelt.
+3. **Kein `variable` trägt einen Default.** Dieselbe Regel wie in den Dockerfiles
+   und aus demselben Grund: ein Default in der HCL wäre **D16 an neuer Stelle**.
+   Die Absicherung ist durchgehend — ein leeres `PHP_VERSION` bricht den Build ab,
+   ein leerer Laufzeitwert den Containerstart, weil `require_image_values` mit
+   `${VAR:?}` arbeitet und das auch bei *leer* greift, nicht nur bei *ungesetzt*.
+4. **Eine Matrix-Mechanik für beide Fälle.** `build-all` nimmt `PHP_VERSIONS` wie
+   es ist, `build` setzt es auf die eine `PHP_VERSION` der `.env`. Kein zweiter
+   Codepfad, keine Fallunterscheidung in der HCL — der Unterschied ist eine Liste.
+5. **Die Plattform steht nicht in der HCL.** Sie kommt von außen: lokal über
+   `BUILD_PLATFORM` (leer = Host), beim Push über `PLATFORMS_CSV`. Stünde sie in
+   der HCL, könnte `--load` nicht mehr funktionieren (Docker lädt keine
+   Multi-Plattform-Images), und der amd64-Nachweis oben wäre ohne Registry nicht
+   führbar gewesen.
+6. **Keine Make-Targets je Image, sondern `BAKE_TARGETS`.** Der Bestand hatte
+   `phpfpm-build`/`nginx-build`; mit drei bis vier Targets würde das eine Zeile je
+   Target und Betriebsart kosten. `make build BAKE_TARGETS=fpm` leistet dasselbe,
+   und **P7 muss an den Make-Modulen nichts ändern** — `frankenphp` wird allein
+   durch seinen Eintrag in der HCL bedienbar.
+7. **Die Abnahme-Builds liefen unter `DOCKER_HUB=php-image-builder-test`** (bzw.
+   `-amd64`). Mit dem echten Namen hätten sie die lokal liegenden
+   `headgent/phpcli:8.3|8.4` und `headgent/phpfpm:*` überschrieben — genau die
+   Referenzkopien der publizierten Images, deren Unversehrtheit weiter unten
+   belegt ist. Nebeneffekt: der Override-Weg aus Entscheidung 1 ist damit noch
+   einmal im scharfen Lauf bestätigt.
+8. **Das Ad-hoc-Build-Skript aus P3/P4 ist abgelöst** und die damit erzeugten
+   Test-Images sind entfernt. `bake` löst `--build-context` nativ auf.
+
+### Befunde aus P6
+
+**B14 — die ARG-Zahl im Handover war falsch: `base` hat 27 ARGs, nicht 21.**
+Die Vorgabe aus P5 (`docs/PROMPT-NEUER-KONTEXT.md`, „base 21") ist beim Nachzählen
+im Dockerfile nicht haltbar: 3 global vor den `FROM`-Zeilen + 6 in der
+Build-Stage + 18 in der Runtime-Stage = **27**, alle verschieden. `cli` 1 und
+`fpm` 7 stimmen. Die HCL ist gegen den tatsächlichen Stand gebaut und per
+`bake --print` gegengeprüft (27 / 1 / 7). Kein Schaden — die Zahl war nur eine
+Merkhilfe, keine Anforderung; sie ist hier richtiggestellt, damit sie niemand als
+Sollwert liest.
+
+**B15 — `bake` parallelisiert die Matrix; der Bestand schleifte sequenziell.**
+Das ist der Gewinn und zugleich eine neue Betriebsbedingung: `make build-all`
+übersetzt die Extensions für **drei PHP-Versionen gleichzeitig**. Der erste Lauf
+brach deshalb ab —
+
+```
+uchar.cpp:629:1: fatal error: error writing to /tmp/cccOEpFe.s: No space left on device
+ERROR: target cli-8-5: failed to solve: ... exit code: 2
+```
+
+— nicht an PHP 8.5 und nicht an der HCL, sondern an der zu 100 % vollen
+Docker-Desktop-VM (62,7 GB). Nach dem Aufräumen (der User selbst; von mir nur die
+eigenen Test-Images und der Cache des `multiarch-builder`) lief derselbe Aufruf
+mit 21,4 GB frei fehlerfrei durch. **Für P8/P11 festzuhalten:** ein sequenzieller
+Rückbau ist *nicht* nötig und wäre gegen AK1 — aber `build-all` braucht spürbar
+Plattenplatz, und ein CI-Runner baut ohnehin eine Version je Matrix-Job. Wer
+lokal wenig Platz hat, nimmt `make build` je Version.
+
+**B16 — unter Rosetta-Emulation trägt ein FPM-Worker keinen `pool www`-Titel.**
+Beim amd64-Nachweis meldete `ps` zunächst null Worker, obwohl der Healthcheck
+`healthy` war. Ursache: die Emulation schreibt die Kommandozeile um —
+`{php-fpm} /run/rosetta/rosetta /usr/local/sbin/php-fpm php-fpm` statt
+`php-fpm: pool www`. Die zwei Worker liefen korrekt als `appuser`. **Verbindlich
+für P8:** ein Test, der auf `pool www` grept, misst auf emulierter Fremdarchitektur
+nichts — die Prüfung muss über den Benutzer und den `/ping` gehen, nicht über den
+Prozesstitel. Gleiche Fehlerklasse wie B11: ein Test, der stillschweigend nichts
+prüft.
 
 ---
 
@@ -763,11 +915,22 @@ geladenen aktiv. Das Problem ist gelöst, nicht verschoben.
 
 - **Kein GitHub-Repo angelegt**, kein Remote gesetzt (`make init` steht bereit).
 - **Nichts archiviert** — `jardisOps/phpcli` und `jardisOps/phpfpm` sind unberührt (E8).
-- **Kein Commit** im neuen Repo; der Arbeitsstand liegt unversioniert im Worktree.
+- **Commits sind freigegeben** und liegen vor (Stand P6: vier). Sie bleiben rein
+  lokal — kein Remote, kein Push.
 - **Vorgriff-Verzeichnis** `devops/image/docker-php-builder/` besteht noch (leere
   Verzeichnisse, Git-Repo ohne Commits, keine Datei). Gegenstandslos, kann entfernt
   werden.
 - **Kein Push, kein `docker login`** — siehe **N6**.
+
+### Belegte Unversehrtheit des Bestands (Stand P6, 2026-07-25)
+
+Nachtrag P6: die Abnahme-Builds liefen bewusst unter `DOCKER_HUB=php-image-builder-test`
+bzw. `-amd64`, damit die lokal liegenden `headgent/*`-Referenzimages nicht
+überschrieben werden. Nach dem Matrix-Lauf gegengeprüft: `headgent/phpcli:8.2|8.3|8.4|latest`
+und `headgent/phpfpm:8.2|8.3|8.4|latest` tragen unverändert ihre alten Image-IDs
+und Größen. Entfernt wurden ausschließlich **eigene** Artefakte (die
+`php-image-builder-*:test`-Images der Vorsession und der Cache des
+`multiarch-builder`). Kein `docker push`, kein `docker login`.
 
 ### Belegte Unversehrtheit des Bestands (Stand P3, 2026-07-25)
 
@@ -835,24 +998,25 @@ UID/GID-Neubau (A4/E7 gegen U1–U3). **L-B ist mit dem `test`-Profil erledigt:*
 
 ## Nächste Phase
 
-**P6 — `docker-bake.hcl` + Make-Targets.** Liefert die Bake-Matrix,
-`docker.build.local.mk` und `docker.build.push.mk` als dünne Wrapper.
-Akzeptanz: `docker buildx bake` baut base/cli/fpm in **einem** Lauf; ein
-Versionsstring treibt alle Tags (A1.3). Nichts ist blockierend offen.
+**P7 — `frankenphp`-Target.** Liefert `src/frankenphp/Dockerfile`. Akzeptanz nach
+Plan: baut, liefert HTTP im klassischen Request-Modus (E4/A5.1), Extension-Menge
+= `base` aus derselben Definition (A5.3/A2.2, `php-extensions.env`).
 
-Konkret einzulösen, aus P3–P5 mitgegeben:
+**Vor dem Bauen zu entscheiden — dem User vorzulegen:**
 
-- **`contexts = { base = "target:base" }`** für `cli` und `fpm` (A1.2) — das
-  Ad-hoc-Skript aus P3/P4 hat das bereits über `--build-context` nachgebildet
-  und funktioniert, `bake` löst es nativ auf.
-- **`base` darf nicht in die Default-Gruppe**, es wird nicht publiziert.
-- Die ARG-Namen je Target stehen fest: `base` 21, `cli` 1
-  (`PHP_MAX_EXECUTION_TIME_CLI`), `fpm` 7 (`PHP_MAX_EXECUTION_TIME_WEB` +
-  sechs `FPM_PM_*`). Alle Werte kommen aus der `.env`, keiner doppelt (A2.1).
-- **Kein `--push`-Lauf.** Die Push-Targets werden geschrieben, nicht ausgeführt
-  — siehe **N6**.
-- Erst hier wird die Matrix über PHP **8.2/8.4** und **amd64** gebaut; P3–P5
-  sind auf 8.3/arm64 nachgewiesen.
+- **N3 — OS-Variante.** Upstream empfiehlt Debian, unsere Reihe ist durchgängig
+  Alpine. `dunglas/frankenphp:1.12.6-php{8.3,8.4,8.5}-alpine` ist verfügbar
+  (geprüft 2026-07-25). Der Default-Port des mitgelieferten Caddyfile ist nicht
+  dokumentiert und **muss am Image selbst verifiziert werden**, nicht geraten.
+- **O1 — Image-Name**, Vorschlag `headgent/frankenphp`.
 
-Danach P7 (`frankenphp`), wo **N3** (OS-Variante) und **O1** (Image-Name) zu
-entscheiden sind.
+Aus P6 mitgegeben:
+
+- Das Target braucht in den Make-Modulen **keine Änderung** — ein Eintrag in
+  `docker-bake.hcl` plus `IMAGE_NAME_FRANKENPHP` genügt (P6-Entscheidung 6).
+- `frankenphp` setzt auf ein eigenes Basis-Image auf, nicht auf `base` (PRD
+  Abschnitt 2). Es zieht `PHP_MAX_EXECUTION_TIME_WEB` wie `fpm` (Prozesstyp, nicht
+  Target) und braucht laut B2 `APP_OWNED_PATHS` für `/config/caddy` und
+  `/data/caddy` sowie `setcap CAP_NET_BIND_SERVICE`.
+- Die Regel „kein Default in der HCL" (P6-Entscheidung 3) gilt für die neuen
+  Variablen mit.

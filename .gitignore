@@ -2,6 +2,9 @@
 .DS_Store
 .claude
 
+# Lokales buildx-Cache-Verzeichnis (CACHE_BACKEND=local, CACHE_DIR)
+.buildx-cache/
+
 # Vendor Dependencies
 vendor/
 

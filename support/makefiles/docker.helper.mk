@@ -47,6 +47,14 @@ IMAGE_DATE ?= $(shell date -u +%Y%m%d)
 PLATFORMS ?= linux/amd64 linux/arm64
 NO_CACHE  ?= false
 
+# bake will die Plattformen kommasepariert, gepflegt sind sie (wie ueberall im
+# Repo) leerzeichensepariert. Die Umrechnung steht hier einmal, damit PLATFORMS
+# die einzige gepflegte Form bleibt.
+comma         := ,
+empty         :=
+space         := $(empty) $(empty)
+PLATFORMS_CSV  = $(subst $(space),$(comma),$(strip $(PLATFORMS)))
+
 BUILD_EXTRA_FLAGS  ?=
 BUILD_ATTEST_FLAGS ?= --provenance=mode=max --attest=type=sbom
 

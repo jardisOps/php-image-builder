@@ -1,7 +1,7 @@
 # Handover — Konsolidierung des PHP-Docker-Image-Builders
 
-**Stand:** 2026-07-25, Ende der zweiten Umsetzungs-Session. **P1–P5 abgeschlossen
-und committet**, nächste Phase ist P6.
+**Stand:** 2026-07-25, Ende der dritten Umsetzungs-Session. **P1–P6 abgeschlossen
+und committet**, nächste Phase ist P7.
 
 Arbeitsverzeichnis: `/Users/Rolf/Development/headgent/devops/docker/php-image-builder/`
 Projekt- und künftiger Repo-Name: **`php-image-builder`**.
@@ -14,7 +14,7 @@ Vorläuferdokumente unter `devops/image/`.
 
 | Datei | Inhalt | Vorrang |
 |---|---|---|
-| `docs/PROGRESS.md` | **Maßgeblich.** Laufender Zustand: P1–P5 mit Nachweisen, alle Umsetzungsentscheidungen, Befunde B1–B13, offene Punkte, nächste Phase | geht bei Widersprüchen vor |
+| `docs/PROGRESS.md` | **Maßgeblich.** Laufender Zustand: P1–P6 mit Nachweisen, alle Umsetzungsentscheidungen, Befunde B1–B16, offene Punkte, nächste Phase | geht bei Widersprüchen vor |
 | `docs/PRD.md` | Anforderungen A1–A10, Entscheidungen E1–E10, Nicht-Ziele N1–N7, Akzeptanzkriterien AK1–AK15, vollständiger Ist-Zustand (Drift D1–D16, UID-Defekte U1–U3, Xdebug/JIT-Lücken L-A–L-G) mit Datei- und Zeilenangaben | bestätigt |
 | `docs/PLAN.md` | Bauform, Zielstruktur, 12 Phasen mit Abhängigkeiten | freigegeben |
 | `docs/HANDOVER.md` | diese Datei — Vorgeschichte und Einstieg | — |
@@ -26,10 +26,12 @@ vollständig mit Fundstellen.
 
 ## Stand
 
-**Zwei Commits, 24 Dateien.** Das Repo hat **kein Remote** und ist nie gepusht
+**Vier Commits, 27 Dateien.** Das Repo hat **kein Remote** und ist nie gepusht
 worden.
 
 ```
+<P6>     feat: docker-bake.hcl drives base/cli/fpm in one run
+238f969  docs: hand over at end of P5 — status, four checks, follow-up prompt for P6
 7ad5cc7  feat: build matrix moves to PHP 8.3/8.4/8.5, drop 8.2
 1aa8d30  feat: consolidated PHP image builder — base, cli and fpm targets
 ```
@@ -41,11 +43,29 @@ worden.
 | P3 `base`-Target | ✅ |
 | P4 `cli`-Target | ✅ |
 | P5 `fpm`-Target | ✅ |
-| **P6 `docker-bake.hcl` + Make-Targets** | **← hier weiter** |
-| P7–P12 | offen |
+| P6 `docker-bake.hcl` + Make-Targets | ✅ |
+| **P7 `frankenphp`-Target** | **← hier weiter** (N3 und O1 vorher vorlegen) |
+| P8–P12 | offen |
 
-Gebaut und geprüft: `base`, `cli` und `fpm` gegen PHP **8.3, 8.4 und 8.5**,
-jeweils nativ auf **arm64**. `amd64` ist noch ungeprüft und kommt mit P6/P11.
+Gebaut und geprüft: `base`, `cli` und `fpm` gegen PHP **8.3, 8.4 und 8.5** — in
+**einem** `bake`-Lauf, nativ auf arm64. **amd64 ist seit P6 belegt** (PHP 8.3,
+emuliert gebaut, `uname -m` = `x86_64`, fpm `healthy`); der Nachweis auf einem
+echten Linux-Runner bleibt P11.
+
+## Bedienung seit P6
+
+```sh
+make build                          # cli + fpm für PHP_VERSION aus der .env
+make build-all                      # cli + fpm für 8.3 / 8.4 / 8.5, ein Lauf
+make build BAKE_TARGETS=fpm         # nur ein Target (base kommt automatisch mit)
+make build BUILD_PLATFORM=linux/amd64
+make bake-print                     # aufgelöste Definition, baut nichts
+PHP_VERSION=8.5 make build          # Umgebung schlägt die .env (B1)
+make push / make push-all           # geschrieben, NIE ausgeführt — siehe N6
+```
+
+`make build-all` übersetzt drei PHP-Versionen **gleichzeitig** und braucht
+entsprechend Plattenplatz (Befund B15).
 
 ---
 
@@ -71,17 +91,8 @@ docker run --rm --platform linux/amd64 \
   alpine:3.23 sh /check.sh                  # 27/27
 ```
 
-**Ad-hoc-Build bis P6** (danach ersetzt durch `bake`) — das Skript speist alle im
-Dockerfile deklarierten ARGs aus der `.env` und gibt der Umgebung Vorrang:
-
-```sh
-PHP_VERSION=8.5 bash <scratchpad>/build-base.sh src/base/Dockerfile my-base:test
-bash <scratchpad>/build-base.sh src/cli/Dockerfile my-cli:test base=my-base:test
-```
-
-Das Skript liegt im Session-Scratchpad und ist **nicht** im Repo. Es ist 30
-Zeilen und in `docs/PROGRESS.md` (P3 → Akzeptanz) beschrieben; P6 macht es
-ohnehin überflüssig.
+Das Ad-hoc-Build-Skript aus P3/P4 ist mit P6 **entfallen** — `make build` löst es
+ab. Die damit erzeugten `php-image-builder-*:test`-Images sind entfernt.
 
 ---
 
@@ -93,6 +104,7 @@ ohnehin überflüssig.
 | **N4** | FPM startet als root, wechselt die Worker selbst per `user =`. **Keine Abwägung** — der su-exec-Weg funktioniert nachweislich nicht | PROGRESS „P5 → N4", Befund B9 |
 | — | `cli` bleibt ein eigenes Target (vier Zeilen), weil `max_execution_time`, `STOPSIGNAL` und `HEALTHCHECK` zwischen Worker und Request entgegengesetzt sind | PROGRESS „P4 → Vorbemerkung" |
 | — | Matrix auf **8.3 / 8.4 / 8.5**, 8.2 gestrichen | PROGRESS „Versions-Matrix umgestellt" |
+| — | `bake` bekommt seine Werte **ausschließlich** über den `export` des Makefiles — es liest die `.env` nicht selbst; `args = { X = null }` vererbt nichts | PROGRESS „P6 → Entscheidungen 1 und 2" |
 
 ## Die wichtigsten Befunde
 
@@ -106,6 +118,12 @@ ohnehin überflüssig.
 - **B11 — Testfallstrick `opcache.file_update_protection` (2 s).** Jeder
   OPcache-Test muss die Frist abwarten und `num_cached_scripts`/`hits` mitprüfen,
   sonst misst er nichts. **Verbindlich für P8.**
+- **B16 — zweiter Testfallstrick, gleiche Klasse:** unter Rosetta-Emulation heißt
+  ein FPM-Worker nicht `php-fpm: pool www`. Ein Test, der darauf grept, misst auf
+  emulierter Fremdarchitektur nichts — über Benutzer und `/ping` prüfen.
+- **B15 — `bake` baut die Matrix parallel.** `make build-all` übersetzt drei
+  PHP-Versionen gleichzeitig; auf einer vollen Docker-VM bricht das mit
+  „No space left on device" ab. Kein Designfehler, eine Betriebsbedingung.
 
 ---
 

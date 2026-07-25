@@ -48,6 +48,8 @@ $(foreach k,$(ENV_SET_KEYS),$(eval $(k) := $(SAVED_$(k))))
 # Module einbinden
 # ---------------------------------------------------------------------------
 include ./support/makefiles/docker.helper.mk
+include ./support/makefiles/docker.build.local.mk
+include ./support/makefiles/docker.build.push.mk
 
 # ---------------------------------------------------------------------------
 # Setup
