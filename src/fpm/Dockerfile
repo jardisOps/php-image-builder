@@ -18,8 +18,8 @@ FROM base
 
 # Der einzige der 13 Pflichtwerte, den base nicht setzt (A2.5, begruendetes
 # Delta zu D10): im Request-Kontext begrenzt ein Zeitlimit haengende Requests.
-# Der Grund ist der Prozesstyp, nicht das Target — derselbe _WEB-Wert gilt ab P7
-# auch fuer frankenphp.
+# Der Grund ist der Prozesstyp, nicht das Target; der Schluessel heisst deshalb
+# _WEB und nicht _FPM.
 ARG PHP_MAX_EXECUTION_TIME_WEB
 ENV PHP_MAX_EXECUTION_TIME=${PHP_MAX_EXECUTION_TIME_WEB}
 

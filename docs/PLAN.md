@@ -56,20 +56,18 @@ php-image-builder/
 │   └── ssh.mk
 ├── src/
 │   ├── shared/
-│   │   ├── php-extensions.env    # Extension-Liste, von base + frankenphp gelesen
+│   │   ├── php-extensions.env    # Extension-Liste, von base gelesen
 │   │   └── entrypoint/
 │   │       ├── entrypoint.sh     # gemeinsamer Kern
 │   │       ├── lib-user.sh       # UID/GID-Angleichung (A4)
 │   │       └── lib-phpini.sh     # APP_ENV-Profile + INI-Erzeugung (A10)
 │   ├── base/Dockerfile
 │   ├── cli/Dockerfile
-│   ├── fpm/
-│   │   ├── Dockerfile
-│   │   └── fpm-pool.sh           # target-spezifische Ergänzung
-│   └── frankenphp/Dockerfile
+│   └── fpm/
+│       ├── Dockerfile
+│       └── fpm-pool.sh           # target-spezifische Ergänzung
 └── compose/
     ├── demo-stack.yml            # mysql + fpm + offizielles nginx
-    ├── demo-frankenphp.yml       # Profil-Variante
     └── nginx/templates/
         └── default.conf.template # vollständig parametrisiert (A6)
 ```
@@ -88,10 +86,10 @@ Abhängigkeiten sind strikt sequenziell, wo nicht anders vermerkt. Parallelisier
 | P4 | `cli`-Target | `src/cli/Dockerfile` | `FROM base`; Extensions vollständig; Entrypoint aus P2 | P3 |
 | P5 | `fpm`-Target | `src/fpm/Dockerfile`, `fpm-pool.sh` | `FROM base`; FPM-Ping antwortet; Pool-Config erzeugt | P3 |
 | P6 | `docker-bake.hcl` + Make-Targets | Bake-Matrix, `docker.helper.mk`, `docker.build.local.mk`, `docker.build.push.mk` | `docker buildx bake` baut base/cli/fpm in einem Lauf; ein Versionsstring treibt alle Tags | P4, P5 |
-| P7 | `frankenphp`-Target | `src/frankenphp/Dockerfile` | Baut; liefert HTTP im Request-Modus; Extension-Menge = `base` | P6 |
-| P8 | Tests | `test.mk` inkl. Extension-, OPcache-/JIT-, `APP_ENV`- und UID-Tests | `make test-all` grün; UID-Test deckt Host-UID ≠ 1000, belegte Ziel-GID, root-Volume ab | P7 |
+| ~~P7~~ | ~~`frankenphp`-Target~~ | **Entfallen** (E11, 2026-07-25) | — | — |
+| P8 | Tests | `test.mk` inkl. Extension-, OPcache-/JIT-, `APP_ENV`- und UID-Tests | `make test-all` grün; UID-Test deckt Host-UID ≠ 1000, belegte Ziel-GID, root-Volume ab | **P6** (vorher P7) |
 | P9 | nginx-Config als Asset | `compose/nginx/templates/default.conf.template` | Vollständig parametrisiert (A6.1–A6.2); läuft mit unverändertem offiziellem Image | P1 |
-| P10 | Demo-Stack | `compose/demo-stack.yml`, `compose/demo-frankenphp.yml` | `docker compose up` ohne Nacharbeit; Health-Checks; beide Profile | P7, P9 |
+| P10 | Demo-Stack | `compose/demo-stack.yml` | `docker compose up` ohne Nacharbeit; Health-Checks | **P9** (vorher P7, P9) |
 | P11 | CI-Pipeline + Härtung | `.github/workflows/ci.yml`, OCI-Labels, Trivy, SBOM/Attestations | Ein Workflow; `base`-Änderung baut alle Targets; Trivy blockiert CRITICAL/HIGH; UID-Test läuft auf Linux-Runner | P8 |
 | P12 | Doku + Abschluss | `README.md`, `.claude/CLAUDE.md` | Akzeptanz-Gate gegen alle AK1–AK15 | alle |
 
@@ -104,4 +102,9 @@ Abhängigkeiten sind strikt sequenziell, wo nicht anders vermerkt. Parallelisier
 
 ## Verbleibende Detailentscheidung
 
-`headgent/frankenphp` als Image-Name (O1) — wird in P7 gesetzt, bis dahin änderbar.
+Keine mehr. ~~`headgent/frankenphp` als Image-Name (O1)~~ ist mit E11 entfallen.
+
+**Die Nummerierung P8–P12 bleibt unverändert**, obwohl P7 wegfällt. Ein Nachrücken
+würde jede Querverweisung in `PROGRESS.md` falsch machen — dort hängen Befunde
+ausdrücklich an Phasennummern (B11 und B16 „verbindlich für P8", AK4 an „P8/P11").
+Die Lücke ist billiger als die stille Verschiebung.

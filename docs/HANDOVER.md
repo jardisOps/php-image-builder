@@ -1,7 +1,7 @@
 # Handover — Konsolidierung des PHP-Docker-Image-Builders
 
 **Stand:** 2026-07-25, Ende der dritten Umsetzungs-Session. **P1–P6 abgeschlossen
-und committet**, nächste Phase ist P7.
+und committet**, **P7 ist entfallen** (E11) — nächste Phase ist **P8**.
 
 Arbeitsverzeichnis: `/Users/Rolf/Development/headgent/devops/docker/php-image-builder/`
 Projekt- und künftiger Repo-Name: **`php-image-builder`**.
@@ -15,7 +15,7 @@ Vorläuferdokumente unter `devops/image/`.
 | Datei | Inhalt | Vorrang |
 |---|---|---|
 | `docs/PROGRESS.md` | **Maßgeblich.** Laufender Zustand: P1–P6 mit Nachweisen, alle Umsetzungsentscheidungen, Befunde B1–B16, offene Punkte, nächste Phase | geht bei Widersprüchen vor |
-| `docs/PRD.md` | Anforderungen A1–A10, Entscheidungen E1–E10, Nicht-Ziele N1–N7, Akzeptanzkriterien AK1–AK15, vollständiger Ist-Zustand (Drift D1–D16, UID-Defekte U1–U3, Xdebug/JIT-Lücken L-A–L-G) mit Datei- und Zeilenangaben | bestätigt |
+| `docs/PRD.md` | Anforderungen A1–A10, Entscheidungen E1–**E11**, Nicht-Ziele N1–**N8**, Akzeptanzkriterien AK1–AK15, vollständiger Ist-Zustand (Drift D1–D16, UID-Defekte U1–U3, Xdebug/JIT-Lücken L-A–L-G) mit Datei- und Zeilenangaben | bestätigt |
 | `docs/PLAN.md` | Bauform, Zielstruktur, 12 Phasen mit Abhängigkeiten | freigegeben |
 | `docs/HANDOVER.md` | diese Datei — Vorgeschichte und Einstieg | — |
 
@@ -45,8 +45,9 @@ ea450dc  feat: docker-bake.hcl drives base/cli/fpm in one run (P6)
 | P4 `cli`-Target | ✅ |
 | P5 `fpm`-Target | ✅ |
 | P6 `docker-bake.hcl` + Make-Targets | ✅ |
-| **P7 `frankenphp`-Target** | **← hier weiter** (N3 und O1 vorher vorlegen) |
-| P8–P12 | offen |
+| ~~P7 `frankenphp`-Target~~ | **entfallen (E11)** — Nummer bleibt frei, P8–P12 rücken nicht nach |
+| **P8 Tests** | **← hier weiter** (hängt jetzt an P6) |
+| P9–P12 | offen |
 
 Gebaut und geprüft: `base`, `cli` und `fpm` gegen PHP **8.3, 8.4 und 8.5** — in
 **einem** `bake`-Lauf, nativ auf arm64. **amd64 ist seit P6 belegt** (PHP 8.3,
@@ -106,6 +107,7 @@ ab. Die damit erzeugten `php-image-builder-*:test`-Images sind entfernt.
 | — | `cli` bleibt ein eigenes Target (vier Zeilen), weil `max_execution_time`, `STOPSIGNAL` und `HEALTHCHECK` zwischen Worker und Request entgegengesetzt sind | PROGRESS „P4 → Vorbemerkung" |
 | — | Matrix auf **8.3 / 8.4 / 8.5**, 8.2 gestrichen | PROGRESS „Versions-Matrix umgestellt" |
 | — | `bake` bekommt seine Werte **ausschließlich** über den `export` des Makefiles — es liest die `.env` nicht selbst; `args = { X = null }` vererbt nichts | PROGRESS „P6 → Entscheidungen 1 und 2" |
+| **E11** | **FrankenPHP entfällt ganz.** Ohne Worker-Mode bringt es nur „ein Container statt zwei", kostet ein drittes publiziertes Image — und hätte mit **null Konsumenten** begonnen, genau der Grund, aus dem `headgent/nginx` gestrichen wurde | PROGRESS „P7 — entfallen", PRD E11 |
 
 ## Die wichtigsten Befunde
 

@@ -106,9 +106,11 @@ Zweiter Befund: Die Template-Config ist **unvollständig parametrisiert**. Subst
 | `base` | — (nicht publiziert) | offizielles `php:X-alpine` | Single Source of Truth: PHP-Version, Extensions, Composer |
 | `cli` | `headgent/phpcli` | `base` | Worker, Queue-Consumer, Cron, CI/Build-Kontext |
 | `fpm` | `headgent/phpfpm` | `base` | php-fpm-only, Sidecar-Pattern |
-| `frankenphp` | `headgent/frankenphp` *(Name offen, O1)* | eigenständig | Single-Process HTTP im klassischen Request-Modus |
+| ~~`frankenphp`~~ | — | — | **Gestrichen am 2026-07-25 auf Anweisung des Users, siehe E11** |
 
 **nginx ist kein Build-Target mehr** (E9). Geliefert wird stattdessen die Template-Konfiguration als versioniertes Asset, das mit dem unveränderten offiziellen Image verwendet wird.
+
+**FrankenPHP ist kein Build-Target mehr** (E11). Das Repo baut damit genau die zwei Images, die heute Konsumenten haben.
 
 ---
 
@@ -118,8 +120,9 @@ Zweiter Befund: Die Template-Config ist **unvollständig parametrisiert**. Subst
 |---|---|---|
 | E1 | **Ein Builder-Repo** ersetzt die zwei bestehenden | Kernziel des Vorhabens |
 | E2 | **Image-Namen bleiben unverändert** (`headgent/phpcli`, `headgent/phpfpm`, `headgent/nginx`) | Repo-Name und Image-Name sind unabhängig; Konsumenten dürfen nichts merken. `development.md` §6: publizierte Reihen laufen nur vorwärts |
-| E3 | **Kein combined Image** (php-fpm + nginx in einem Container) | Verworfen zugunsten von FrankenPHP. Combined bräuchte einen Prozess-Manager (s6/supervisord) und löst dasselbe Problem, das FrankenPHP ohne diesen Aufwand löst |
-| E4 | **FrankenPHP im klassischen Request-Modus** ist die Kernanforderung. Der Worker-Mode ist ausdrücklich **kein** Teil dieses Vorhabens | Reduziert Umfang und Risiko. Der Worker-Mode bleibt das mittelfristige Ziel (er hält die Anwendung zwischen Requests im Speicher und passt zum Koffer-/DomainKernel-Muster: Bootstrap einmal, dann Request-Loop), wird hier aber nur *nicht verbaut* — siehe A5.2 |
+| E3 | **Kein combined Image** (php-fpm + nginx in einem Container) | Combined bräuchte einen Prozess-Manager (s6/supervisord). Die ursprüngliche Begründung „verworfen zugunsten von FrankenPHP" trägt seit E11 nicht mehr; die Entscheidung bleibt trotzdem, weil der Prozess-Manager-Aufwand für sich genügt. **Folge:** „ein Container statt zwei" hat keinen Nachfolger — Projekte fahren weiterhin `fpm` + offizielles nginx mit unserem Template (A6) |
+| ~~E4~~ | ~~**FrankenPHP im klassischen Request-Modus** ist die Kernanforderung~~ | **Gegenstandslos seit E11.** Der Worker-Mode-Gedanke bleibt als Notiz erhalten: er hält die Anwendung zwischen Requests im Speicher und passt zum Koffer-/DomainKernel-Muster (Bootstrap einmal, dann Request-Loop). Wird FrankenPHP je aufgegriffen, ist **das** der Anlass — nicht der Request-Modus |
+| **E11** | **FrankenPHP entfällt vollständig als Build-Target** (Anweisung Rolf, 2026-07-25) | Im vereinbarten Zuschnitt (ohne Worker-Mode, N7) bringt es nur „ein Container statt zwei": kein Geschwindigkeitsgewinn, weil im klassischen Request-Modus wie unter FPM pro Request gebootet wird, und Caddys HTTP/2/HTTP/3/Auto-TLS sind hinter einem vorgelagerten Traefik redundant. Dem stünden ein drittes publiziertes Image (~250 MB statt 128), ZTS-PHP, ~30 duplizierte Dockerfile-Zeilen und je ein Dauerzweig in CI, Trivy und Push gegenüber. Ausschlaggebend: `headgent/frankenphp` startet mit **null Konsumenten** — dieselbe Lage, aus der heraus `headgent/nginx` gestrichen wurde (E9/A6.5). Nachrüstbar, sinnvollerweise gemeinsam mit dem Worker-Mode |
 | E5 | **`pcntl` kommt nach `base`**, also auch in `fpm` | Kostet zur Laufzeit nichts; das bisherige Weglassen ist ein Nutzungs-, kein Sicherheitsargument. Hebt D1 auf |
 | E6 | **Gemeinsame Basis, begründete Deltas** bei der Konfiguration | Extensions, PECL-Versionen, Variablennamen und Entrypoint-Kern sind für alle Targets identisch. Unterschiedlich bleiben nur Werte, die aus dem Einsatzzweck folgen (D10: CLI-Worker will kein Web-Timeout) — jedes verbleibende Delta wird im Plan einzeln begründet |
 | E7 | **UID/GID-Behandlung wird strukturell neu gebaut**, nicht gepatcht | U1–U3 sind Symptome eines heuristischen Ansatzes. Zielbild: Zweiwege-Entrypoint (siehe A4) |
@@ -141,7 +144,7 @@ Zweiter Befund: Die Template-Config ist **unvollständig parametrisiert**. Subst
 ### A2 — Eine Konfigurationsquelle
 
 - A2.1 Eine `.env` speist alle Targets; kein Wert ist an zwei Stellen gepflegt.
-- A2.2 Die Extension-Liste liegt in einer geteilten Definition, die `base` **und** der FrankenPHP-Build lesen (verhindert Drift).
+- A2.2 Die Extension-Liste liegt in einer geteilten Definition (`src/shared/php-extensions.env`). Ihr ursprünglicher Zweck — Drift zwischen `base` und dem FrankenPHP-Build zu verhindern — ist mit E11 entfallen; sie bleibt, weil sie die Liste aus dem Dockerfile heraushält und jeder künftige zweite Build-Pfad sie wieder braucht.
 - A2.3 Variablennamen sind über alle Targets identisch (hebt D2 auf).
 - A2.4 Kein Dockerfile trägt einen hartkodierten Versions-Default, der die `.env` überstimmen kann (hebt D16 auf).
 - A2.5 Jede beim Konsolidieren verbleibende Delta-Konfiguration ist im Plan namentlich begründet (D3, D4, D5, D9, D10, D11).
@@ -160,11 +163,11 @@ Zweiter Befund: Die Template-Config ist **unvollständig parametrisiert**. Subst
 - A4.4 Wird der Container von außen bereits mit `--user <uid>:<gid>` gestartet, unternimmt der Entrypoint keine Anpassung und das Image funktioniert dennoch mit einer im Image unbekannten UID.
 - A4.5 Das Verhalten ist auf Linux mit Host-UID ≠ 1000, mit belegter Ziel-GID und mit frischem Named Volume nachweislich geprüft.
 
-### A5 — FrankenPHP als Docker-Image
+### ~~A5 — FrankenPHP als Docker-Image~~ — gestrichen (E11, 2026-07-25)
 
-- A5.1 Das Image läuft im klassischen Request-Modus und ersetzt darin funktional die Kombination fpm+nginx.
-- A5.2 Der Worker-Mode ist **nicht** Teil des Lieferumfangs. Es wird lediglich sichergestellt, dass seine spätere Aktivierung keine Umstellung des Images erzwingt (kein Aufbau, der ihn strukturell ausschließt). Ob darüber hinaus etwas vorbereitet wird, entscheidet der Plan nach Aufwand.
-- A5.3 Das Image trägt dieselbe Extension-Menge wie `base` und bezieht sie aus derselben geteilten Definition (A2.2).
+A5.1–A5.3 sind ersatzlos entfallen. Was am Image `dunglas/frankenphp:1.12.6-php8.3-alpine`
+vor der Streichung bereits verifiziert wurde, ist in `docs/PROGRESS.md` („P7 —
+entfallen") festgehalten, damit ein späterer Anlauf nicht bei null beginnt.
 
 ### A6 — nginx-Konfiguration als Asset statt als Image
 
@@ -204,7 +207,7 @@ Die dort als H1–H6 priorisierten Maßnahmen werden im konsolidierten Repo umge
 - A8.1 Ein Compose-Stack (mysql/mariadb, php-fpm, nginx) startet ohne manuelle Nacharbeit mit `docker compose up`. Datenbank **und** nginx laufen dabei als unveränderte offizielle Images — der Stack demonstriert damit zugleich den Weg, den Projekte gehen sollen.
 - A8.2 Health-Checks für alle Services.
 - A8.3 Die nginx-Template-Variablen aus A6 sind exemplarisch befüllt.
-- A8.4 Ein zweites Profil setzt FrankenPHP statt fpm+nginx ein, sodass beide Architekturen vergleichbar sind.
+- ~~A8.4~~ Zweites Profil mit FrankenPHP — **entfallen mit E11**. Der Demo-Stack hat damit genau eine Ausprägung: mysql/mariadb + `fpm` + offizielles nginx.
 
 ### A9 — CI-Pipeline
 
@@ -223,8 +226,9 @@ Die dort als H1–H6 priorisierten Maßnahmen werden im konsolidierten Repo umge
 | N3 | Umbenennung der publizierten Image-Namen | E2 |
 | N4 | Migration der Konsumenten-Projekte | Nicht Teil dieses Repos |
 | N5 | Optionale Härtungen H7–H9 (SHA-Pinning, `clear_env`) | Niedrige Priorität; nach Abschluss erneut bewerten |
-| N6 | **Statisches FrankenPHP-Executable** als portables Binary und Release-Asset | Aufwendigster und unsicherster Teil des Vorläuferzuschnitts (eigener Build-Pfad über `static-php-cli`, unbelegte Extension-Verfügbarkeit bei `rdkafka`/`amqp`/`xdebug`, zusätzliches Release-Publishing) — zahlt auf keins der vier Ziele ein. Jederzeit nachrüstbar, sinnvollerweise gemeinsam mit dem Worker-Mode (E4) |
-| N7 | **FrankenPHP Worker-Mode** | E4 |
+| N6 | **Statisches FrankenPHP-Executable** als portables Binary und Release-Asset | Aufwendigster und unsicherster Teil des Vorläuferzuschnitts (eigener Build-Pfad über `static-php-cli`, unbelegte Extension-Verfügbarkeit bei `rdkafka`/`amqp`/`xdebug`, zusätzliches Release-Publishing) — zahlt auf keins der vier Ziele ein. Mit E11 ohnehin gegenstandslos |
+| N7 | **FrankenPHP Worker-Mode** | Ursprünglich E4; mit E11 fällt ohnehin das ganze Target weg |
+| N8 | **FrankenPHP insgesamt** | E11 |
 
 ---
 
@@ -232,7 +236,7 @@ Die dort als H1–H6 priorisierten Maßnahmen werden im konsolidierten Repo umge
 
 | # | Frage | Vorschlag | Blockiert |
 |---|---|---|---|
-| O1 | Image-Name für FrankenPHP | `headgent/frankenphp` | A5 |
+| ~~O1~~ | ~~Image-Name für FrankenPHP~~ | **Gegenstandslos:** am 2026-07-25 zunächst auf `headgent/frankenphp` entschieden, wenige Minuten später mit E11 zusammen mit dem Target gestrichen | — |
 | ~~O2~~ | ~~Bleibt `headgent/nginx` als eigenständiges Image bestehen?~~ | **Entschieden:** nein, siehe E9 und A6. `headgent/nginx` hat keine Konsumenten, daher entfällt auch ein Deprecation-Pfad | — |
 | ~~O3~~ | ~~Statisches Executable und dessen Extension-Verfügbarkeit~~ | **Entschieden:** entfällt, siehe N6 | — |
 | ~~O4~~ | ~~Name und Ort des neuen Repos~~ | **Entschieden:** neues Repo (Name siehe E8), `jardisOps/phpcli` und `jardisOps/phpfpm` werden archiviert statt gelöscht — History bleibt erhalten | — |
@@ -246,11 +250,11 @@ Die dort als H1–H6 priorisierten Maßnahmen werden im konsolidierten Repo umge
 - [ ] AK2 — `base`, `cli` und `fpm` teilen nachweislich **eine** PHP-Versions- und Extensions-Definition; kein Wert ist doppelt gepflegt.
 - [ ] AK3 — Kein Image-Name hat sich geändert; `headgent/phpcli` und `headgent/phpfpm` sind mit der neuen Versionsreihe fortsetzbar.
 - [ ] AK4 — Der UID/GID-Nachweis aus A4.5 ist erbracht: Host-UID ≠ 1000, belegte Ziel-GID und frisches Named Volume funktionieren auf Linux.
-- [ ] AK5 — FrankenPHP liegt als lauffähiges Docker-Image im klassischen Request-Modus vor und bedient denselben Anwendungsfall wie fpm+nginx.
-- [ ] AK6 — Das FrankenPHP-Image trägt dieselbe Extension-Menge wie `cli` und `fpm`, aus derselben Definition bezogen.
+- [x] ~~AK5 — FrankenPHP liegt als lauffähiges Docker-Image vor~~ — **entfallen (E11)**.
+- [x] ~~AK6 — Das FrankenPHP-Image trägt dieselbe Extension-Menge~~ — **entfallen (E11)**.
 - [ ] AK7 — Die nginx-Config enthält keine hartkodierten Werte mehr aus der Liste in 1.3, der Betrieb ohne TLS-Proxy ist korrekt, und sie läuft mit dem **unveränderten** offiziellen Image ohne eigenen Entrypoint.
 - [ ] AK8 — H1–H5 plus H10 sind umgesetzt; Trivy blockiert bei CRITICAL/HIGH und läuft nicht mehr mit `continue-on-error`.
-- [ ] AK9 — Der Demo-Stack startet mit `docker compose up` ohne Nacharbeit; das FrankenPHP-Profil ebenfalls.
+- [ ] AK9 — Der Demo-Stack startet mit `docker compose up` ohne Nacharbeit. *(Der Zusatz „das FrankenPHP-Profil ebenfalls" ist mit E11 entfallen.)*
 - [ ] AK10 — Ein CI-Workflow ersetzt beide bestehenden; eine `base`-Änderung baut alle abhängigen Targets neu.
 - [ ] AK11 — Jede in Abschnitt 1.1 gelistete Drift ist entweder aufgehoben oder als bewusstes Delta begründet.
 - [ ] AK13 — `APP_ENV=dev|test|prod` setzt in allen Targets ein konsistentes Profil; eine explizit gesetzte Einzelvariable schlägt das Profil weiterhin.

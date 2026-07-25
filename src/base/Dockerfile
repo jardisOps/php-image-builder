@@ -1,5 +1,5 @@
 # ---------------------------------------------------------------------------
-# base — gemeinsame Grundlage von cli, fpm und (teilweise) frankenphp
+# base — gemeinsame Grundlage von cli und fpm
 # ---------------------------------------------------------------------------
 # Wird NICHT publiziert. Sein Zweck ist, dass PHP-Version, Extensions, Composer,
 # Laufzeit-Bibliotheken, der Benutzer appuser und der Entrypoint-Kern genau

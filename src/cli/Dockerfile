@@ -16,8 +16,8 @@
 # DL3006 ("always tag the version explicitly") ist hier ein Fehlalarm: `base` ist
 # ein benannter Build-Context, kein Registry-Image — es gibt nichts zu taggen.
 # hadolint kennt das bake-Konzept nicht. Der Ignore steht bewusst inline und
-# nicht in .hadolint.yaml, damit ein echtes ungetaggtes FROM in einem anderen
-# Dockerfile (etwa frankenphp) weiterhin auffaellt.
+# nicht in .hadolint.yaml, damit ein echtes ungetaggtes FROM in einem kuenftigen
+# Dockerfile weiterhin auffaellt.
 # ---------------------------------------------------------------------------
 # hadolint ignore=DL3006
 FROM base

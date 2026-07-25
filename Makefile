@@ -1,8 +1,8 @@
 # ---------------------------------------------------------------------------
 # php-image-builder — Einstiegspunkt
 # ---------------------------------------------------------------------------
-# Baut die PHP-Laufzeit-Images headgent/phpcli, headgent/phpfpm und
-# headgent/frankenphp aus einer gemeinsamen Basis. Alle Werte kommen aus ./.env
+# Baut die PHP-Laufzeit-Images headgent/phpcli und headgent/phpfpm aus einer
+# gemeinsamen Basis. Alle Werte kommen aus ./.env
 # (Single Source of Truth); dieses Makefile pflegt keine eigenen Defaults.
 # ---------------------------------------------------------------------------
 MAKEFLAGS      += --warn-undefined-variables
@@ -80,7 +80,6 @@ info: ## Build-Konfiguration anzeigen
 	@printf "  %-30s %s\n" "base (nicht publiziert):" "php:<ver>-*-alpine$(ALPINE_VERSION)"
 	@printf "  %-30s %s\n" "cli:"                     "$(CLI_IMAGE)"
 	@printf "  %-30s %s\n" "fpm:"                     "$(FPM_IMAGE)"
-	@printf "  %-30s %s\n" "frankenphp:"              "$(FRANKENPHP_IMAGE)"
 	@echo ""
 	@printf "\033[1mVersionen:\033[0m\n"
 	@printf "  %-30s %s\n" "Alpine:"          "$(ALPINE_VERSION)"
@@ -88,7 +87,6 @@ info: ## Build-Konfiguration anzeigen
 	@printf "  %-30s %s\n" "PHP (latest):"    "$(PHP_LATEST)"
 	@printf "  %-30s %s\n" "PHP (default):"   "$(PHP_VERSION)"
 	@printf "  %-30s %s\n" "Composer:"        "$(COMPOSER_VERSION)"
-	@printf "  %-30s %s\n" "FrankenPHP:"      "$(FRANKENPHP_VERSION)"
 	@printf "  %-30s %s\n" "nginx (Demo):"    "$(NGINX_VERSION)"
 	@printf "  %-30s %s\n" "Datums-Tag:"      "$(IMAGE_DATE)"
 	@echo ""

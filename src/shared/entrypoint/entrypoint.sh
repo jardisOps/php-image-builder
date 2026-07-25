@@ -2,8 +2,7 @@
 # ---------------------------------------------------------------------------
 # entrypoint.sh — gemeinsamer Entrypoint-Kern aller PHP-Targets
 # ---------------------------------------------------------------------------
-# Existiert genau einmal (A3.1) und wird von cli, fpm und frankenphp unveraendert
-# verwendet. In den Bestands-Repos war dieser Code zu rund 80 % dupliziert.
+# Existiert genau einmal (A3.1) und wird von cli und fpm unveraendert verwendet. In den Bestands-Repos war dieser Code zu rund 80 % dupliziert.
 #
 # Ablauf:
 #   1. Laufzeit-Benutzer an den Eigentuemer von /app angleichen   (lib-user.sh)
@@ -15,8 +14,10 @@
 # Skripte in /usr/local/lib/entrypoint.d/ und werden hier nur eingesammelt
 # (A3.2). Dieser Kern kennt kein einziges Target namentlich.
 #
-# POSIX-sh, nicht bash: derselbe Kern soll auch in einem Image ohne bash laufen
-# (FrankenPHP-Alpine). Geprueft wird mit shellcheck im dash-Dialekt.
+# POSIX-sh, nicht bash: derselbe Kern soll auch in einem Image ohne bash laufen.
+# Der urspruengliche Anlass (FrankenPHP-Alpine) ist mit E11 entfallen, die
+# Entscheidung bleibt — sie kostet nichts und haelt den Kern unabhaengig vom
+# Basis-Image. Geprueft wird mit shellcheck im dash-Dialekt.
 # ---------------------------------------------------------------------------
 set -eu
 

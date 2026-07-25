@@ -1,5 +1,5 @@
 # hadolint-Konfiguration fuer alle Dockerfiles dieses Repos:
-# src/base, src/cli, src/fpm und src/frankenphp.
+# src/base, src/cli und src/fpm.
 # Jeder Ignore unten ist eine bewusste Entscheidung fuer ein Basis-Image, kein
 # Versehen. (nginx wird hier nicht mehr gebaut — E9; das offizielle Image wird
 # unveraendert verwendet und bringt seinen Patch-Stand selbst mit.)

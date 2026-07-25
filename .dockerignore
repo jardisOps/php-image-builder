@@ -1,5 +1,5 @@
-# Build-Kontext aller Targets ist das Repo-Root (A7.5), weil base, cli, fpm und
-# frankenphp gemeinsam auf src/shared/ zugreifen. Alles, was kein Target braucht,
+# Build-Kontext aller Targets ist das Repo-Root (A7.5), weil base, cli und fpm
+# gemeinsam auf src/shared/ zugreifen. Alles, was kein Target braucht,
 # wird hier ausgeschlossen — das haelt den Kontext klein und verhindert, dass ein
 # unbedachtes COPY Repo-Beiwerk ins Image traegt.
 

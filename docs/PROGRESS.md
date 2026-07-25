@@ -20,7 +20,7 @@ Repo und sind mitversioniert. Bestandscode unverändert unter
 - [x] **P4  `cli`-Target** — abgeschlossen 2026-07-25
 - [x] **P5  `fpm`-Target** — abgeschlossen 2026-07-25
 - [x] **P6  `docker-bake.hcl` + Make-Targets** — abgeschlossen 2026-07-25
-- [ ] P7  `frankenphp`-Target
+- [~] ~~P7  `frankenphp`-Target~~ — **entfallen 2026-07-25 (E11)**
 - [ ] P8  Tests
 - [ ] P9  nginx-Config als Asset
 - [ ] P10 Demo-Stack
@@ -898,6 +898,87 @@ prüft.
 
 ---
 
+## P7 — entfallen (E11, Anweisung Rolf 2026-07-25)
+
+N3 (OS-Variante) und O1 (Image-Name) waren wie vereinbart vorgelegt und
+**entschieden** — Alpine und `headgent/frankenphp`. Auf die anschließende Frage
+des Users, was FrankenPHP im vereinbarten Zuschnitt überhaupt einbringt, fiel die
+Entscheidung, das Target **ganz zu streichen**.
+
+### Begründung
+
+Im Zuschnitt ohne Worker-Mode (N7) bringt FrankenPHP genau eine Sache: **ein
+Container statt zwei**, samt Wegfall der nginx-Konfiguration. Kein
+Geschwindigkeitsgewinn — im klassischen Request-Modus bootet PHP pro Request wie
+unter FPM; gemessen wurde nichts, architektonisch ist auch nichts zu erwarten.
+Caddys HTTP/2, HTTP/3 und Auto-TLS sind hinter einem vorgelagerten Traefik
+redundant.
+
+Dem stünden gegenüber: ein drittes publiziertes Image (~250 MB statt 128),
+ZTS-PHP statt NTS, rund 30 duplizierte Dockerfile-Zeilen (weil `frankenphp`
+nicht `FROM base` kommt) und je ein Dauerzweig in CI-Matrix, Trivy-Scan und
+Push-Lauf.
+
+Ausschlaggebend war der Vergleich mit E9: `headgent/nginx` wurde gestrichen,
+**weil es keine Konsumenten hat**. `headgent/frankenphp` hätte mit null
+Konsumenten begonnen — dieselbe Lage, nur andersherum entschieden. Der eigentliche
+Gewinn läge im Worker-Mode (Bootstrap einmal, dann Request-Loop; passt zum
+Koffer-/DomainKernel-Muster), und der ist ausgeschlossen.
+
+### Was vor der Streichung am Image belegt wurde
+
+Damit ein späterer Anlauf nicht bei null beginnt — geprüft am
+`dunglas/frankenphp:1.12.6-php8.3-alpine` (2026-07-25), **nicht** recherchiert:
+
+| Punkt | Befund |
+|---|---|
+| Image | 172 MB (arm64), läuft als **root**, `WORKDIR /app` — zufällig unser `APP_ROOT` |
+| Ports | 80, 443 (tcp+udp), 2019 (Caddy-Admin) |
+| **Default-Port** | **keiner.** Das Caddyfile bindet `{$SERVER_NAME:localhost}`; mit dem Default macht Caddy **Auto-HTTPS auf 443** mit selbst erzeugtem Zertifikat. Klartext-HTTP erst mit `SERVER_NAME=:80`. Damit ist der in N3 offene Punkt beantwortet |
+| Document-Root | `{$SERVER_ROOT:public/}` → `/app/public` |
+| Betriebsmodus | `php_server`, `worker`-Zeile auskommentiert → klassischer Request-Modus ist der Auslieferzustand; er entsteht dadurch, dass man `FRANKENPHP_CONFIG` **nicht** setzt |
+| PHP | 8.3.32, aber **ZTS** (thread-safe) — unser `base` ist NTS |
+| Extensions | ~30 Kern-Extensions; von unseren 20 fehlen **17**. `curl`, `dom`, `mbstring` sind einkompiliert — dasselbe Bild wie B12 |
+| Vorhandene Werkzeuge | `install-php-extensions`, `setcap` |
+| **Fehlende Werkzeuge** | `composer`, `su-exec`, `shadow` (usermod/groupmod) und `bash` — alle vier hätte unser Entrypoint-Kern gebraucht |
+
+Ein späterer Anlauf beginnt sinnvollerweise beim Worker-Mode, nicht beim
+Request-Modus, und braucht dann ohnehin eine neue Nutzenrechnung.
+
+### Zurückgebaut
+
+| Ort | Änderung |
+|---|---|
+| `docs/PRD.md` | **E11** neu; Abschnitt 2, E3 (Begründung), E4, A2.2, A5 (ganz), A8.4, N6/N7 (+ **N8**), O1, AK5/AK6, AK9 nachgezogen |
+| `docs/PLAN.md` | Zielstruktur ohne `src/frankenphp/` und `demo-frankenphp.yml`; P7 gestrichen; **P8 hängt jetzt an P6**, **P10 nur noch an P9** |
+| `.env` | `FRANKENPHP_VERSION` und `IMAGE_NAME_FRANKENPHP` entfernt (52 → 50 Schlüssel) |
+| `docker.helper.mk`, `Makefile` | `FRANKENPHP_IMAGE` und die zwei `info`-Zeilen entfernt |
+| Kommentare | `.dockerignore`, `.hadolint.yaml`, `php-extensions.env`, `entrypoint.sh`, `base`/`cli`/`fpm`-Dockerfile |
+
+`docker-bake.hcl` war **nicht** betroffen — das Target war dort noch nicht
+angelegt.
+
+**Bewusst nicht geändert:** die Phasennummern P8–P12 rücken **nicht** nach. Ein
+Nachrücken machte jede Querverweisung falsch (B11 und B16 „verbindlich für P8",
+AK4 an „P8/P11"). Die Lücke ist billiger als die stille Verschiebung.
+
+**Zwei Entscheidungen bleiben, obwohl ihr Anlass entfallen ist**, beide zum
+Nulltarif und im Code begründet: der Entrypoint-Kern bleibt POSIX-`sh` (statt
+`bash`), und die Extension-Liste bleibt in `src/shared/php-extensions.env`
+ausgelagert.
+
+### Akzeptanz — nachgewiesen
+
+- Außerhalb von `docs/` steht `frankenphp` nur noch in **drei** Kommentaren, die
+  die Streichung selbst erklären (`.env`, `php-extensions.env`, `entrypoint.sh`).
+- `make info` zeigt zwei Targets, `stderr` ist leer — keine
+  `--warn-undefined-variables`-Warnung durch die entfernten Schlüssel.
+- `make bake-print` löst unverändert auf: Gruppe `default` = `cli` + `fpm`,
+  neun Ziele.
+- **Vier Prüfungen grün** (hadolint ×3, shellcheck, 33/33, 27/27).
+
+---
+
 ## Offene Punkte / Risiken
 
 | # | Punkt | Fällig in | Kritikalität |
@@ -907,8 +988,8 @@ prüft.
 | ~~N5~~ | ~~`STOPSIGNAL SIGQUIT` aus dem fpm-Basisimage ist für einen CLI-Worker falsch~~ — **korrigiert in P4**, `StopSignal=SIGTERM` am gebauten Image geprüft | — | erledigt |
 | **N6** | **Erster Push auf `headgent/phpcli`/`phpfpm` ist der einzige Punkt, an dem laufende Projekte Schaden nehmen könnten.** Vor dem ersten Push wird eine Tag-Strategie vorgelegt (Vorschlag: Nebentag `:<ver>-next`, `:latest` und `:<ver>` unangetastet, bis in einem Projekt gegengeprüft). Bis dahin: kein `docker login`, kein `--push`, keine CI-Auslösung | vor P11-Abschluss | **hoch** |
 | ~~N4~~ | ~~FPM-Privilegienwechsel: zwei tragfähige Wege~~ — **entschieden 2026-07-25: Variante (b)**, und zwar zwingend: (a) ist nachweislich nicht lauffähig (Befund **B9** — der `chown`-Griff ist wirkungslos, `headgent/phpfpm` startet deshalb in keiner Version). Es war keine Abwägung | — | erledigt |
-| N3 | FrankenPHP-OS-Variante: upstream empfiehlt **Debian**, unsere übrige Reihe ist durchgängig **Alpine**. Abwägung Konsistenz vs. Upstream-Empfehlung; die Doku nennt für die Empfehlung keine Begründung. Der Default-Port des mitgelieferten Caddyfile ist nicht dokumentiert und muss am Image selbst verifiziert werden. | P7 | mittel |
-| O1 | Image-Name für FrankenPHP (`headgent/frankenphp` vorgeschlagen) | P7 | niedrig |
+| ~~N3~~ | ~~FrankenPHP-OS-Variante~~ — **entschieden 2026-07-25: Alpine**, wenige Minuten später mit dem ganzen Target gestrichen (E11). Der offene Default-Port ist im Abschnitt „P7 — entfallen" trotzdem belegt festgehalten | — | erledigt |
+| ~~O1~~ | ~~Image-Name für FrankenPHP~~ — **entschieden: `headgent/frankenphp`**, dann mit E11 gegenstandslos | — | erledigt |
 | AK4 | UID-Nachweis ist auf macOS prinzipiell nicht führbar. P8 liefert den Test, P11 den Nachweis auf dem Linux-Runner. | P8/P11 | bekannt |
 
 ### Wartet auf ausdrückliche Freigabe (nach außen wirkend)
@@ -998,25 +1079,26 @@ UID/GID-Neubau (A4/E7 gegen U1–U3). **L-B ist mit dem `test`-Profil erledigt:*
 
 ## Nächste Phase
 
-**P7 — `frankenphp`-Target.** Liefert `src/frankenphp/Dockerfile`. Akzeptanz nach
-Plan: baut, liefert HTTP im klassischen Request-Modus (E4/A5.1), Extension-Menge
-= `base` aus derselben Definition (A5.3/A2.2, `php-extensions.env`).
+**P8 — Tests.** Liefert `support/makefiles/test.mk`. Hängt seit E11 an **P6**,
+nicht mehr an P7. Akzeptanz nach Plan: `make test-all` grün; der UID-Test deckt
+Host-UID ≠ 1000, belegte Ziel-GID und frisches Named Volume ab.
 
-**Vor dem Bauen zu entscheiden — dem User vorzulegen:**
+Einzubinden sind die vier Prüfungen, die seit P2/P3 von Hand laufen (hadolint ×3,
+shellcheck über vier Shell-Dateien, 33 `APP_ENV`-Fälle, 27 UID-Fälle) — die
+Aufrufe stehen in `docs/HANDOVER.md`.
 
-- **N3 — OS-Variante.** Upstream empfiehlt Debian, unsere Reihe ist durchgängig
-  Alpine. `dunglas/frankenphp:1.12.6-php{8.3,8.4,8.5}-alpine` ist verfügbar
-  (geprüft 2026-07-25). Der Default-Port des mitgelieferten Caddyfile ist nicht
-  dokumentiert und **muss am Image selbst verifiziert werden**, nicht geraten.
-- **O1 — Image-Name**, Vorschlag `headgent/frankenphp`.
+**Zwei Testfallstricke sind verbindlich**, beide derselben Fehlerklasse „der Test
+misst nichts und meldet trotzdem grün":
 
-Aus P6 mitgegeben:
+- **B11 — `opcache.file_update_protection` (2 s).** Jeder OPcache-Test muss die
+  Frist abwarten und `num_cached_scripts`/`hits` mitprüfen. Genau daran ist ein
+  Nachweis in P5 schon einmal gescheitert.
+- **B16 — kein `pool www`-Titel unter Emulation.** Ein FPM-Test darf nicht auf den
+  Prozesstitel grepen, sondern muss über den Benutzer und `/ping` gehen.
 
-- Das Target braucht in den Make-Modulen **keine Änderung** — ein Eintrag in
-  `docker-bake.hcl` plus `IMAGE_NAME_FRANKENPHP` genügt (P6-Entscheidung 6).
-- `frankenphp` setzt auf ein eigenes Basis-Image auf, nicht auf `base` (PRD
-  Abschnitt 2). Es zieht `PHP_MAX_EXECUTION_TIME_WEB` wie `fpm` (Prozesstyp, nicht
-  Target) und braucht laut B2 `APP_OWNED_PATHS` für `/config/caddy` und
-  `/data/caddy` sowie `setcap CAP_NET_BIND_SERVICE`.
-- Die Regel „kein Default in der HCL" (P6-Entscheidung 3) gilt für die neuen
-  Variablen mit.
+Weiter zu beachten:
+
+- **B15 — `bake` baut die Matrix parallel.** Tests, die vorher bauen, brauchen
+  Plattenplatz; `make build` je Version ist der sparsame Weg.
+- **AK4 ist auf macOS prinzipiell nicht vollständig führbar.** P8 liefert den
+  Test, P11 den Nachweis auf dem Linux-Runner.

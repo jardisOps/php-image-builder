@@ -27,9 +27,8 @@ PHP_LATEST   := $(lastword $(PHP_VERSIONS))
 # ---------------------------------------------------------------------------
 # Die Namen selbst stehen in .env (E2: unveraendert gegenueber den
 # Bestands-Repos); hier entstehen nur die vollen Registry-Referenzen.
-CLI_IMAGE        = $(DOCKER_HUB)/$(IMAGE_NAME_CLI)
-FPM_IMAGE        = $(DOCKER_HUB)/$(IMAGE_NAME_FPM)
-FRANKENPHP_IMAGE = $(DOCKER_HUB)/$(IMAGE_NAME_FRANKENPHP)
+CLI_IMAGE = $(DOCKER_HUB)/$(IMAGE_NAME_CLI)
+FPM_IMAGE = $(DOCKER_HUB)/$(IMAGE_NAME_FPM)
 
 # ---------------------------------------------------------------------------
 # Unveraenderliches Datums-Tag (UTC)
