@@ -26,11 +26,13 @@ vollständig mit Fundstellen.
 
 ## Stand
 
-**Fünf Commits, 27 Dateien.** Das Repo hat **kein Remote** und ist nie gepusht
+**Sieben Commits, 27 Dateien.** Das Repo hat **kein Remote** und ist nie gepusht
 worden.
 
 ```
-(HEAD)   docs: record the P6 commit hash in the handover
+(HEAD)   docs: update commit count and log in the handover
+7cd1187  feat!: drop the frankenphp target entirely (E11)
+aaf7772  docs: record the P6 commit hash in the handover
 ea450dc  feat: docker-bake.hcl drives base/cli/fpm in one run (P6)
 238f969  docs: hand over at end of P5 — status, four checks, follow-up prompt for P6
 7ad5cc7  feat: build matrix moves to PHP 8.3/8.4/8.5, drop 8.2
@@ -139,7 +141,7 @@ ab. Die damit erzeugten `php-image-builder-*:test`-Images sind entfernt.
   Makefile-Struktur mit `support/makefiles/`, `##@`-Hilfesystem, `.env` als
   Single Source of Truth. Details in `PLAN.md`, Abschnitt „Bauform".
 - **Nichts nach außen ohne ausdrückliche Freigabe:** kein GitHub-Repo, kein
-  Remote, kein Push, keine Archivierung. Commits sind **freigegeben** (fünf
+  Remote, kein Push, keine Archivierung. Commits sind **freigegeben** (sieben
   liegen vor); bei Unsicherheit fragen.
 - **Umfang: nicht überkonstruieren.** Der User hat in P2 zweimal zurückgebaut
   (Notwert-Ebene, Lookup-Tabelle). Wenn etwas einfacher geht als geplant: sagen
