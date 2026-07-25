@@ -1,78 +1,140 @@
 # Handover — Konsolidierung des PHP-Docker-Image-Builders
 
-**Stand:** 2026-07-25, Ende der PRD-/Plan-Session. Umsetzung hat noch nicht begonnen.
+**Stand:** 2026-07-25, Ende der zweiten Umsetzungs-Session. **P1–P5 abgeschlossen
+und committet**, nächste Phase ist P6.
 
-> **Nachtrag 2026-07-25 (Umsetzungs-Session), gilt vor allen Pfadangaben unten:**
-> Der Zielort wurde auf Anordnung des Users verlegt und der Name festgelegt:
-> **`/Users/Rolf/Development/headgent/devops/docker/php-image-builder/`**, Projekt- und
-> künftiger Repo-Name **`php-image-builder`**. Diese vier Dokumente liegen jetzt unter
-> `docs/` in diesem Repo (nicht mehr unter `devops/image/docs/docker-php-builder/`).
-> Der Vorgriff `image/docker-php-builder/` (leeres Verzeichnis, leeres Git-Repo ohne
-> Commits) ist damit gegenstandslos. Bestandscode unverändert unter
-> `devops/image/phpcli/` und `devops/image/phpfpm/`; die Vorläuferdokumente
-> ebenfalls unverändert unter `devops/image/`.
-> Der laufende Zustand steht in `docs/PROGRESS.md` — dort weiterlesen.
+Arbeitsverzeichnis: `/Users/Rolf/Development/headgent/devops/docker/php-image-builder/`
+Projekt- und künftiger Repo-Name: **`php-image-builder`**.
+Bestandscode unverändert unter `devops/image/phpcli/` und `devops/image/phpfpm/`,
+Vorläuferdokumente unter `devops/image/`.
 
 ---
 
-## Was zu tun ist
+## Die vier Dokumente — in dieser Reihenfolge lesen
 
-Zwei getrennte Docker-Image-Builder (`phpcli`, `phpfpm`) werden zu **einem** Repo konsolidiert, um Drift zu beseitigen, einen belegten UID/GID-Defekt zu beheben und FrankenPHP als drittes Ziel zu ergänzen.
-
-## Die drei Dokumente — in dieser Reihenfolge lesen
-
-| Datei | Inhalt | Status |
+| Datei | Inhalt | Vorrang |
 |---|---|---|
-| `docs/docker-php-builder/PRD.md` | Anforderungen A1–A10, Entscheidungen E1–E10, Nicht-Ziele N1–N7, Akzeptanzkriterien AK1–AK15, **vollständiger Ist-Zustand** (Drift D1–D16, UID-Defekte U1–U3, Xdebug/JIT-Lücken L-A–L-G) | **Vom User bestätigt.** Keine offenen Punkte |
-| `docs/docker-php-builder/PLAN.md` | Bauform-Übernahme, Zielstruktur, 12 Phasen P1–P12 mit Abhängigkeiten | Erstellt, vom User implizit freigegeben („leg mal los") |
-| `docs/docker-php-builder/PROGRESS.md` | Laufender Zustand | Angelegt, P1 offen |
+| `docs/PROGRESS.md` | **Maßgeblich.** Laufender Zustand: P1–P5 mit Nachweisen, alle Umsetzungsentscheidungen, Befunde B1–B13, offene Punkte, nächste Phase | geht bei Widersprüchen vor |
+| `docs/PRD.md` | Anforderungen A1–A10, Entscheidungen E1–E10, Nicht-Ziele N1–N7, Akzeptanzkriterien AK1–AK15, vollständiger Ist-Zustand (Drift D1–D16, UID-Defekte U1–U3, Xdebug/JIT-Lücken L-A–L-G) mit Datei- und Zeilenangaben | bestätigt |
+| `docs/PLAN.md` | Bauform, Zielstruktur, 12 Phasen mit Abhängigkeiten | freigegeben |
+| `docs/HANDOVER.md` | diese Datei — Vorgeschichte und Einstieg | — |
 
-**Das PRD trägt den kompletten verifizierten Ist-Zustand mit Fundstellen.** Es muss nichts neu analysiert werden — alle Befunde sind belegt und mit Datei:Zeile referenziert. Der Bestandscode liegt unter `/Users/Rolf/Development/headgent/devops/image/phpcli/` und `.../phpfpm/`.
+**Der Bestandscode muss nicht neu analysiert werden.** Das PRD trägt ihn
+vollständig mit Fundstellen.
 
-## Aktueller Fortschritt
+---
 
-Nur ein Vorgriff auf P1 wurde ausgeführt:
+## Stand
 
-- `docker-php-builder/` samt Unterverzeichnissen laut Zielstruktur angelegt
-- `git init -b main` in diesem Verzeichnis ausgeführt
-- **Keine einzige Datei geschrieben.** Da Git leere Verzeichnisse nicht trackt, ist der Repo-Stand faktisch leer
+**Zwei Commits, 24 Dateien.** Das Repo hat **kein Remote** und ist nie gepusht
+worden.
 
-P1 beginnt also praktisch bei null; die Verzeichnisse sind lediglich schon da.
+```
+7ad5cc7  feat: build matrix moves to PHP 8.3/8.4/8.5, drop 8.2
+1aa8d30  feat: consolidated PHP image builder — base, cli and fpm targets
+```
 
-## Für P1 bereits recherchiert
+| Phase | Stand |
+|---|---|
+| P1 Repo-Gerüst + konsolidierte `.env` | ✅ |
+| P2 Gemeinsamer Entrypoint-Kern (UID/GID + `APP_ENV`) | ✅ |
+| P3 `base`-Target | ✅ |
+| P4 `cli`-Target | ✅ |
+| P5 `fpm`-Target | ✅ |
+| **P6 `docker-bake.hcl` + Make-Targets** | **← hier weiter** |
+| P7–P12 | offen |
 
-Diese Dateien werden aus den Bestands-Repos übernommen — Inhalte sind geprüft:
+Gebaut und geprüft: `base`, `cli` und `fpm` gegen PHP **8.3, 8.4 und 8.5**,
+jeweils nativ auf **arm64**. `amd64` ist noch ungeprüft und kommt mit P6/P11.
 
-| Datei | Quelle | Anpassung |
+---
+
+## Die vier Prüfungen, die grün bleiben müssen
+
+Aus dem Repo-Root. Sie sind in P8 in `test.mk` einzubinden.
+
+```sh
+# hadolint — für alle drei Dockerfiles, je Exit 0
+for f in src/base/Dockerfile src/cli/Dockerfile src/fpm/Dockerfile; do
+  docker run --rm -i -v "$PWD/.hadolint.yaml:/.hadolint.yaml:ro" \
+    hadolint/hadolint:latest hadolint --config /.hadolint.yaml - < "$f"; done
+
+# shellcheck — alle vier Shell-Dateien
+docker run --rm -v "$PWD:/mnt" -w /mnt koalaman/shellcheck:stable \
+  --external-sources --source-path=src/shared/entrypoint \
+  src/shared/entrypoint/*.sh src/shared/php-extensions.env src/fpm/fpm-pool.sh
+
+bash support/tests/check-phpini.sh          # 33/33
+docker run --rm --platform linux/amd64 \
+  -v "$PWD/src/shared/entrypoint/lib-user.sh:/lib-user.sh:ro" \
+  -v "$PWD/support/tests/check-user-alignment.sh:/check.sh:ro" \
+  alpine:3.23 sh /check.sh                  # 27/27
+```
+
+**Ad-hoc-Build bis P6** (danach ersetzt durch `bake`) — das Skript speist alle im
+Dockerfile deklarierten ARGs aus der `.env` und gibt der Umgebung Vorrang:
+
+```sh
+PHP_VERSION=8.5 bash <scratchpad>/build-base.sh src/base/Dockerfile my-base:test
+bash <scratchpad>/build-base.sh src/cli/Dockerfile my-cli:test base=my-base:test
+```
+
+Das Skript liegt im Session-Scratchpad und ist **nicht** im Repo. Es ist 30
+Zeilen und in `docs/PROGRESS.md` (P3 → Akzeptanz) beschrieben; P6 macht es
+ohnehin überflüssig.
+
+---
+
+## Was in dieser Session entschieden wurde
+
+| # | Entscheidung | Wo begründet |
 |---|---|---|
-| `.gitignore` | `phpcli/.gitignore` | unverändert übernehmen |
-| `.hadolint.yaml` | `phpfpm/.hadolint.yaml` | Kommentartext anpassen (gilt künftig für base/cli/fpm/frankenphp, nicht mehr für nginx); die Ignores DL3018 und DL4006 bleiben mit ihrer Begründung |
-| `.github/CODEOWNERS` | `phpfpm/.github/CODEOWNERS` | Inhalt `* @headgent.dev` |
-| `LICENSE` | `phpfpm/LICENSE` | MIT, Copyright 2024 Headgent GmbH |
+| **N1** | `base` = `php:X-fpm-alpine`, auch für CLI. Gemessen: fpm-Image ist 16,7 MB **kleiner** als cli und trägt einen byte-gleichen PHP-CLI | PROGRESS „P3 → N1 entschieden" |
+| **N4** | FPM startet als root, wechselt die Worker selbst per `user =`. **Keine Abwägung** — der su-exec-Weg funktioniert nachweislich nicht | PROGRESS „P5 → N4", Befund B9 |
+| — | `cli` bleibt ein eigenes Target (vier Zeilen), weil `max_execution_time`, `STOPSIGNAL` und `HEALTHCHECK` zwischen Worker und Request entgegengesetzt sind | PROGRESS „P4 → Vorbemerkung" |
+| — | Matrix auf **8.3 / 8.4 / 8.5**, 8.2 gestrichen | PROGRESS „Versions-Matrix umgestellt" |
 
-Die konsolidierte `.env` entsteht aus `phpcli/src/.env` + `phpfpm/.env`. Beide sind im PRD Abschnitt 1.1 vollständig gegenübergestellt; die PECL-Versionen sind in beiden identisch, nur `REDIS_VERSION` vs. `REDIS_PECL_VERSION` weicht im Namen ab (D2). Achtung auf D16: `phpcli/src/Dockerfile:22` hat `ARG COMPOSER_VERSION=2.9.3` hartkodiert, während die `.env` 2.9.5 pflegt — dieses Muster ist künftig verboten (A2.4).
+## Die wichtigsten Befunde
 
-## Arbeitsweise in dieser Session
+- **B9 — `headgent/phpfpm` ist in allen drei publizierten Versionen
+  startunfähig.** Der `chown` auf `/proc/self/fd/{1,2}` liefert Exit 0 und wirkt
+  nicht (anonyme Pipe), FPM scheitert danach am `error_log`. Der User hat
+  bestätigt, dass derzeit nichts gegen phpfpm läuft. Das neue Image behebt es.
+- **B12/B13 — zwei überflüssige Bauschritte im Bestand**: `curl`/`dom`/`mbstring`
+  wurden nachgebaut, obwohl einkompiliert; `docker-php-ext-enable opcache` war
+  immer ein No-op. Beide brachen erst bei 8.5 auf.
+- **B11 — Testfallstrick `opcache.file_update_protection` (2 s).** Jeder
+  OPcache-Test muss die Frist abwarten und `num_cached_scripts`/`hits` mitprüfen,
+  sonst misst er nichts. **Verbindlich für P8.**
 
-- **Sprache Deutsch** (globale Regel).
-- **Keine Subagenten** — die Session-Konfiguration untersagte das Agent-Tool ohne ausdrückliche Anforderung. Falls im neuen Kontext erlaubt und gewünscht, kann der Workflow aus `project-workflow.md` §3 mit Umsetzungs-Subagent und unabhängigem Verifier je Phase gefahren werden; sonst arbeitet die Hauptsession die Phasen selbst ab.
-- **Kein Experten-Gremium** — der User hat es für dieses Vorhaben ausdrücklich abgelehnt.
-- Der User arbeitet auf **macOS**; der UID-Defekt ist dort prinzipiell unsichtbar und nur auf einem Linux-Runner nachweisbar (deshalb P8 = Test, P11 = Nachweis).
+---
 
-## Entscheidungen, die im Gespräch fielen und leicht übersehen werden
+## Arbeitsweise in dieser Session (fortzuführen)
 
-1. **Combined Image (php-fpm + nginx in einem Container) ist verworfen** — FrankenPHP ist mittelfristig das Ziel. Nicht wieder einführen (N1).
-2. **Statisches FrankenPHP-Executable ist gestrichen** (N6) — samt der ganzen `static-php-cli`-Frage. Das Vorläuferdokument `anforderungen-docker-image-builder.md` fordert es noch; dieses ist überholt.
-3. **Worker-Mode ist nicht im Lieferumfang** (N7), darf aber nicht strukturell verbaut werden (A5.2).
-4. **nginx wird nicht mehr gebaut** (E9). Geliefert wird nur die Template-Config als Asset für das unveränderte offizielle Image. `headgent/nginx` hat keine Konsumenten, daher kein Deprecation-Pfad nötig.
-5. **Image-Namen bleiben** `headgent/phpcli` und `headgent/phpfpm` (E2) — auf ausdrücklichen Wunsch, nicht aus Zwang.
-6. **`pcntl` kommt nach `base`** und damit auch ins FPM-Image (E5), entgegen der bisherigen Praxis.
-7. **Bauform der Bestands-Repos beibehalten und optimieren** — Makefile-Struktur mit `support/makefiles/`, `##@`-Hilfesystem, `.env` als Single Source of Truth. Details in `PLAN.md`, Abschnitt „Bauform".
+- **Sprache Deutsch.**
+- **Keine Subagenten, kein Experten-Gremium** — der User hat beides ausdrücklich
+  ausgeschlossen, sofern er sie nicht anfordert.
+- **Bauform der Bestands-Repos bleibt erhalten und wird nur optimiert:**
+  Makefile-Struktur mit `support/makefiles/`, `##@`-Hilfesystem, `.env` als
+  Single Source of Truth. Details in `PLAN.md`, Abschnitt „Bauform".
+- **Nichts nach außen ohne ausdrückliche Freigabe:** kein GitHub-Repo, kein
+  Remote, kein Push, keine Archivierung. Commits sind **freigegeben** (zwei
+  liegen vor); bei Unsicherheit fragen.
+- **Umfang: nicht überkonstruieren.** Der User hat in P2 zweimal zurückgebaut
+  (Notwert-Ebene, Lookup-Tabelle). Wenn etwas einfacher geht als geplant: sagen
+  statt aufwendig bauen. Vor Abweichungen von PRD oder Plan nachfragen.
+- **Keine Annahmen.** Jeder Befund wird belegt — dieselbe Linie, die B9, B12 und
+  B13 überhaupt erst sichtbar gemacht hat.
 
-## Was das Vorläuferdokument falsch annimmt
+---
 
-`anforderungen-docker-image-builder.md` ist die Ausgangsbasis, aber an drei Stellen überholt — das PRD ist maßgeblich:
+## Vor dem Abschluss zu erledigen
 
-- Es nimmt an, die nginx-Config werde zur Build-Zeit erzeugt. Falsch: `envsubst` läuft bereits zur Laufzeit (`phpfpm/src/nginx/entrypoint.sh:11`).
-- Es fordert das statische Executable (§3.2, §4) — gestrichen.
-- Sein Zielbild (§2) widerspricht sich selbst bei nginx (Baum sagt „raus", §3.3 sagt „bleibt", §5 braucht es).
+- **N6 — der erste Push ist der einzige Punkt mit Außenwirkung.** Vorher eine
+  Tag-Strategie vorlegen (Vorschlag: Nebentag `:<ver>-next`, `:latest` und
+  `:<ver>` unangetastet, bis in einem Projekt gegengeprüft).
+- Kein GitHub-Repo, kein Remote (`make init` steht bereit, ist nie gelaufen).
+- `jardisOps/phpcli` und `jardisOps/phpfpm` sind unberührt und **nicht**
+  archiviert (E8).
+- `devops/image/docker-php-builder/` (alter Vorgriff: leere Verzeichnisse plus
+  Git-Repo ohne Commits) steht noch da und ist gegenstandslos.
