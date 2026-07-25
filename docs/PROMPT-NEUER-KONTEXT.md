@@ -1,6 +1,6 @@
 # Prompt für einen neuen Kontext
 
-Stand 2026-07-25, nach Abschluss von P8. Der Text unten ist zum Kopieren gedacht —
+Stand 2026-07-25, nach Abschluss von P9. Der Text unten ist zum Kopieren gedacht —
 er zeigt nur auf die Dokumente, statt Inhalte zu wiederholen, damit es eine
 einzige Wahrheitsquelle gibt.
 
@@ -10,10 +10,11 @@ Arbeitsverzeichnis: `/Users/Rolf/Development/headgent/devops/docker/php-image-bu
 
 Lies zuerst, in dieser Reihenfolge:
 
-1. `docs/PROGRESS.md` — trägt den laufenden Zustand: was P1–P6 und P8 geliefert
-   und nachgewiesen haben, warum P7 entfallen ist, alle Umsetzungsentscheidungen
-   mit Begründung, die Befunde B1–B20, die offenen Punkte und die nächste Phase.
-   Das ist die maßgebliche Datei; sie geht bei Widersprüchen vor.
+1. `docs/PROGRESS.md` — trägt den laufenden Zustand: was P1–P6, P8 und P9
+   geliefert und nachgewiesen haben, warum P7 entfallen ist, alle
+   Umsetzungsentscheidungen mit Begründung, die Befunde B1–B23, die offenen
+   Punkte und die nächste Phase. Das ist die maßgebliche Datei; sie geht bei
+   Widersprüchen vor.
 2. `docs/HANDOVER.md` — Einstieg, Stand, Bedienung, Prüflauf, Arbeitsweise.
 3. `docs/PRD.md` — Anforderungen A1–A10, Entscheidungen E1–E11, Nicht-Ziele
    N1–N8, Akzeptanzkriterien AK1–AK15 und der vollständige, verifizierte
@@ -25,36 +26,40 @@ Analysiere den Bestandscode nicht neu — das PRD trägt ihn mit Fundstellen. De
 Bestand liegt unter `/Users/Rolf/Development/headgent/devops/image/phpcli/` und
 `.../phpfpm/` und bleibt unverändert.
 
-**Stand:** P1–P6 und P8 sind abgeschlossen und committet, **P7 (`frankenphp`) ist
-gestrichen** (E11). `base`, `cli` und `fpm` bauen in einem `bake`-Lauf gegen PHP
-8.3, 8.4 und 8.5; amd64 ist belegt, der Nachweis auf einem echten Linux-Runner
-bleibt P11. `make test-all` läuft grün. Das Repo hat kein Remote und ist nie
-gepusht worden.
+**Stand:** P1–P6, P8 und P9 sind abgeschlossen und committet, **P7 (`frankenphp`)
+ist gestrichen** (E11). `base`, `cli` und `fpm` bauen in einem `bake`-Lauf gegen
+PHP 8.3, 8.4 und 8.5; amd64 ist belegt, der Nachweis auf einem echten
+Linux-Runner bleibt P11. Die nginx-Vorlage liegt als Asset vor und ist gegen das
+unveränderte offizielle Image nachgewiesen (39/39, AK7). `make test-all` läuft
+grün — jetzt neun Stufen. Das Repo hat kein Remote und ist nie gepusht worden.
 
-**Beginne mit P9** (nginx-Config als Asset). Die Phase hängt nur an P1, es ist
-nichts blockierend offen. Die Phasennummern rücken trotz der Lücke bei P7 **nicht**
-nach — Befunde und Akzeptanzkriterien verweisen namentlich auf sie.
+**Beginne mit P10** (Demo-Stack). Die Phase hängt nur an P9, es ist nichts
+blockierend offen. Die Phasennummern rücken trotz der Lücke bei P7 **nicht** nach
+— Befunde und Akzeptanzkriterien verweisen namentlich auf sie.
 
-Einzulösen in P9:
+Einzulösen in P10:
 
-- `compose/nginx/templates/default.conf.template`, vollständig parametrisiert.
-- Der Ist-Zustand steht im PRD Abschnitt 1.3 **mit Fundstellen**: hartkodiert
-  sind heute der Upstream-Host `app:`, `client_max_body_size 100m`, sämtliche
-  fastcgi-Timeouts und die feste HTTPS-Annahme (`fastcgi_param HTTPS on`,
-  `REQUEST_SCHEME https`). Die letzte muss schaltbar werden — ohne vorgelagerten
-  TLS-Proxy ist sie schlicht falsch (A6.2).
-- Es läuft mit dem **unveränderten** offiziellen nginx-Image über dessen
-  eingebaute Substitution (`NGINX_ENVSUBST_TEMPLATE_DIR`), ohne eigenen
-  Entrypoint und ohne eigenen Build (A6.3). Der eigene Entrypoint des Bestands
-  dupliziert nur, was das offizielle Image seit 1.19 selbst kann (E9).
-- Alle Variablen brauchen dokumentierte Defaults, damit das Ergebnis ohne
-  Konfiguration lauffähig ist (A6.4).
+- `compose/demo-stack.yml`: mysql/mariadb + `fpm` + **unverändertes** offizielles
+  nginx. Datenbank und nginx laufen als offizielle Images — der Stack
+  demonstriert damit zugleich den Weg, den Projekte gehen sollen (A8.1).
+- `docker compose up` ohne jede Nacharbeit, Health-Checks für **alle** Services
+  (A8.2), die nginx-Template-Variablen exemplarisch befüllt (A8.3).
+- Seit E11 hat der Stack nur **eine** Ausprägung; das zweite Profil (A8.4) ist
+  entfallen.
+- Damit fällt die zweite Hälfte von **AK12** („der Demo-Stack belegt, dass das
+  offizielle Image mit der gelieferten Config auskommt"); die erste ist mit P9
+  erbracht.
 
-Danach P10 (Demo-Stack, seit E11 nur noch eine Ausprägung), P11 (CI + Härtung),
-P12 (Doku + Abschluss).
+Was aus P9 bereitliegt: `compose/nginx/nginx-defaults.env` wird per `env_file:`
+eingebunden, überschrieben wird nur, was der Stack wirklich anders braucht.
+Denselben Aufbau fährt `support/tests/check-nginx-template.sh` schon — Netz,
+gemeinsames `/app`, fpm vor nginx. Befund **B23** beachten: nginx löst den
+Upstream-Namen beim Start auf, ohne erreichbaren PHP-Service startet es nicht.
+
+Danach P11 (CI + Härtung), P12 (Doku + Abschluss).
 
 Halte `docs/PROGRESS.md` nach jeder abgeschlossenen Phase fort — in derselben
-Form wie die Abschnitte zu P1–P6 und P8 (Geliefert, Akzeptanz mit Nachweis,
+Form wie die Abschnitte zu P1–P6, P8 und P9 (Geliefert, Akzeptanz mit Nachweis,
 Umsetzungsentscheidungen, Befunde).
 
 Wichtig:
@@ -66,10 +71,10 @@ Wichtig:
 - **`make test-all` muss grün bleiben.** Ein Aufruf, seit P8; der Umfang steht
   in `docs/HANDOVER.md`. Wer eine Extension, ein Profil oder einen Laufzeitwert
   ändert, zieht dort nach.
-- **Vier Testfallstricke derselben Klasse „der Test misst nichts und meldet
-  trotzdem grün" haben in diesem Vorhaben bereits zugeschlagen** — B11, B16, B19
-  und B20 in `PROGRESS.md`. Wer einen neuen Test schreibt, prüft ihn gegen diese
-  vier, bevor er ihn für grün hält.
+- **Fünf Testfallstricke derselben Klasse „der Test misst nichts und meldet
+  trotzdem grün" haben in diesem Vorhaben bereits zugeschlagen** — B11, B16,
+  B19, B20 und B21 in `PROGRESS.md`. Wer einen neuen Test schreibt, prüft ihn
+  gegen diese fünf, bevor er ihn für grün hält.
 - Keine nach außen wirkenden Aktionen ohne ausdrückliche Freigabe: kein
   GitHub-Repo anlegen, kein Remote setzen, nichts archivieren, **nicht pushen**.
   Commits sind freigegeben; frag im Zweifel.

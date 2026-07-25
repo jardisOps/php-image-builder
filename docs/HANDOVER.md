@@ -1,7 +1,7 @@
 # Handover — Konsolidierung des PHP-Docker-Image-Builders
 
-**Stand:** 2026-07-25, Ende der dritten Umsetzungs-Session. **P1–P6 und P8
-abgeschlossen und committet**, **P7 ist entfallen** (E11) — nächste Phase ist **P9**.
+**Stand:** 2026-07-25, Ende der vierten Umsetzungs-Session. **P1–P6, P8 und P9
+abgeschlossen und committet**, **P7 ist entfallen** (E11) — nächste Phase ist **P10**.
 
 Arbeitsverzeichnis: `/Users/Rolf/Development/headgent/devops/docker/php-image-builder/`
 Projekt- und künftiger Repo-Name: **`php-image-builder`**.
@@ -14,7 +14,7 @@ Vorläuferdokumente unter `devops/image/`.
 
 | Datei | Inhalt | Vorrang |
 |---|---|---|
-| `docs/PROGRESS.md` | **Maßgeblich.** Laufender Zustand: P1–P6 und P8 mit Nachweisen, alle Umsetzungsentscheidungen, Befunde B1–B20, offene Punkte, nächste Phase | geht bei Widersprüchen vor |
+| `docs/PROGRESS.md` | **Maßgeblich.** Laufender Zustand: P1–P6, P8 und P9 mit Nachweisen, alle Umsetzungsentscheidungen, Befunde B1–B23, offene Punkte, nächste Phase | geht bei Widersprüchen vor |
 | `docs/PRD.md` | Anforderungen A1–A10, Entscheidungen E1–**E11**, Nicht-Ziele N1–**N8**, Akzeptanzkriterien AK1–AK15, vollständiger Ist-Zustand (Drift D1–D16, UID-Defekte U1–U3, Xdebug/JIT-Lücken L-A–L-G) mit Datei- und Zeilenangaben | bestätigt |
 | `docs/PLAN.md` | Bauform, Zielstruktur, 12 Phasen mit Abhängigkeiten | freigegeben |
 | `docs/HANDOVER.md` | diese Datei — Vorgeschichte und Einstieg | — |
@@ -26,11 +26,13 @@ vollständig mit Fundstellen.
 
 ## Stand
 
-**Neun Commits, 32 Dateien.** Das Repo hat **kein Remote** und ist nie gepusht
+**Elf Commits, 35 Dateien.** Das Repo hat **kein Remote** und ist nie gepusht
 worden.
 
 ```
-(HEAD)   docs: hand over at end of P8
+(HEAD)   docs: hand over at end of P9
+d4e89e6  feat: nginx-Vorlage als Asset, vollstaendig parametrisiert (P9)
+9d2f171  docs: hand over at end of P8
 a473405  feat: test.mk — ein Prueflauf loest die Handarbeit ab (P8)
 93ee074  docs: update commit count and log in the handover
 7cd1187  feat!: drop the frankenphp target entirely (E11)
@@ -51,8 +53,9 @@ ea450dc  feat: docker-bake.hcl drives base/cli/fpm in one run (P6)
 | P6 `docker-bake.hcl` + Make-Targets | ✅ |
 | ~~P7 `frankenphp`-Target~~ | **entfallen (E11)** — Nummer bleibt frei, P8–P12 rücken nicht nach |
 | P8 Tests | ✅ `make test-all` grün |
-| **P9 nginx-Config als Asset** | **← hier weiter** (hängt nur an P1) |
-| P10–P12 | offen |
+| P9 nginx-Config als Asset | ✅ Vorlage + Defaults, 39/39 gegen das offizielle Image (AK7) |
+| **P10 Demo-Stack** | **← hier weiter** (hängt nur an P9) |
+| P11–P12 | offen |
 
 Gebaut und geprüft: `base`, `cli` und `fpm` gegen PHP **8.3, 8.4 und 8.5** — in
 **einem** `bake`-Lauf, nativ auf arm64. **amd64 ist seit P6 belegt** (PHP 8.3,
@@ -87,7 +90,7 @@ make test-all          # baut Test-Images fuer PHP_VERSION und prueft alles
 
 | Target | Umfang |
 |---|---|
-| `test-lint` | hadolint ×3, shellcheck über 11 Shell-Dateien |
+| `test-lint` | hadolint ×3, shellcheck über 12 Shell-Dateien |
 | `test-phpini` | 34 Fälle gegen `lib-phpini.sh`, ohne Container |
 | `test-user` | 27 Fälle gegen `lib-user.sh`, in `alpine:3.23` |
 | `test-boot` | cli startet, fpm wird `healthy` |
@@ -95,6 +98,7 @@ make test-all          # baut Test-Images fuer PHP_VERSION und prueft alles
 | `test-app-env` | 15 Fälle: AK13, AK14/L-F, A10.2, A10.5, A10.7 |
 | `test-uid` | 5 Fälle gegen echte Docker-Volumes (AK4) |
 | `test-opcache` | 14 Fälle inkl. **AK15** im laufenden FPM |
+| `test-nginx` | 39 Fälle gegen das **unveränderte** offizielle nginx-Image (AK7), zwei Instanzen: nur Defaults / alles überschrieben |
 
 Die Test-Images entstehen unter `php-image-builder-test/` und überschreiben die
 lokalen `headgent/*`-Images nicht. Eine andere Version prüfen:
@@ -111,6 +115,7 @@ lokalen `headgent/*`-Images nicht. Eine andere Version prüfen:
 | — | `cli` bleibt ein eigenes Target (vier Zeilen), weil `max_execution_time`, `STOPSIGNAL` und `HEALTHCHECK` zwischen Worker und Request entgegengesetzt sind | PROGRESS „P4 → Vorbemerkung" |
 | — | Matrix auf **8.3 / 8.4 / 8.5**, 8.2 gestrichen | PROGRESS „Versions-Matrix umgestellt" |
 | — | `bake` bekommt seine Werte **ausschließlich** über den `export` des Makefiles — es liest die `.env` nicht selbst; `args = { X = null }` vererbt nichts | PROGRESS „P6 → Entscheidungen 1 und 2" |
+| — | **nginx-Vorlage: ein Schalter `REQUEST_SCHEME=http\|https`** statt zweier Werte, und die Defaults liegen in `compose/nginx/nginx-defaults.env` — envsubst kennt keine Default-Schreibweise, ohne die Datei startet nginx nicht | PROGRESS „P9 → Entscheidungen 1 und 2" |
 | **E11** | **FrankenPHP entfällt ganz.** Ohne Worker-Mode bringt es nur „ein Container statt zwei", kostet ein drittes publiziertes Image — und hätte mit **null Konsumenten** begonnen, genau der Grund, aus dem `headgent/nginx` gestrichen wurde | PROGRESS „P7 — entfallen", PRD E11 |
 
 ## Die wichtigsten Befunde
@@ -126,14 +131,16 @@ lokalen `headgent/*`-Images nicht. Eine andere Version prüfen:
   wie Xdebug.** Die JIT-Automatik kannte nur Xdebug, also warnte ausgerechnet das
   `test`-Profil bei jedem Aufruf („JIT is incompatible…") — L-A wortwörtlich, nur
   mit anderer Extension. In `lib-phpini.sh` behoben.
-- **Vier Testfallstricke derselben Klasse „der Test misst nichts und meldet
-  trotzdem grün".** Alle vier haben in diesem Vorhaben schon einmal zugeschlagen:
+- **Fünf Testfallstricke derselben Klasse „der Test misst nichts und meldet
+  trotzdem grün".** Alle fünf haben in diesem Vorhaben schon einmal zugeschlagen:
   **B11** (`opcache.file_update_protection`, 2 s abwarten und
   `num_cached_scripts`/`hits` mitprüfen), **B16** (unter Emulation trägt ein
   FPM-Worker keinen `pool www`-Titel), **B19** (`--entrypoint php` umgeht den
   Entrypoint — dann gibt es keine Laufzeit-INI und man misst Extension-Defaults),
   **B20** (ein leeres Named Volume bekommt beim ersten Mount die Ownership des
-  Image-Verzeichnisses zurück). B20 ist für P11 relevant.
+  Image-Verzeichnisses zurück), **B21** (busybox-`wget --post-file` setzt POST,
+  sendet aber keinen Rumpf — ein Body-Size-Limit lässt sich damit nicht prüfen).
+  B20 ist für P11 relevant.
 - **B15 — `bake` baut die Matrix parallel.** `make build-all` übersetzt drei
   PHP-Versionen gleichzeitig; auf einer vollen Docker-VM bricht das mit
   „No space left on device" ab. Kein Designfehler, eine Betriebsbedingung.

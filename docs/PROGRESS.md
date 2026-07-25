@@ -22,7 +22,7 @@ Repo und sind mitversioniert. Bestandscode unverändert unter
 - [x] **P6  `docker-bake.hcl` + Make-Targets** — abgeschlossen 2026-07-25
 - [~] ~~P7  `frankenphp`-Target~~ — **entfallen 2026-07-25 (E11)**
 - [x] **P8  Tests** — abgeschlossen 2026-07-25
-- [ ] P9  nginx-Config als Asset
+- [x] **P9  nginx-Config als Asset** — abgeschlossen 2026-07-25
 - [ ] P10 Demo-Stack
 - [ ] P11 CI-Pipeline + Härtung
 - [ ] P12 Doku + Abschluss
@@ -1099,6 +1099,151 @@ Vorrang gibt (A10.5).
 
 ---
 
+## P9 — abgeschlossen
+
+### Geliefert
+
+| Datei | Inhalt |
+|---|---|
+| `compose/nginx/templates/default.conf.template` | **neu.** Der vhost des Bestands, vollstaendig parametrisiert (A6.1–A6.2), verhaltensgleich im Uebrigen |
+| `compose/nginx/nginx-defaults.env` | **neu.** Die elf Variablen mit dokumentierten Defaults (A6.4) — gleichzeitig ihre Dokumentation |
+| `support/tests/check-nginx-template.sh` | **neu.** 39 Zusicherungen gegen das unveraenderte offizielle Image, zwei Instanzen |
+| `support/makefiles/test.mk` | **geaendert:** `test-nginx` ergaenzt und in `test-all` aufgenommen |
+
+Die elf Variablen: `HOST`, `APP_ROOT`, `DOCUMENT_ROOT`, `INDEX_FILE`,
+`FASTCGI_UPSTREAM`, `PHP_PORT`, `CLIENT_MAX_BODY_SIZE`, `FASTCGI_READ_TIMEOUT`,
+`FASTCGI_SEND_TIMEOUT`, `FASTCGI_CONNECT_TIMEOUT`, `REQUEST_SCHEME`. Der Bestand
+substituierte fuenf (`phpfpm/src/nginx/entrypoint.sh:11`).
+
+### Akzeptanz — nachgewiesen
+
+`make test-nginx` laeuft mit **39/39** durch, gegen `nginx:1.28-alpine`
+(nginx/1.28.3) und `php-image-builder-test/phpfpm:8.3`. Der Aufbau ist der, den
+Projekte fahren sollen: fpm-Container plus **unveraendertes** offizielles nginx,
+gemeinsames `/app`, ein Bind-Mount der Vorlage nach `/etc/nginx/templates`.
+
+**Zwei Instanzen, weil eine allein nichts beweist:**
+
+| | Instanz A | Instanz B |
+|---|---|---|
+| Konfiguration | **nur** `nginx-defaults.env` | jeder Wert ueberschrieben |
+| Beweist | A6.4: laeuft ohne eigene Konfiguration | die Variablen wirken wirklich |
+
+| Prueffall | Ergebnis |
+|---|---|
+| Start ohne eigenen Entrypoint und ohne eigenen Build (A6.3) | ✅ beide Instanzen |
+| Keine unsubstituierte Variable in der erzeugten Konfiguration | ✅ |
+| `fastcgi_pass app:9000` an **beiden** Stellen, `client_max_body_size 100m`, alle drei Timeouts | ✅ am Rendering |
+| Front-Controller: `/nicht/vorhanden` → 200, `PROBE=index`, `REQUEST_URI` erhalten | ✅ |
+| Location 2: `/index.php/foo/bar` → `PATH_INFO=/foo/bar` | ✅ |
+| Location 3: `/info.php` → eigene Datei, eigenes `SCRIPT_FILENAME` | ✅ |
+| `/.env` → 404 | ✅ |
+| **A6.2 ohne TLS-Proxy:** `REQUEST_SCHEME=http`, **`HTTPS` gar nicht uebergeben** | ✅ |
+| **A6.2 hinter TLS-Proxy:** ein Schalter setzt `HTTPS=on`, `REQUEST_SCHEME=https`, `HTTP_X_FORWARDED_PROTO=https` | ✅ |
+| `HOST`, `DOCUMENT_ROOT`, `INDEX_FILE` ueberschrieben → `SERVER_NAME`, Dokumentwurzel und PATH_INFO-Location folgen | ✅ |
+| `CLIENT_MAX_BODY_SIZE` **wirkt**: 2000 B gegen `1k` → 413, gegen `100m` → 200 | ✅ mit Gegenprobe auf `CONTENT_LENGTH=2000` |
+| `FASTCGI_READ_TIMEOUT` **wirkt**: 3-s-Antwort gegen `1` → 504, gegen `600` → 200 | ✅ |
+| `FASTCGI_UPSTREAM` landet wirklich im `fastcgi_pass` | ✅ Gegenprobe: falscher Name → nginx meldet ihn sichtbar |
+
+**Gegenprobe zu A6.4** (nicht im Skript, weil sie den Start verhindert): ohne die
+Defaults-Datei — nur die Vorlage gemountet — bricht nginx sichtbar ab
+(`"client_max_body_size" directive invalid value`). Das ist der Beleg, dass die
+Defaults gebraucht werden und nicht bloss Beiwerk sind.
+
+**AK7 ist damit vollstaendig belegt**, alle drei Haelften: keine hartkodierten
+Werte mehr aus der Liste in PRD 1.3, der Betrieb ohne TLS-Proxy ist korrekt, und
+es laeuft mit dem unveraenderten offiziellen Image ohne eigenen Entrypoint. Das
+Abhaken im PRD bleibt dem Gate in P12 vorbehalten. **AK12** braucht die zweite
+Haelfte („der Demo-Stack belegt es") und faellt damit in P10.
+
+`make test-all` bleibt gruen — der neue Prueflauf ist die neunte Stufe.
+
+### Umsetzungsentscheidungen
+
+1. **Die Defaults liegen in einer eigenen Datei — das ist eine Abweichung von
+   der Zielstruktur des Plans** (dort steht nur die Vorlage) und sie ist
+   unvermeidlich: `envsubst` kennt keine Default-Schreibweise. Was die Umgebung
+   nicht traegt, bleibt unersetzt stehen und nginx startet nicht (oben belegt).
+   A6.4 („ohne Konfiguration lauffaehig") ist also **nur** mit einer
+   mitgelieferten Defaultquelle einloesbar. Die Datei ist gleichzeitig die von
+   A6.4 verlangte Dokumentation und wird in P10 vom Demo-Stack per `env_file:`
+   eingebunden — kein Wert doppelt gepflegt (A2.1). Vorrang: `environment:`
+   schlaegt `env_file:`, dieselbe Richtung wie A10.2 bei den PHP-Werten;
+   nachgewiesen an Instanz B.
+2. **Ein Schalter statt zweier Werte.** `REQUEST_SCHEME=http|https` speist ueber
+   einen `map`-Block alle drei fastcgi-Werte (`HTTPS`, `REQUEST_SCHEME`,
+   `HTTP_X_FORWARDED_PROTO`). Zwei einzelne Variablen waeren einfacher zu lesen
+   und koennten auseinanderlaufen — `HTTPS=on` bei `REQUEST_SCHEME=http` ist
+   genau die stille Fehlkonfiguration, die dieses Vorhaben sonst ueberall
+   austreibt. Im `http`-Fall wird `HTTPS` ueber nginx-eigenes `if_not_empty` gar
+   nicht uebergeben, statt es auf `off` zu setzen: Frameworks pruefen den Wert
+   unterschiedlich (`=== 'on'` vs. „nicht leer"), das Fehlen ist eindeutig. Genau
+   so verfaehrt das offizielle `fastcgi_params` mit `$https` auch.
+3. **Die fuenf bestehenden Variablennamen bleiben** (`HOST`, `APP_ROOT`,
+   `DOCUMENT_ROOT`, `INDEX_FILE`, `PHP_PORT`). Sie stehen so in der README des
+   Bestands und in den `environment:`-Bloecken der Projekte; sie umzubenennen
+   waere ein Bruch ohne Gegenwert (Linie E2). `FASTCGI_UPSTREAM` ist **der Name
+   aus dem Vorlaeuferdokument**, den PRD 1.3 als „existiert nicht" fuehrt — jetzt
+   existiert er.
+4. **Kein `NGINX_ENVSUBST_FILTER`.** Erwogen, um die Substitution auf einen
+   Praefix zu begrenzen. Nicht noetig und deshalb weggelassen: das offizielle
+   Skript uebergibt `envsubst` eine **Namensliste** aus der Umgebung, und
+   nginx-eigene Variablen (`$uri`, `$args`, `$document_root`, `$1`) sind
+   kleingeschrieben und stehen in keiner Umgebung. Ein Filter waere eine weitere
+   Pflichtvariable, deren Fehlen niemand bemerkt.
+5. **Eine Datei, kein ausgelagerter fastcgi-Block.** Der 11-Zeilen-Block steht in
+   beiden PHP-Locations — nginx kennt kein Makro. Ein `include` einer zweiten
+   gerenderten Datei waere moeglich (Endung `.inc`, damit `conf.d/*.conf` sie
+   nicht selbst laedt), haette aber zwei Nachteile: die Zielstruktur des Plans
+   nennt genau eine Datei, und wer nur die Vorlage mountet statt des
+   Verzeichnisses, bekaeme einen kaputten Include. Ein Drift-Risiko entsteht
+   nicht: die parametrisierten Werte kommen an beiden Stellen aus derselben
+   Variablen.
+6. **Nicht parametrisiert:** `send_timeout`, `keepalive_timeout`, die
+   gzip-Einstellungen, die Security-Header, die `real_ip`-Netze, die
+   fastcgi-Buffer und `expires`. A6.1 nennt sie nicht, und PRD 1.3 fuehrt sie
+   nicht als Defekt. Jede weitere Variable ist eine, die ohne Eintrag in der
+   Defaults-Datei den Start verhindert — der Preis will begruendet sein.
+7. **Im Uebrigen verhaltensgleich.** Beide PHP-Locations, die Deny-Regeln, die
+   Header und der `try_files`-Pfad sind unveraendert uebernommen. Erwogen und
+   **nicht** getan: die Fallback-Location fuer beliebige `*.php`-Dateien
+   streichen (waere eine Verhaltensaenderung ohne Auftrag) und HSTS an den
+   Schalter binden (Browser ignorieren HSTS ueber Klartext ohnehin).
+8. **Kommentare der Vorlage tragen keinen Platzhalter**, den die Umgebung nicht
+   kennt. Ein solcher bleibt unersetzt stehen; nginx stoert das im Kommentar
+   nicht, aber die Rendering-Pruefung kann einen harmlosen von einem echten Rest
+   nicht unterscheiden — und soll streng bleiben. Erster Lauf des Prueffalls fiel
+   genau darauf.
+
+### Befunde aus P9
+
+**B21 — fuenfter Fall der Klasse „der Test misst nichts": busybox-`wget
+--post-file` sendet keinen Rumpf.** Ein POST von 2 MB gegen
+`client_max_body_size 1m` lieferte **200 statt 413**. Ursache ist nicht die
+Vorlage: `--post-file` setzt in busybox 1.37.0 die Methode POST, uebertraegt aber
+nichts — die Sonde meldete `REQUEST_METHOD=POST` bei `CONTENT_LENGTH=0`. Mit
+`--post-data` stimmt es (`CONTENT_LENGTH=2000`, 413 gegen `1k`, 200 gegen
+`100m`). Der Prueffall zieht seither die angekommene Rumpflaenge als Gegenprobe
+mit, sonst haette derselbe Fehler in anderer Gestalt wieder gruen gemeldet.
+Reihe mit B11, B16, B19, B20.
+
+**B22 — der spaetere `fastcgi_param` gewinnt; das Muster des Bestands ist damit
+belegt.** Das offizielle `fastcgi_params` setzt selbst schon
+`REQUEST_SCHEME $scheme` und `HTTPS $https if_not_empty`. Der Bestand (und unsere
+Vorlage) schreibt beide **nach** dem `include` erneut — dass dabei der zweite
+Wert zaehlt, war nie geprueft. Gemessen an Instanz B: bei `REQUEST_SCHEME=https`
+kommt `https` in `$_SERVER` an, obwohl das `include` vorher `http` setzte. Das
+Muster traegt.
+
+**B23 — `nginx -t` loest den Upstream-Namen auf.** Ein Konfigurationstest ohne
+laufenden fpm-Container scheitert mit `host not found in upstream "app"` — kein
+Vorlagenfehler, sondern DNS. **Fuer P11 relevant:** ein reiner Lint der Vorlage
+in der CI braucht entweder einen erreichbaren Upstream oder einen auflösbaren
+Ersatznamen. Im Prueffall ist genau dieses Verhalten die Gegenprobe, dass
+`FASTCGI_UPSTREAM` wirklich im `fastcgi_pass` landet.
+
+---
+
 ## Offene Punkte / Risiken
 
 | # | Punkt | Fällig in | Kritikalität |
@@ -1199,19 +1344,20 @@ UID/GID-Neubau (A4/E7 gegen U1–U3). **L-B ist mit dem `test`-Profil erledigt:*
 
 ## Nächste Phase
 
-**P9 — nginx-Config als Asset.** Liefert
-`compose/nginx/templates/default.conf.template`. Hängt nur an P1.
+**P10 — Demo-Stack.** Liefert `compose/demo-stack.yml`: mysql/mariadb + `fpm` +
+**unverändertes** offizielles nginx mit der Vorlage aus P9 (A8.1). Hängt nur noch
+an P9, seit E11 gibt es nur eine Ausprägung (A8.4 entfallen).
 
-Akzeptanz nach Plan: vollständig parametrisiert (A6.1–A6.2) und lauffähig mit dem
-**unveränderten** offiziellen nginx-Image über dessen eingebaute Substitution
-(`NGINX_ENVSUBST_TEMPLATE_DIR`), ohne eigenen Entrypoint und ohne eigenen Build
-(A6.3). Alle Variablen brauchen dokumentierte Defaults (A6.4).
+Akzeptanz nach Plan: `docker compose up` ohne Nacharbeit, Health-Checks für alle
+Services (A8.2), die Template-Variablen exemplarisch befüllt (A8.3). Damit fällt
+auch die zweite Hälfte von **AK12** („der Demo-Stack belegt, dass das offizielle
+Image mit der gelieferten Config auskommt") — die erste ist mit P9 erbracht.
 
-Der Ist-Zustand ist im PRD Abschnitt 1.3 mit Fundstellen belegt — hartkodiert
-sind heute der Upstream-Host `app:`, `client_max_body_size 100m`, sämtliche
-fastcgi-Timeouts und die feste HTTPS-Annahme (`fastcgi_param HTTPS on`,
-`REQUEST_SCHEME https`). Letztere muss schaltbar werden, sonst ist der Betrieb
-ohne vorgelagerten TLS-Proxy schlicht falsch (A6.2).
+Was aus P9 dafür bereitliegt: `compose/nginx/nginx-defaults.env` wird per
+`env_file:` eingebunden, überschrieben wird nur, was der Stack wirklich anders
+braucht (`HOST`, ggf. `FASTCGI_UPSTREAM`, wenn der PHP-Service nicht `app` heißt).
+Der Aufbau ist in `check-nginx-template.sh` schon einmal gefahren — Netz, gemeinsames
+`/app`, Reihenfolge fpm-vor-nginx. Befund **B23** beachten: nginx löst den
+Upstream-Namen beim Start auf, ein nginx ohne erreichbaren PHP-Service startet nicht.
 
-Danach P10 (Demo-Stack, seit E11 nur noch eine Ausprägung), P11 (CI + Härtung),
-P12 (Doku + Abschluss).
+Danach P11 (CI + Härtung), P12 (Doku + Abschluss).
