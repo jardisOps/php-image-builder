@@ -26,11 +26,13 @@ vollständig mit Fundstellen.
 
 ## Stand
 
-**Sieben Commits, 27 Dateien.** Das Repo hat **kein Remote** und ist nie gepusht
+**Neun Commits, 32 Dateien.** Das Repo hat **kein Remote** und ist nie gepusht
 worden.
 
 ```
-(HEAD)   docs: update commit count and log in the handover
+(HEAD)   docs: hand over at end of P8
+a473405  feat: test.mk — ein Prueflauf loest die Handarbeit ab (P8)
+93ee074  docs: update commit count and log in the handover
 7cd1187  feat!: drop the frankenphp target entirely (E11)
 aaf7772  docs: record the P6 commit hash in the handover
 ea450dc  feat: docker-bake.hcl drives base/cli/fpm in one run (P6)
@@ -147,7 +149,7 @@ lokalen `headgent/*`-Images nicht. Eine andere Version prüfen:
   Makefile-Struktur mit `support/makefiles/`, `##@`-Hilfesystem, `.env` als
   Single Source of Truth. Details in `PLAN.md`, Abschnitt „Bauform".
 - **Nichts nach außen ohne ausdrückliche Freigabe:** kein GitHub-Repo, kein
-  Remote, kein Push, keine Archivierung. Commits sind **freigegeben** (sieben
+  Remote, kein Push, keine Archivierung. Commits sind **freigegeben** (neun
   liegen vor); bei Unsicherheit fragen.
 - **Umfang: nicht überkonstruieren.** Der User hat in P2 zweimal zurückgebaut
   (Notwert-Ebene, Lookup-Tabelle). Wenn etwas einfacher geht als geplant: sagen
