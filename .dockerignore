@@ -1,0 +1,36 @@
+# Build-Kontext aller Targets ist das Repo-Root (A7.5), weil base, cli, fpm und
+# frankenphp gemeinsam auf src/shared/ zugreifen. Alles, was kein Target braucht,
+# wird hier ausgeschlossen — das haelt den Kontext klein und verhindert, dass ein
+# unbedachtes COPY Repo-Beiwerk ins Image traegt.
+
+# Versionskontrolle & Werkzeuge
+.git/
+.github/
+.gitignore
+.dockerignore
+.hadolint.yaml
+
+# Build-Steuerung (wird als Build-Arg uebergeben, nicht ins Image kopiert)
+.env
+Makefile
+support/
+docker-bake.hcl
+.buildx-cache/
+
+# Dokumentation & Demo (nicht Teil einer Laufzeit)
+docs/
+compose/
+LICENSE
+**/*.md
+
+# Editor & OS
+.idea/
+.vscode/
+.claude/
+**/.DS_Store
+
+# Temporaeres
+**/*.tmp
+**/*.log
+**/*.cache
+*.local
