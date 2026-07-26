@@ -1468,7 +1468,7 @@ benennt den Port, es geht nichts still schief; Ausweg
 | ~~N3~~ | ~~FrankenPHP-OS-Variante~~ — **entschieden 2026-07-25: Alpine**, wenige Minuten später mit dem ganzen Target gestrichen (E11). Der offene Default-Port ist im Abschnitt „P7 — entfallen" trotzdem belegt festgehalten | — | erledigt |
 | ~~O1~~ | ~~Image-Name für FrankenPHP~~ — **entschieden: `headgent/frankenphp`**, dann mit E11 gegenstandslos | — | erledigt |
 | AK4 | UID-Nachweis ist auf macOS prinzipiell nicht führbar. P8 liefert den Test, P11 den Nachweis auf dem Linux-Runner. | P8/P11 | bekannt |
-| **O6** | **Zwei Härtungen an der nginx-Vorlage warten auf Entscheidung** — beide sind Bestandsdefekte, beide belegt, keiner eigenmächtig geändert: `try_files $uri =404;` in der `.php`-Fallback-Location (**B24**) und die verlorenen Security-Header bei statischen Dateien (**B25**, Empfehlung: eine Zeile löschen). Beides ist je eine Zeile und gehört sachlich zu A7 | P11 oder P12 | niedrig |
+| ~~O6~~ | ~~Zwei Härtungen an der nginx-Vorlage warten auf Entscheidung~~ — **entschieden 2026-07-26 (Freigabe Rolf): beide umsetzen.** `try_files $uri =404;` in der `.php`-Fallback-Location (**B24**) und die verlorenen Security-Header bei statischen Dateien (**B25**, nach der dokumentierten Empfehlung **Variante (b)**: die Zeile `add_header Cache-Control "public";` löschen, damit die Location die fünf Server-Header wieder erbt). Umzusetzen **vor** P11, weil beides sachlich zu A7 gehört und `test-nginx` mitwachsen muss | P11 | erledigt (Entscheidung) |
 
 ### Wartet auf ausdrückliche Freigabe (nach außen wirkend)
 
@@ -1583,7 +1583,9 @@ Was dabei zu beachten ist:
 - **B15/B28** — Betriebsbedingungen des Runners: `build-all` übersetzt drei
   Versionen gleichzeitig (Plattenplatz), und der Demo-Stack belegt einen
   Host-Port.
-- **O6** wartet weiter auf Entscheidung und gehört sachlich hierher (A7): die
-  zwei Zeilen an der nginx-Vorlage, B24 und B25.
+- **O6 ist entschieden** (Freigabe Rolf, 2026-07-26): beide Härtungen werden
+  umgesetzt, und zwar **vor** dem CI-Teil — sie gehören sachlich zu A7 und der
+  Prüflauf `test-nginx` muss mitwachsen, sonst ist die Änderung an der Vorlage
+  unbelegt. B25 nach der dokumentierten Empfehlung Variante (b).
 
 Danach P12 (Doku + Abschluss, Akzeptanz-Gate gegen AK1–AK15).

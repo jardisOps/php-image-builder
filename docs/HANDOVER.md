@@ -17,15 +17,15 @@ P8–P10), P7 ist gestrichen (E11) und die Nummer bleibt frei.
 
 | Punkt | Stand |
 |---|---|
-| Arbeitsbaum | **sauber**, alles committet (16 Commits, kein Remote, nie gepusht) |
+| Arbeitsbaum | **sauber**, alles committet (17 Commits, kein Remote, nie gepusht) |
 | Prüflauf | `make test-all` war zuletzt **grün**, Exit 0, für PHP 8.3 — jetzt **zehn** Stufen |
 | Test-Images | `php-image-builder-test/phpcli:8.3` und `…/phpfpm:8.3` liegen **lokal** — `make test-all` startet damit ohne Neubau |
 | Demo-Stack | läuft: `make demo-up` → drei Dienste `healthy` unter `http://localhost:8088`, `make demo-down` hinterlässt nichts |
 | Aufgeräumt | keine Testcontainer, -volumes oder -netze übrig; `headgent/*` unberührt |
-| Wartet auf Entscheidung | **O6** (zwei Einzeiler an der nginx-Vorlage, B24/B25) — nicht blockierend, gehört sachlich in P11 |
+| Entschieden, noch nicht umgesetzt | **O6** (zwei Einzeiler an der nginx-Vorlage, B24/B25) — **freigegeben am 2026-07-26**, erster Schritt der nächsten Session, vor dem CI-Teil |
 | Wartet auf Freigabe | **N6** (erster Push, Tag-Strategie), kein GitHub-Repo, kein Remote, keine Archivierung |
 
-Einstieg: `docs/PROMPT-NEUER-KONTEXT.md` ist bereits auf **P11** umgestellt
+Einstieg: `docs/PROMPT-NEUER-KONTEXT.md` ist bereits auf **O6 + P11** umgestellt
 und in einen neuen Kontext kopierbar. Kurzform, falls es ohne gehen soll:
 
 ```sh
@@ -34,11 +34,12 @@ make test-all          # Ausgangslage bestätigen (grün)
 make help              # Bedienoberfläche
 ```
 
-P11 liefert `.github/workflows/ci.yml`, die OCI-Labels, Trivy und die
-SBOM-/Attestations-Schritte — und den **UID-Nachweis (AK4)** auf einem echten
-Linux-Runner, der auf macOS prinzipiell nicht zu führen ist. **N6 bleibt dabei
-die harte Grenze:** der Workflow darf geschrieben, aber nicht scharf geschaltet
-werden.
+Die nächste Session beginnt mit **O6** (freigegeben) — zwei Zeilen an der
+nginx-Vorlage plus die dazugehörigen Prüffälle — und macht danach mit **P11**
+weiter: `.github/workflows/ci.yml`, OCI-Labels, Trivy, SBOM/Attestations und
+der **UID-Nachweis (AK4)** auf einem echten Linux-Runner, der auf macOS
+prinzipiell nicht zu führen ist. **N6 bleibt dabei die harte Grenze:** der
+Workflow darf geschrieben, aber nicht scharf geschaltet werden.
 
 ---
 
@@ -58,11 +59,12 @@ vollständig mit Fundstellen.
 
 ## Stand
 
-**Sechzehn Commits, 41 Dateien.** Das Repo hat **kein Remote** und ist nie
+**Siebzehn Commits, 41 Dateien.** Das Repo hat **kein Remote** und ist nie
 gepusht worden.
 
 ```
-(HEAD)   docs: Commit-Zahl und Log im Handover richtigstellen
+(HEAD)   docs: O6 freigegeben, Folgeprompt auf O6 + P11 umgestellt
+0c7d7f2  docs: Commit-Zahl und Log im Handover richtigstellen
 90b7aeb  feat: Demo-Stack — mariadb + fpm + offizielles nginx (P10)
 ca7b87f  docs: Wiedereinstiegs-Block und Phasenzaehlung
 c455ca4  docs: update commit count in the handover
