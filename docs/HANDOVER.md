@@ -78,11 +78,13 @@ vollständig mit Fundstellen.
 
 ## Stand
 
-**Zweiundzwanzig Commits.** Das Repo hat **kein Remote** und ist nie
-gepusht worden.
+**Vierundzwanzig Commits** (dieser mitgezählt). Das Repo hat **kein Remote** und
+ist nie gepusht worden.
 
 ```
-(HEAD)   feat: Aufraeum-Targets, ssh.mk nachgezogen, AK8 abgehakt
+(HEAD)   docs: Commit-Zahl und Log im Handover nachziehen
+88ce423  feat: Aufraeum-Targets, ssh.mk nachgezogen, AK8 abgehakt
+0d5aa38  docs: Commit-Zahl und Log im Handover nachziehen
 ced3aa7  docs: README, Arbeitsanweisung und das Akzeptanz-Gate (P12)
 9f1d51d  docs: Commit-Zahl und Log im Handover nachziehen
 1858f8b  feat: CI-Workflow, OCI-Labels und der Linux-UID-Nachweis (P11)
