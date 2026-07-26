@@ -24,6 +24,7 @@ Repo und sind mitversioniert. Bestandscode unverändert unter
 - [x] **P8  Tests** — abgeschlossen 2026-07-25
 - [x] **P9  nginx-Config als Asset** — abgeschlossen 2026-07-25
 - [x] **P10 Demo-Stack** — abgeschlossen 2026-07-26
+- [x] **O6  Härtung der nginx-Vorlage (B24/B25)** — umgesetzt 2026-07-26, vorgezogen vor P11
 - [ ] P11 CI-Pipeline + Härtung
 - [ ] P12 Doku + Abschluss
 
@@ -1266,6 +1267,10 @@ wirkungsgleich (`/gibtesnicht.php` antwortet schon heute 404) und nimmt die
 Abhaengigkeit von der fpm-Einstellung heraus. Nicht eigenmaechtig gemacht, weil
 die Vorlage im Uebrigen verhaltensgleich zum Bestand bleiben soll.
 
+> **Erledigt in O6** (2026-07-26): die Zeile steht, `/upload.jpg/x.php` antwortet
+> jetzt 404 aus nginx. Siehe Abschnitt „O6 — umgesetzt". Die Einschraenkung
+> „fuer legitime Requests wirkungsgleich" ist dort praezisiert.
+
 **B25 — statische Dateien bekommen keinen einzigen Security-Header.** Ebenfalls
 aus dem Review, ebenfalls ein Bestandsdefekt und **gemessen**:
 
@@ -1279,6 +1284,7 @@ uebergeordneten Ebene **nur dann** geerbt, wenn die eigene Ebene **kein**
 `add_header` traegt. Die Static-Location traegt eines
 (`add_header Cache-Control "public"`) und verliert damit alle fuenf
 Server-Header. Ausgerechnet `nosniff` wirkt bei statischen Dateien am meisten.
+*(Es sind sechs, nicht fuenf — nachgezaehlt in O6, siehe Befund B30.)*
 Nebenbefund: die Antwort traegt `Cache-Control` doppelt (`max-age=31536000` aus
 `expires 1y` **und** `public` aus dem `add_header`).
 
@@ -1456,6 +1462,88 @@ benennt den Port, es geht nichts still schief; Ausweg
 
 ---
 
+## O6 — umgesetzt 2026-07-26 (vorgezogen vor P11)
+
+Die beiden am Ende von P9 belegten, aber bewusst nicht eigenmächtig geänderten
+Bestandsdefekte der nginx-Vorlage. Freigabe Rolf am 2026-07-26; umgesetzt vor
+dem CI-Teil, weil beides sachlich zu A7 gehört und der Prüflauf mitwachsen muss.
+
+### Geliefert
+
+| Datei | Änderung |
+|---|---|
+| `compose/nginx/templates/default.conf.template` | **B24:** `try_files $uri =404;` in der `.php`-Fallback-Location ergänzt. **B25:** `add_header Cache-Control "public";` aus der Static-Location gelöscht (Variante (b)). Zwei wirksame Zeilen; alles Übrige ist Begründung an der Fundstelle |
+| `support/tests/check-nginx-template.sh` | **geändert:** drei Härtungs-Sonden (`upload.jpg` mit echtem PHP-Code, `exec-check.php`, `a.css`), die Hilfsfunktionen `hdrs`/`has_header` und **16 neue Zusicherungen**. `test-nginx` steht damit bei **55** statt 39 |
+
+### Akzeptanz — nachgewiesen
+
+`make test-nginx` läuft mit **55/55** durch, `make test-all` bleibt grün.
+
+**B24 — der `.jpg/x.php`-Pfad wird jetzt von der Vorlage abgewehrt:**
+
+| Prüffall | Ergebnis |
+|---|---|
+| Positivprobe `/exec-check.php` (dieselbe PHP-Zeile als echte `.php`-Datei) | 200, Marke im Rumpf — der Inhalt **ist** ausführbar, die Messung greift nicht ins Leere |
+| `/upload.jpg` | 200, Quelltext als Text — unverändert, es ist eine statische Datei |
+| **`/upload.jpg/x.php`** | **404** (vorher: 403 aus dem php-fpm) |
+| `/gibtesnicht.php` | 404, unverändert |
+
+**B25 — statische Antworten tragen die Security-Header:**
+
+| Prüffall | Ergebnis |
+|---|---|
+| `X-Content-Type-Options`, `X-Frame-Options`, `Strict-Transport-Security` auf `/a.css` | ✅ je vorhanden |
+| dieselben drei auf `/index.php` (Positivprobe) | ✅ — fällt sie aus, ist die Header-Messung defekt, nicht die Vorlage |
+| `Cache-Control` trägt weiter `max-age=31536000` (aus `expires 1y`) | ✅ |
+| `Cache-Control` hat `public` verloren | ✅ (Gegenprobe) |
+
+**Die Gegenprobe, weil 55/55 im ersten Anlauf genau die Lage ist, in der die
+sechs Testfallstricke zuschlagen.** Beide Änderungen wurden am laufenden Aufbau
+zurückgenommen und die Datei danach byte-gleich wiederhergestellt (`cmp`):
+
+| Zustand | Ergebnis |
+|---|---|
+| Bestandsfassung (beide Zeilen zurück) | **6 Zusicherungen rot**, die 39 alten und alle Positivproben grün |
+| davon `/upload.jpg/x.php` | **403** statt 404 — der in B24 gemessene fpm-Schutz |
+| davon die drei Header auf `/a.css` | fehlen; `Cache-Control` trägt wieder `public` |
+
+**Der entscheidende Beleg für B24 ist die dritte Gegenprobe:** mit **angehaltenem
+fpm** antwortet die gehärtete Vorlage auf `/upload.jpg/x.php` weiterhin **404** —
+der Request erreicht den Upstream also gar nicht mehr. In der Bestandsfassung
+kommt an derselben Stelle **502**, weil er ihn erreicht hätte. Damit ist der
+Unterschied nicht bloß ein Statuscode, sondern belegt verschiedene Wege.
+Gegenprobe dazu: `/index.php` liefert in beiden Fassungen 502 — der Upstream ist
+wirklich aus.
+
+### Umsetzungsentscheidungen
+
+1. **B25 nach der dokumentierten Empfehlung Variante (b)** — eine gelöschte
+   Zeile statt der Wiederholung der Header in der Location. Verloren geht
+   allein das Attribut `public`; für Assets ohne Authentifizierung ändert das
+   nichts, und die doppelte `Cache-Control`-Angabe verschwindet mit.
+2. **Der PATH_INFO-Verlust hinter beliebigen `.php`-Dateien wird benannt, nicht
+   verschwiegen.** `try_files` löst `/legacy.php/sub.php` nicht mehr auf
+   `/legacy.php` mit `PATH_INFO=/sub.php` auf — das **ist** die Angriffsform.
+   Der Front-Controller behält sein PATH_INFO über Location 2 (dort steht kein
+   `try_files`), und ein Pfad, dessen letztes Segment nicht auf `.php` endet,
+   trifft die Fallback-Location ohnehin nie.
+3. **Die Gegenprobe mit angehaltenem fpm steht am Ende des Skripts**, weil sie
+   den fpm-Container unbrauchbar zurücklässt. Wer dort Prüffälle anhängt, prüft
+   gegen einen toten Upstream.
+
+### Befund aus O6
+
+**B30 — der B25-Text zählte falsch: es sind sechs Server-Header, nicht fünf.**
+P9 und das Handover sprechen von „den fünf Server-Headern", die die
+Static-Location verdrängte. Nachgezählt in der Vorlage sind es **sechs**:
+`Referrer-Policy`, `X-XSS-Protection`, `X-Content-Type-Options`,
+`X-Frame-Options`, `Strict-Transport-Security`, `Content-Security-Policy`. Kein
+Schaden — die Zahl war nie eine Anforderung, und geprüft werden ohnehin die drei
+mit der größten Wirkung. Sie ist hier richtiggestellt, damit sie niemand als
+Sollwert liest; gleiche Klasse wie B14.
+
+---
+
 ## Offene Punkte / Risiken
 
 | # | Punkt | Fällig in | Kritikalität |
@@ -1468,7 +1556,7 @@ benennt den Port, es geht nichts still schief; Ausweg
 | ~~N3~~ | ~~FrankenPHP-OS-Variante~~ — **entschieden 2026-07-25: Alpine**, wenige Minuten später mit dem ganzen Target gestrichen (E11). Der offene Default-Port ist im Abschnitt „P7 — entfallen" trotzdem belegt festgehalten | — | erledigt |
 | ~~O1~~ | ~~Image-Name für FrankenPHP~~ — **entschieden: `headgent/frankenphp`**, dann mit E11 gegenstandslos | — | erledigt |
 | AK4 | UID-Nachweis ist auf macOS prinzipiell nicht führbar. P8 liefert den Test, P11 den Nachweis auf dem Linux-Runner. | P8/P11 | bekannt |
-| ~~O6~~ | ~~Zwei Härtungen an der nginx-Vorlage warten auf Entscheidung~~ — **entschieden 2026-07-26 (Freigabe Rolf): beide umsetzen.** `try_files $uri =404;` in der `.php`-Fallback-Location (**B24**) und die verlorenen Security-Header bei statischen Dateien (**B25**, nach der dokumentierten Empfehlung **Variante (b)**: die Zeile `add_header Cache-Control "public";` löschen, damit die Location die fünf Server-Header wieder erbt). Umzusetzen **vor** P11, weil beides sachlich zu A7 gehört und `test-nginx` mitwachsen muss | P11 | erledigt (Entscheidung) |
+| ~~O6~~ | ~~Zwei Härtungen an der nginx-Vorlage warten auf Entscheidung~~ — **entschieden 2026-07-26 (Freigabe Rolf): beide umsetzen.** `try_files $uri =404;` in der `.php`-Fallback-Location (**B24**) und die verlorenen Security-Header bei statischen Dateien (**B25**, nach der dokumentierten Empfehlung **Variante (b)**: die Zeile `add_header Cache-Control "public";` löschen, damit die Location die Server-Header wieder erbt). **Umgesetzt und belegt am 2026-07-26** — Abschnitt „O6 — umgesetzt", `test-nginx` steht bei 55/55 | — | erledigt |
 
 ### Wartet auf ausdrückliche Freigabe (nach außen wirkend)
 
@@ -1583,9 +1671,8 @@ Was dabei zu beachten ist:
 - **B15/B28** — Betriebsbedingungen des Runners: `build-all` übersetzt drei
   Versionen gleichzeitig (Plattenplatz), und der Demo-Stack belegt einen
   Host-Port.
-- **O6 ist entschieden** (Freigabe Rolf, 2026-07-26): beide Härtungen werden
-  umgesetzt, und zwar **vor** dem CI-Teil — sie gehören sachlich zu A7 und der
-  Prüflauf `test-nginx` muss mitwachsen, sonst ist die Änderung an der Vorlage
-  unbelegt. B25 nach der dokumentierten Empfehlung Variante (b).
+- ~~**O6**~~ — **erledigt am 2026-07-26**, vor dem CI-Teil. Beide Härtungen
+  stehen und sind belegt; `test-nginx` ist von 39 auf **55** Zusicherungen
+  gewachsen. Siehe Abschnitt „O6 — umgesetzt".
 
 Danach P12 (Doku + Abschluss, Akzeptanz-Gate gegen AK1–AK15).

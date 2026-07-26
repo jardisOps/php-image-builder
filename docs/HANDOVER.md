@@ -1,7 +1,7 @@
 # Handover — Konsolidierung des PHP-Docker-Image-Builders
 
-**Stand:** 2026-07-26, Ende der fünften Umsetzungs-Session. **P1–P6 und P8–P10
-abgeschlossen und committet**, **P7 ist entfallen** (E11) — nächste Phase ist **P11**.
+**Stand:** 2026-07-26, Ende der sechsten Umsetzungs-Session. **P1–P6, P8–P10 und
+O6 abgeschlossen**, **P7 ist entfallen** (E11) — nächste Phase ist **P11**.
 
 Arbeitsverzeichnis: `/Users/Rolf/Development/headgent/devops/docker/php-image-builder/`
 Projekt- und künftiger Repo-Name: **`php-image-builder`**.
@@ -18,15 +18,14 @@ P8–P10), P7 ist gestrichen (E11) und die Nummer bleibt frei.
 | Punkt | Stand |
 |---|---|
 | Arbeitsbaum | **sauber**, alles committet (17 Commits, kein Remote, nie gepusht) |
-| Prüflauf | `make test-all` war zuletzt **grün**, Exit 0, für PHP 8.3 — jetzt **zehn** Stufen |
+| Prüflauf | `make test-all` war zuletzt **grün**, Exit 0, für PHP 8.3 — **zehn** Stufen, `test-nginx` seit O6 bei **55** Zusicherungen |
 | Test-Images | `php-image-builder-test/phpcli:8.3` und `…/phpfpm:8.3` liegen **lokal** — `make test-all` startet damit ohne Neubau |
 | Demo-Stack | läuft: `make demo-up` → drei Dienste `healthy` unter `http://localhost:8088`, `make demo-down` hinterlässt nichts |
 | Aufgeräumt | keine Testcontainer, -volumes oder -netze übrig; `headgent/*` unberührt |
-| Entschieden, noch nicht umgesetzt | **O6** (zwei Einzeiler an der nginx-Vorlage, B24/B25) — **freigegeben am 2026-07-26**, erster Schritt der nächsten Session, vor dem CI-Teil |
+| **O6** | **umgesetzt und belegt am 2026-07-26** — beide Härtungen an der nginx-Vorlage (B24/B25) stehen, `test-nginx` 55/55, Gegenprobe gefahren |
 | Wartet auf Freigabe | **N6** (erster Push, Tag-Strategie), kein GitHub-Repo, kein Remote, keine Archivierung |
 
-Einstieg: `docs/PROMPT-NEUER-KONTEXT.md` ist bereits auf **O6 + P11** umgestellt
-und in einen neuen Kontext kopierbar. Kurzform, falls es ohne gehen soll:
+Einstieg: Kurzform:
 
 ```sh
 cd /Users/Rolf/Development/headgent/devops/docker/php-image-builder
@@ -34,12 +33,10 @@ make test-all          # Ausgangslage bestätigen (grün)
 make help              # Bedienoberfläche
 ```
 
-Die nächste Session beginnt mit **O6** (freigegeben) — zwei Zeilen an der
-nginx-Vorlage plus die dazugehörigen Prüffälle — und macht danach mit **P11**
-weiter: `.github/workflows/ci.yml`, OCI-Labels, Trivy, SBOM/Attestations und
-der **UID-Nachweis (AK4)** auf einem echten Linux-Runner, der auf macOS
-prinzipiell nicht zu führen ist. **N6 bleibt dabei die harte Grenze:** der
-Workflow darf geschrieben, aber nicht scharf geschaltet werden.
+Weiter geht es mit **P11**: `.github/workflows/ci.yml`, OCI-Labels, Trivy,
+SBOM/Attestations und der **UID-Nachweis (AK4)** auf einem echten Linux-Runner,
+der auf macOS prinzipiell nicht zu führen ist. **N6 bleibt dabei die harte
+Grenze:** der Workflow darf geschrieben, aber nicht scharf geschaltet werden.
 
 ---
 
@@ -94,6 +91,7 @@ ea450dc  feat: docker-bake.hcl drives base/cli/fpm in one run (P6)
 | P8 Tests | ✅ `make test-all` grün |
 | P9 nginx-Config als Asset | ✅ Vorlage + Defaults, 39/39 gegen das offizielle Image (AK7) |
 | P10 Demo-Stack | ✅ mariadb + fpm + offizielles nginx, 21/21, AK9 und AK12 erbracht |
+| O6 Härtung der nginx-Vorlage (B24/B25) | ✅ vorgezogen vor P11, `test-nginx` 39 → 55 |
 | **P11 CI-Pipeline + Härtung** | **← hier weiter** (hängt an P8) |
 | P12 Doku + Abschluss | offen |
 
@@ -139,7 +137,7 @@ make test-all          # baut Test-Images fuer PHP_VERSION und prueft alles
 | `test-app-env` | 15 Fälle: AK13, AK14/L-F, A10.2, A10.5, A10.7 |
 | `test-uid` | 5 Fälle gegen echte Docker-Volumes (AK4) |
 | `test-opcache` | 14 Fälle inkl. **AK15** im laufenden FPM |
-| `test-nginx` | 39 Fälle gegen das **unveränderte** offizielle nginx-Image (AK7), zwei Instanzen: nur Defaults / alles überschrieben |
+| `test-nginx` | **55** Fälle gegen das **unveränderte** offizielle nginx-Image (AK7), zwei Instanzen: nur Defaults / alles überschrieben, seit O6 plus die Härtungs-Prüffälle B24/B25 |
 | `test-demo` | 21 Fälle gegen den laufenden Demo-Stack (AK9/AK12, A8.1–A8.3): ein `up --wait`, alle Dienste healthy, DB verbunden, Abbau ohne Reste |
 
 Die Test-Images entstehen unter `php-image-builder-test/` und überschreiben die
@@ -187,13 +185,16 @@ lokalen `headgent/*`-Images nicht. Eine andere Version prüfen:
   **B27** (`docker compose up --wait` meldet grün für einen Dienst **ohne**
   Healthcheck — in der Gegenprobe belegt). **B20 und B27 sind für P11
   relevant.**
-- **B24/B25 — zwei belegte Bestandsdefekte in der nginx-Vorlage, bewusst nicht
-  eigenmächtig geändert (O6).** Die `.php`-Fallback-Location hat kein
-  `try_files` — der klassische `/upload.jpg/x.php`-Pfad wird derzeit allein von
-  `security.limit_extensions` des php-fpm abgefangen (gemessen: 403, kein Code
-  ausgeführt). Und statische Dateien bekommen **keinen** Security-Header, weil
-  ein `add_header` in der Location die fünf Server-Header verdrängt (gemessen).
-  Beides ist je eine Zeile und gehört zur Härtung (A7).
+- **B24/B25 — zwei belegte Bestandsdefekte in der nginx-Vorlage, in O6 behoben
+  (2026-07-26).** Die `.php`-Fallback-Location hatte kein `try_files` — der
+  klassische `/upload.jpg/x.php`-Pfad wurde allein von
+  `security.limit_extensions` des php-fpm abgefangen (gemessen: 403). Und
+  statische Dateien bekamen **keinen** Security-Header, weil ein `add_header` in
+  der Location die sechs Server-Header verdrängte (gemessen). Beides ist je eine
+  Zeile und gehört zur Härtung (A7); beides steht jetzt, mit 16 neuen
+  Zusicherungen und gefahrener Gegenprobe. Die entscheidende: mit **angehaltenem
+  fpm** antwortet die gehärtete Vorlage weiterhin 404, die Bestandsfassung 502 —
+  der Request erreicht den Upstream also nachweislich nicht mehr.
 - **B15 — `bake` baut die Matrix parallel.** `make build-all` übersetzt drei
   PHP-Versionen gleichzeitig; auf einer vollen Docker-VM bricht das mit
   „No space left on device" ab. Kein Designfehler, eine Betriebsbedingung.

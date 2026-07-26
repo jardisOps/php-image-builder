@@ -88,6 +88,21 @@ write_probe /app/public index.php index    # Default-Dokumentwurzel
 write_probe /app/public info.php  info     # Fallback-Location (echte .php-Datei)
 write_probe /app/web    app.php   alt      # abweichende DOCUMENT_ROOT/INDEX_FILE
 
+# Haertungs-Sonden (O6, Abschnitt ganz unten).
+#
+#   upload.jpg    eine ECHTE hochgeladene Datei mit PHP-Code darin. Nur damit
+#                 ist messbar, ob /upload.jpg/x.php sie ausfuehrt (B24).
+#   exec-check.php dieselbe Zeile als echte .php-Datei — die Positivprobe. Sie
+#                 belegt, dass der Inhalt ueberhaupt ausfuehrbar ist; ohne sie
+#                 koennte ein 404 auf die .jpg-Kette auch bedeuten, dass die
+#                 Messung ins Leere greift (Klasse B11/B19/B21).
+#   a.css         eine statische Datei fuer die Header-Pruefung (B25).
+MARKE=AUSGEFUEHRT-$SFX
+PHP_ZEILE="<?php echo \"$MARKE\";"
+docker exec "$APP-$SFX" sh -c "printf '%s' '$PHP_ZEILE' > /app/public/upload.jpg"
+docker exec "$APP-$SFX" sh -c "printf '%s' '$PHP_ZEILE' > /app/public/exec-check.php"
+docker exec "$APP-$SFX" sh -c "printf '%s' 'body{color:#000}' > /app/public/a.css"
+
 start_web() { # <container> <env...>
   local name=$1; shift
   docker run -d --name "$name" --network "$NET" \
@@ -118,6 +133,18 @@ resp() { # <container> <pfad> [wget-zusatz...]
 }
 status() { echo "$1" | head -1; }
 body()   { echo "$1" | tail -1; }
+
+# Antwort-Header holen. busybox-wget schreibt sie mit -S nach stderr, jede Zeile
+# eingerueckt und mit CR am Ende.
+hdrs() { # <container> <pfad>
+  docker exec "$1" sh -c "wget -S -O /dev/null 'http://127.0.0.1$2' 2>&1 | tr -d '\r'" || true
+}
+# <header-block> <name> <erwarteter Teilstring im Wert>
+# $2 und $3 landen als Teil eines grep-Musters, nicht als Festtext: alle
+# Aufrufer unten uebergeben Literale ohne Regex-Sonderzeichen. Wer hier einen
+# Wert mit '.', '[' oder '*' einsetzt, muss ihn maskieren — sonst matcht das
+# Muster weiter, aber nicht mehr das Gemeinte.
+has_header() { echo "$1" | grep -qi "^[[:space:]]*$2:.*$3"; }
 field()  { # <rumpf> <schluessel>
   echo "$1" | tr ' ' '\n' | sed -n "s/^$2=//p"
 }
@@ -248,6 +275,86 @@ if conftest gibt-es-nicht | grep -q 'host not found in upstream "gibt-es-nicht"'
 else
   bad "FASTCGI_UPSTREAM wirkt nicht im fastcgi_pass"
 fi
+
+# ---------------------------------------------------------------------------
+# Haertung O6 — B24: nur vorhandene .php-Dateien erreichen den Upstream
+# ---------------------------------------------------------------------------
+# Gemessen wird gegen eine echte /app/public/upload.jpg, die PHP-Code enthaelt.
+# Vor der Haertung antwortete /upload.jpg/x.php mit 403 — abgefangen allein von
+# security.limit_extensions des php-fpm, nicht von der Vorlage (B24, gemessen am
+# 2026-07-25). Mit `try_files $uri =404;` antwortet nginx selbst 404. Genau
+# dieser Unterschied im Statuscode ist der Beleg; die Gegenprobe am Ende dieses
+# Abschnitts zeigt zusaetzlich, dass die Antwort den Upstream gar nicht mehr
+# erreicht.
+echo ">>> Haertung O6 — B24 (.php-Fallback-Location)"
+
+r=$(resp "$WEB_A" /exec-check.php)
+check "Positivprobe /exec-check.php — Status"  "$(status "$r")" "200"
+check "  Inhalt wird wirklich ausgefuehrt"     "$(body "$r")"   "$MARKE"
+
+r=$(resp "$WEB_A" /upload.jpg)
+check "GET /upload.jpg — Status"               "$(status "$r")" "200"
+check "  Quelltext statt Ausfuehrung"          "$(body "$r")"   "$PHP_ZEILE"
+
+check "GET /upload.jpg/x.php — Status (B24)"   "$(status "$(resp "$WEB_A" /upload.jpg/x.php)")" "404"
+check "GET /gibtesnicht.php — Status"          "$(status "$(resp "$WEB_A" /gibtesnicht.php)")"  "404"
+
+# ---------------------------------------------------------------------------
+# Haertung O6 — B25: statische Antworten tragen die Security-Header
+# ---------------------------------------------------------------------------
+# nginx vererbt add_header nur an Ebenen, die selbst keines tragen. Die
+# Static-Location trug eines (Cache-Control "public") und verlor damit alle
+# sechs Server-Header — ausgerechnet nosniff wirkt bei statischen Dateien am
+# meisten. Die Zeile ist geloescht (Variante (b)).
+echo ">>> Haertung O6 — B25 (Security-Header auf statischen Antworten)"
+
+h_css=$(hdrs "$WEB_A" /a.css)
+h_php=$(hdrs "$WEB_A" /index.php)
+for paar in "X-Content-Type-Options:nosniff" \
+            "X-Frame-Options:SAMEORIGIN" \
+            "Strict-Transport-Security:max-age=31536000"; do
+  name=${paar%%:*}; wert=${paar#*:}
+  # Positivprobe an der PHP-Antwort: die trug die Header schon immer. Faellt sie
+  # aus, misst nicht die Vorlage falsch, sondern dieser Test.
+  if has_header "$h_php" "$name" "$wert"; then
+    ok "$name auf /index.php (Positivprobe)"
+  else
+    bad "$name fehlt auf /index.php — die Header-Messung selbst ist defekt"
+  fi
+  if has_header "$h_css" "$name" "$wert"; then
+    ok "$name auf /a.css (B25)"
+  else
+    bad "$name fehlt auf der statischen Antwort (B25)"
+  fi
+done
+
+# Gegenprobe: Cache-Control ist weiterhin da (aus `expires 1y`), aber ohne
+# "public". Ohne die erste Haelfte wuerde die zweite auch dann gruen melden,
+# wenn Cache-Control ganz verschwunden waere.
+if has_header "$h_css" Cache-Control "max-age=31536000"; then
+  ok "Cache-Control aus 'expires 1y' bleibt erhalten"
+else
+  bad "Cache-Control fehlt auf der statischen Antwort — 'expires 1y' wirkt nicht mehr"
+fi
+if has_header "$h_css" Cache-Control "public"; then
+  bad "Cache-Control traegt weiterhin 'public' — die add_header-Zeile ist nicht geloescht"
+else
+  ok "Cache-Control hat 'public' verloren (Gegenprobe zu B25)"
+fi
+
+# ---------------------------------------------------------------------------
+# Die entscheidende Gegenprobe zu B24 — zuletzt, weil sie den fpm anhaelt
+# ---------------------------------------------------------------------------
+# Steht der Upstream, laesst sich ein 404 von nginx nicht zweifelsfrei von einem
+# 404 des fpm unterscheiden. Mit angehaltenem fpm ist es eindeutig: was jetzt
+# noch 404 liefert, hat den Upstream nie erreicht — und was ihn erreicht haette,
+# liefert 502.
+echo ">>> Haertung O6 — Gegenprobe mit angehaltenem fpm"
+docker stop -t 5 "$APP-$SFX" >/dev/null
+check "GET /upload.jpg/x.php — Status (B24, fpm aus)" \
+      "$(status "$(resp "$WEB_A" /upload.jpg/x.php)")" "404"
+check "GET /index.php — Status (belegt: Upstream ist wirklich aus)" \
+      "$(status "$(resp "$WEB_A" /index.php)")" "502"
 
 echo
 echo "  bestanden: $PASS   fehlgeschlagen: $FAIL"

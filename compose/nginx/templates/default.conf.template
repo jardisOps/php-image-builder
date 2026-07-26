@@ -107,9 +107,16 @@ server {
     ##############################
     # Static Assets & verborgene #
     ##############################
+    # Kein add_header in dieser Location (B25/O6): nginx vererbt die
+    # Server-Header oben NUR an Ebenen, die selbst keines tragen. Das frueher
+    # hier stehende `add_header Cache-Control "public";` verdraengte damit alle
+    # sechs Header — statische Dateien kamen ohne nosniff, ohne SAMEORIGIN und
+    # ohne HSTS heraus, und trugen Cache-Control doppelt (max-age aus
+    # `expires 1y` plus public). Die Zeile ist geloescht statt die sechs Header
+    # hier zu wiederholen; verloren geht allein das Attribut "public", das fuer
+    # Assets ohne Authentifizierung nichts aendert.
     location ~* \.(?:css|js|gif|jpe?g|png|webp|svg|ico|woff2?|woff|ttf)$ {
         expires 1y;
-        add_header Cache-Control "public";
         try_files $uri =404;
     }
 
@@ -161,6 +168,22 @@ server {
     # 3. Fallback: wirkliche *.php-Dateien (z. B. /info.php)       #
     ###############################################################
     location ~ \.php$ {
+        # Nur wirklich vorhandene .php-Dateien erreichen den Upstream (B24/O6).
+        # Ohne diese Zeile gibt die Location jeden Pfad weiter, der auf .php
+        # endet — auch /upload.jpg/x.php. Bei cgi.fix_pathinfo=1 loest PHP dann
+        # auf den laengsten existierenden Prefix auf und fuehrt die hochgeladene
+        # Datei aus. Abgefangen hat das bisher allein security.limit_extensions
+        # des php-fpm (403); mit try_files antwortet nginx selbst 404, und die
+        # Vorlage traegt den Schutz unabhaengig von der fpm-Konfiguration.
+        #
+        # Was sich dabei aendert: PATH_INFO hinter einer beliebigen .php-Datei
+        # gibt es hier nicht mehr — /legacy.php/sub.php faellt jetzt auf 404
+        # statt auf /legacy.php mit PATH_INFO=/sub.php aufzuloesen. Das ist
+        # genau die Angriffsform; der Front-Controller behaelt sein PATH_INFO
+        # ueber Location 2. Ein Pfad, dessen letztes Segment NICHT auf .php
+        # endet, trifft diese Location ohnehin nie.
+        try_files $uri =404;
+
         include fastcgi_params;
         fastcgi_pass   ${FASTCGI_UPSTREAM}:${PHP_PORT};
         fastcgi_index  ${INDEX_FILE};
