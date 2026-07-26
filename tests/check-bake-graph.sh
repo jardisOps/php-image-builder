@@ -27,7 +27,22 @@ check() { if [ "$2" = "$3" ]; then ok "$1 ($3)"; else bad "$1 — expected '$3',
 
 echo ">>> Bake definition (resolved, no build)"
 
-DEF=$(cd "$REPO_ROOT" && make bake-print 2>/dev/null)
+# --no-print-directory: GNU Make 4.x passes -w down to a sub-make, which then
+# writes "make: Entering directory ..." to STDOUT, right in front of the JSON.
+# Make 3.81 (macOS default) does not, so the failure only appears on Linux.
+#
+# stderr is deliberately NOT discarded: a `2>/dev/null` here once hid the
+# reason for exactly that failure and left three bare JSON tracebacks behind.
+DEF=$(cd "$REPO_ROOT" && make --no-print-directory bake-print)
+
+# Everything below parses $DEF anew, eight times over. Without this guard, any
+# non-JSON output produces a wall of identical tracebacks and "got ''" lines,
+# none of which names the cause.
+case "$DEF" in
+  '{'*) ;;
+  *)    bad "'make bake-print' returned no JSON. First line: $(printf '%s\n' "$DEF" | head -1)"
+        echo; echo "  passed: $PASS   failed: $FAIL"; exit 1 ;;
+esac
 
 # jq would be the obvious choice but isn't installed everywhere and would add
 # a new prerequisite for the test run. python3 is on every runner and every

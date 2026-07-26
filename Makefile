@@ -16,12 +16,15 @@ SHELL          := bash
 # The profile-driven override slots are derived from the marked section of
 # .env, not maintained a second time here — .env stays the single place that
 # decides which variables an APP_ENV profile may override.
-# The '\#' is escaped for Make — unescaped, Make would read the rest of the
-# line as its own comment and never see the shell function's closing paren.
+# awk has to see a plain '#'. Written directly, Make would read the rest of
+# the line as its own comment; written as '\#' the backslash reaches awk,
+# where it is not a known regex escape and gawk warns on every single call.
+# Going through a variable gets a bare '#' past both.
+HASH := \#
 OVERRIDE_SLOTS := $(shell awk \
-	'/^\# --- Override Slots/ { inblock = 1; next } \
-	 inblock && /^\# ---/     { inblock = 0 } \
-	 inblock && /^[A-Z_]+=/   { sub(/=.*/, ""); print }' ./.env)
+	'/^$(HASH) --- Override Slots/ { inblock = 1; next } \
+	 inblock && /^$(HASH) ---/     { inblock = 0 } \
+	 inblock && /^[A-Z_]+=/        { sub(/=.*/, ""); print }' ./.env)
 
 include ./.env
 export
