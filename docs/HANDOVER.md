@@ -18,7 +18,7 @@ abgeschlossen (P1–P6, P8–P10, O6), P7 ist gestrichen (E11) und die Nummer bl
 
 | Punkt | Stand |
 |---|---|
-| Arbeitsbaum | **sauber**, alles committet (17 Commits, kein Remote, nie gepusht) |
+| Arbeitsbaum | **sauber**, alles committet (19 Commits, kein Remote, nie gepusht) |
 | Prüflauf | **grün, Exit 0** für PHP 8.3 — seit P11 **dreizehn** Stufen; `test-nginx` 55/55, `test-uid-linux` 13/13, shellcheck über 16 Dateien |
 | Test-Images | `php-image-builder-test/phpcli:8.3` und `…/phpfpm:8.3` liegen **lokal** — `make test-all` startet damit ohne Neubau |
 | Demo-Stack | läuft: `make demo-up` → drei Dienste `healthy` unter `http://localhost:8088`, `make demo-down` hinterlässt nichts |
@@ -68,11 +68,13 @@ vollständig mit Fundstellen.
 
 ## Stand
 
-**Siebzehn Commits, 41 Dateien.** Das Repo hat **kein Remote** und ist nie
+**Neunzehn Commits.** Das Repo hat **kein Remote** und ist nie
 gepusht worden.
 
 ```
-(HEAD)   docs: O6 freigegeben, Folgeprompt auf O6 + P11 umgestellt
+(HEAD)   feat: CI-Workflow, OCI-Labels und der Linux-UID-Nachweis (P11)
+01db7bb  feat: nginx-Vorlage gehaertet — try_files und Security-Header (O6)
+a3ac9a3  docs: O6 freigegeben, Folgeprompt auf O6 + P11 umgestellt
 0c7d7f2  docs: Commit-Zahl und Log im Handover richtigstellen
 90b7aeb  feat: Demo-Stack — mariadb + fpm + offizielles nginx (P10)
 ca7b87f  docs: Wiedereinstiegs-Block und Phasenzaehlung
