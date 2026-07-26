@@ -1,6 +1,6 @@
 # Prompt für einen neuen Kontext
 
-Stand 2026-07-25, nach Abschluss von P9. Der Text unten ist zum Kopieren gedacht —
+Stand 2026-07-26, nach Abschluss von P10. Der Text unten ist zum Kopieren gedacht —
 er zeigt nur auf die Dokumente, statt Inhalte zu wiederholen, damit es eine
 einzige Wahrheitsquelle gibt.
 
@@ -10,9 +10,9 @@ Arbeitsverzeichnis: `/Users/Rolf/Development/headgent/devops/docker/php-image-bu
 
 Lies zuerst, in dieser Reihenfolge:
 
-1. `docs/PROGRESS.md` — trägt den laufenden Zustand: was P1–P6, P8 und P9
+1. `docs/PROGRESS.md` — trägt den laufenden Zustand: was P1–P6 und P8–P10
    geliefert und nachgewiesen haben, warum P7 entfallen ist, alle
-   Umsetzungsentscheidungen mit Begründung, die Befunde B1–B23, die offenen
+   Umsetzungsentscheidungen mit Begründung, die Befunde B1–B29, die offenen
    Punkte und die nächste Phase. Das ist die maßgebliche Datei; sie geht bei
    Widersprüchen vor.
 2. `docs/HANDOVER.md` — Einstieg, Stand, Bedienung, Prüflauf, Arbeitsweise.
@@ -26,40 +26,55 @@ Analysiere den Bestandscode nicht neu — das PRD trägt ihn mit Fundstellen. De
 Bestand liegt unter `/Users/Rolf/Development/headgent/devops/image/phpcli/` und
 `.../phpfpm/` und bleibt unverändert.
 
-**Stand:** P1–P6, P8 und P9 sind abgeschlossen und committet, **P7 (`frankenphp`)
-ist gestrichen** (E11). `base`, `cli` und `fpm` bauen in einem `bake`-Lauf gegen
-PHP 8.3, 8.4 und 8.5; amd64 ist belegt, der Nachweis auf einem echten
-Linux-Runner bleibt P11. Die nginx-Vorlage liegt als Asset vor und ist gegen das
-unveränderte offizielle Image nachgewiesen (39/39, AK7). `make test-all` läuft
-grün — jetzt neun Stufen. Das Repo hat kein Remote und ist nie gepusht worden.
+**Stand:** P1–P6 und P8–P10 sind abgeschlossen und committet, **P7
+(`frankenphp`) ist gestrichen** (E11). `base`, `cli` und `fpm` bauen in einem
+`bake`-Lauf gegen PHP 8.3, 8.4 und 8.5; amd64 ist belegt, der Nachweis auf einem
+echten Linux-Runner bleibt P11. Die nginx-Vorlage liegt als Asset vor und ist
+gegen das unveränderte offizielle Image nachgewiesen (39/39, AK7). Der
+Demo-Stack läuft (`make demo-up`, 21/21, AK9 und AK12 erbracht). `make test-all`
+läuft grün — jetzt zehn Stufen. Das Repo hat kein Remote und ist nie gepusht
+worden.
 
-**Beginne mit P10** (Demo-Stack). Die Phase hängt nur an P9, es ist nichts
-blockierend offen. Die Phasennummern rücken trotz der Lücke bei P7 **nicht** nach
-— Befunde und Akzeptanzkriterien verweisen namentlich auf sie.
+**Beginne mit P11** (CI-Pipeline + Härtung). Die Phase hängt an P8, es ist
+nichts blockierend offen. Die Phasennummern rücken trotz der Lücke bei P7
+**nicht** nach — Befunde und Akzeptanzkriterien verweisen namentlich auf sie.
 
-Einzulösen in P10:
+Einzulösen in P11:
 
-- `compose/demo-stack.yml`: mysql/mariadb + `fpm` + **unverändertes** offizielles
-  nginx. Datenbank und nginx laufen als offizielle Images — der Stack
-  demonstriert damit zugleich den Weg, den Projekte gehen sollen (A8.1).
-- `docker compose up` ohne jede Nacharbeit, Health-Checks für **alle** Services
-  (A8.2), die nginx-Template-Variablen exemplarisch befüllt (A8.3).
-- Seit E11 hat der Stack nur **eine** Ausprägung; das zweite Profil (A8.4) ist
-  entfallen.
-- Damit fällt die zweite Hälfte von **AK12** („der Demo-Stack belegt, dass das
-  offizielle Image mit der gelieferten Config auskommt"); die erste ist mit P9
-  erbracht.
+- `.github/workflows/ci.yml`: **ein** Workflow ersetzt die beiden bestehenden
+  (A9.1), eine Änderung an `base` baut alle abhängigen Targets neu (A9.2), die
+  heutigen Trigger bleiben erhalten — push/PR/dispatch/scheduled inklusive
+  Keepalive-Job (A9.3).
+- Härtung H1–H5 plus H10 (AK8): Trivy für **alle** Targets, CRITICAL/HIGH
+  blockieren und **kein** `continue-on-error` mehr (A7.1, hebt D14 auf),
+  SBOM-Attestation (A7.2), `id-token: write` + `attestations: write` (A7.3,
+  hebt D13 auf), OCI-Labels `org.opencontainers.image.{source,version,revision,created}`
+  in allen Dockerfiles (A7.4). `.dockerignore` (A7.5), `apk upgrade` im
+  Build-Stage (A7.7) und `.hadolint.yaml` (A7.8) liegen bereits vor — prüfen
+  statt neu bauen.
+- **Der UID-Nachweis AK4** wird hier geführt: auf einem echten Linux-Runner mit
+  Host-UID ≠ 1000, belegter Ziel-GID und frischem Named Volume. P8 hat den Test
+  geliefert (`make test-uid`), auf macOS ist der Fehler prinzipiell unsichtbar.
 
-Was aus P9 bereitliegt: `compose/nginx/nginx-defaults.env` wird per `env_file:`
-eingebunden, überschrieben wird nur, was der Stack wirklich anders braucht.
-Denselben Aufbau fährt `support/tests/check-nginx-template.sh` schon — Netz,
-gemeinsames `/app`, fpm vor nginx. Befund **B23** beachten: nginx löst den
-Upstream-Namen beim Start auf, ohne erreichbaren PHP-Service startet es nicht.
+Zu beachten:
 
-Danach P11 (CI + Härtung), P12 (Doku + Abschluss).
+- **N6 ist die harte Grenze dieser Phase.** Der Workflow darf geschrieben, aber
+  **nicht scharf geschaltet** werden: kein `docker login`, kein `--push`, keine
+  CI-Auslösung, bis die Tag-Strategie vorliegt und freigegeben ist.
+- **B20** — ein leeres Named Volume bekommt beim ersten Mount die Ownership des
+  Image-Verzeichnisses zurück. Für AK4 auf dem Runner maßgeblich.
+- **B23** — ein reiner Lint der nginx-Vorlage braucht einen auflösbaren
+  Upstream-Namen, sonst scheitert `nginx -t` an DNS statt an der Vorlage.
+- **B27** — `docker compose up --wait` meldet grün für einen Dienst **ohne**
+  Healthcheck. Ein CI-Schritt, der einen Stack so hochfährt, belegt für sich
+  genommen nicht, dass die Dienste gesund sind.
+- **B15/B28** — Betriebsbedingungen: `build-all` übersetzt drei Versionen
+  gleichzeitig (Plattenplatz), der Demo-Stack belegt einen Host-Port.
+
+Danach P12 (Doku + Abschluss, Akzeptanz-Gate gegen AK1–AK15).
 
 Halte `docs/PROGRESS.md` nach jeder abgeschlossenen Phase fort — in derselben
-Form wie die Abschnitte zu P1–P6, P8 und P9 (Geliefert, Akzeptanz mit Nachweis,
+Form wie die Abschnitte zu P1–P6 und P8–P10 (Geliefert, Akzeptanz mit Nachweis,
 Umsetzungsentscheidungen, Befunde).
 
 Wichtig:
@@ -71,10 +86,10 @@ Wichtig:
 - **`make test-all` muss grün bleiben.** Ein Aufruf, seit P8; der Umfang steht
   in `docs/HANDOVER.md`. Wer eine Extension, ein Profil oder einen Laufzeitwert
   ändert, zieht dort nach.
-- **Fünf Testfallstricke derselben Klasse „der Test misst nichts und meldet
+- **Sechs Testfallstricke derselben Klasse „der Test misst nichts und meldet
   trotzdem grün" haben in diesem Vorhaben bereits zugeschlagen** — B11, B16,
-  B19, B20 und B21 in `PROGRESS.md`. Wer einen neuen Test schreibt, prüft ihn
-  gegen diese fünf, bevor er ihn für grün hält.
+  B19, B20, B21 und B27 in `PROGRESS.md`. Wer einen neuen Test schreibt, prüft
+  ihn gegen diese sechs, bevor er ihn für grün hält.
 - Keine nach außen wirkenden Aktionen ohne ausdrückliche Freigabe: kein
   GitHub-Repo anlegen, kein Remote setzen, nichts archivieren, **nicht pushen**.
   Commits sind freigegeben; frag im Zweifel.
@@ -86,10 +101,11 @@ Wichtig:
   ist P7 gestrichen worden.
 - Kein Experten-Gremium, keine Subagenten, sofern ich sie nicht anfordere.
 
-Offen aus P9 (nicht blockierend, Entscheidung liegt bei mir): **O6** in
-`PROGRESS.md` — zwei belegte Bestandsdefekte der nginx-Vorlage, je eine Zeile,
-sachlich Härtung (A7): `try_files` in der `.php`-Fallback-Location (B24) und die
-bei statischen Dateien verlorenen Security-Header (B25).
+Offen aus P9 (nicht blockierend, Entscheidung liegt bei mir, gehört sachlich in
+diese Phase): **O6** in `PROGRESS.md` — zwei belegte Bestandsdefekte der
+nginx-Vorlage, je eine Zeile, sachlich Härtung (A7): `try_files` in der
+`.php`-Fallback-Location (B24) und die bei statischen Dateien verlorenen
+Security-Header (B25).
 
 Zwei Dinge warten unverändert:
 

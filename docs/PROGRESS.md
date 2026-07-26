@@ -23,7 +23,7 @@ Repo und sind mitversioniert. Bestandscode unverändert unter
 - [~] ~~P7  `frankenphp`-Target~~ — **entfallen 2026-07-25 (E11)**
 - [x] **P8  Tests** — abgeschlossen 2026-07-25
 - [x] **P9  nginx-Config als Asset** — abgeschlossen 2026-07-25
-- [ ] P10 Demo-Stack
+- [x] **P10 Demo-Stack** — abgeschlossen 2026-07-26
 - [ ] P11 CI-Pipeline + Härtung
 - [ ] P12 Doku + Abschluss
 
@@ -1292,6 +1292,170 @@ geloeschte Zeile.
 
 ---
 
+## P10 — abgeschlossen
+
+### Geliefert
+
+| Datei | Inhalt |
+|---|---|
+| `compose/demo-stack.yml` | **neu.** Drei Dienste: `db` (mariadb), `app` (unser `fpm`), `web` (offizielles nginx mit der Vorlage aus P9). Kein `build:`-Abschnitt |
+| `compose/demo-app/public/index.php` | **neu.** Die Demo-Anwendung: Datenbankverbindung, die Laufzeitwerte des `APP_ENV`-Profils und die `$_SERVER`-Werte aus der nginx-Vorlage |
+| `compose/demo-app/public/demo.css` | **neu.** Beiwerk mit zweitem Zweck: fällt in die Static-Asset-Location und wird von nginx ohne php-fpm ausgeliefert |
+| `compose/demo-app/public/health.txt` | **neu.** Statische Sonde, trägt den Healthcheck des Webservers |
+| `support/makefiles/demo.mk` | **neu.** `demo-up`, `demo-down`, `demo-logs`, `demo-config` |
+| `support/tests/check-demo-stack.sh` | **neu.** 21 Zusicherungen gegen den laufenden Stack |
+| `support/makefiles/test.mk` | **geändert:** `test-demo` ergänzt und in `test-all` aufgenommen (zehnte Stufe) |
+| `Makefile` | **geändert:** `demo.mk` eingebunden, `info` zeigt den Demo-Stack |
+| `.env` | **geändert:** `MARIADB_VERSION` und der Abschnitt „Demo-Stack" (fünf Schlüssel) |
+| `compose/nginx/templates/default.conf.template` | **geändert:** nur der Kopfkommentar — die Beispielpfade zeigen jetzt auf die wirklich gelieferte Einbindung |
+
+### Akzeptanz — nachgewiesen
+
+`make test-demo` läuft mit **21/21** durch, `make test-all` bleibt grün — der
+Demo-Stack ist die zehnte Stufe.
+
+| Prüffall | Ergebnis |
+|---|---|
+| **AK9** — ein Aufruf, keine Nacharbeit (`up -d --wait`) | ✅ |
+| **AK12, zweite Hälfte** — kein Dienst trägt einen `build:`-Abschnitt; nginx und mariadb kommen als offizielle Images | ✅ am aufgelösten Modell, nicht am Dateitext |
+| **A8.2** — Health-Checks für **alle** drei Dienste | ✅ je Dienst einzeln nachgesehen, siehe B27 |
+| **A8.1** — die Datenbank antwortet wirklich: `SELECT VERSION()` = `11.8.8-MariaDB-ubu2404` | ✅ mit Gegenprobe |
+| **A8.3** — `SERVER_NAME` aus `HOST`, `REQUEST_SCHEME=http`, `HTTPS` **nicht** übergeben (A6.2) | ✅ |
+| `/index.php/foo/bar` → `PATH_INFO=/foo/bar` | ✅ |
+| `/health.txt` und `/demo.css` → 200, von nginx direkt, ohne php-fpm | ✅ |
+| `/.env` → 404 | ✅ |
+| nach `down` kein Container, kein Netz, kein Volume übrig | ✅ |
+
+**Drei Gegenproben, weil 21/21 im ersten Lauf genau die Lage ist, in der die
+fünf Fallstricke zuschlagen.** Jede wurde am laufenden Stack gefahren, die
+Datei danach byte-gleich wiederhergestellt:
+
+| Eingriff | Erwartung | Ergebnis |
+|---|---|---|
+| DB-Passwort im `app`-Dienst verfälscht | Datenbank-Zusicherung fällt | ✅ rot, mit `Access denied for user 'demo'` |
+| `REQUEST_SCHEME: https` (der fest verdrahtete Zustand des Bestands) | A6.2-Zusicherung fällt | ✅ **zwei** Zusicherungen rot |
+| Healthcheck des Webservers entfernt | A8.2-Zusicherung fällt | ✅ rot — **und `up --wait` meldete trotzdem grün**, siehe B27 |
+
+**Bedienweg gefahren**, nicht nur der Prüflauf: `make demo-up` → alle drei
+Dienste `healthy`, Seite unter `http://localhost:8088` erreichbar, die
+Demo-Seite zeigt `APP_ENV=dev` mit `opcache.validate_timestamps=1` und
+`xdebug.mode=debug`, und im Log steht die JIT-Automatik aus A10.3 („opcache.jit
+wird von '1254' auf 'off' gesetzt"). `make demo-down` hinterlässt nichts. Die
+lokalen `headgent/*`-Images sind unberührt (6 Wochen bis 6 Monate alt, keins
+von heute).
+
+**AK12 ist damit vollständig**: die erste Hälfte kam mit P9, die zweite hier.
+Das Abhaken im PRD bleibt wie bei P9 dem Gate in P12 vorbehalten.
+
+### Umsetzungsentscheidungen
+
+1. **`--project-directory .` statt Datei ins Root oder Inline-Defaults**
+   (drei Wege vorgelegt, Entscheidung Rolf 2026-07-26). Grund ist der
+   gemessene Befund **B26**: liegt die Compose-Datei in `compose/`, nimmt
+   Compose dieses Verzeichnis als Projektverzeichnis und findet die `.env` im
+   Root nicht — jede Variable wäre leer. Die Alternative „überall
+   `${VAR:-default}`" wäre eine Zweitpflege aller Werte und damit gegen A2.1.
+   Der Griff steckt in `demo-up`; die Zielstruktur des Plans bleibt unberührt.
+2. **Die Demo-Anwendung ist eine Abweichung von der Zielstruktur des Plans**
+   (dort steht nur `demo-stack.yml`) und sie ist unvermeidlich: ein Stack ohne
+   Anwendung belegt nichts — `docker compose up` liefe grün und
+   `http://localhost:8088` gäbe 404. Dieselbe Lage wie bei
+   `nginx-defaults.env` in P9. Die Seite ist zugleich der Messpunkt des
+   Prüflaufs; sie hat keine Abhängigkeiten, keinen Autoloader und kein
+   Framework.
+3. **mariadb `11.8` statt der `11.2` aus den Jardis-Projekten** (Entscheidung
+   Rolf 2026-07-26). 11.2 ist eine kurzlebige Reihe ohne Pflegezusage; als
+   Vorlage für den Weg, den Projekte gehen sollen, taugt nur eine LTS-Reihe.
+4. **Die Datenbank liegt im `tmpfs`, nicht in einem Named Volume.** Ein Volume
+   überlebt `docker compose down` und schiebt dem nächsten Lauf still einen
+   alten Zustand unter — Nachbarschaft zu **B20**. Die Zeile für Persistenz
+   steht als Kommentar daneben.
+5. **`DEMO_REGISTRY ?= $(TEST_REGISTRY)`, bis der erste Push liegt.** Die
+   Compose-Datei verweist auf `headgent/phpfpm:<ver>` — das, was ein Projekt
+   schreiben würde. Unter dem Namen liegt bis **N6** aber nur der Bestand, und
+   der ist in allen drei Versionen startunfähig (**B9**). `make demo-up` setzt
+   deshalb `DOCKER_HUB` auf das Test-Präfix um. Nach dem Push entfällt der
+   Griff ersatzlos (`make demo-up DEMO_REGISTRY=headgent`). Zweiter Nutzen: der
+   Bedienweg überschreibt die lokalen `headgent/*`-Referenzimages nicht.
+6. **Jeder Dienst meldet seine eigene Verfügbarkeit.** Der Healthcheck des
+   Webservers prüft `health.txt` und nicht den Front-Controller: sonst meldete
+   `web` die Verfügbarkeit von `app` mit, und ein hängendes php-fpm ließe
+   beide rot aussehen, ohne zu sagen welcher. `app` bekommt gar keinen
+   `healthcheck:`-Block — der kommt aus dem Image (FastCGI-Ping) und wird hier
+   nicht zweitgepflegt.
+7. **Der Dienst heißt `app`**, weil `FASTCGI_UPSTREAM` in `nginx-defaults.env`
+   genau so voreingestellt ist — der Stack braucht dafür keinen Override
+   (A8.3: überschrieben wird nur, was ein Projekt wirklich entscheidet, `HOST`
+   und `REQUEST_SCHEME`). `depends_on: condition: service_healthy` ist die
+   Antwort auf **B23**: nginx löst den Upstream-Namen beim Start auf und
+   beendet sich, wenn er ihn nicht findet.
+8. **Der Prüflauf sieht die Healthchecks einzeln nach**, statt sich auf
+   `up --wait` zu verlassen — der Grund steht in **B27**.
+9. **Eigener Projektname und eigener Port im Prüflauf** (`18080`), damit ein
+   parallel laufender `make demo-up` weder gestört noch abgeräumt wird.
+
+### Befunde aus P10
+
+**B26 — Compose liest die `.env` des Repo-Roots nicht, wenn die Stack-Datei in
+einem Unterverzeichnis liegt.** Gemessen am 2026-07-26 mit einer Sonde, die nur
+drei Variablen interpoliert:
+
+| Aufruf | Ergebnis |
+|---|---|
+| `docker compose -f compose/x.yml config` | `UNSET/UNSET:UNSET` |
+| `… --project-directory . config` | `headgent/phpfpm:8.3` |
+| `… --env-file .env config` | `headgent/phpfpm:8.3` |
+
+Compose leitet das Projektverzeichnis aus dem Ort der Datei ab und sucht die
+`.env` dort. Ohne Flag greift also **keine** Zuweisung, und zwar ohne Warnung —
+der Stack liefe mit leeren Werten an. `--project-directory` und nicht
+`--env-file`, weil es zusätzlich die relativen Volume-Pfade auf das Repo-Root
+bezieht; alle Pfade in `demo-stack.yml` sind entsprechend von dort aus
+geschrieben.
+
+**B27 — sechster Fall der Klasse „der Test misst nichts": `docker compose up
+--wait` meldet grün für einen Dienst OHNE Healthcheck.** `--wait` wartet nur
+auf Dienste, die einen haben; ein Dienst ohne einen gilt als fertig, sobald er
+läuft. In der Gegenprobe wurde der Healthcheck des Webservers entfernt — `up
+--wait` kehrte mit Exit 0 zurück, obwohl A8.2 damit verletzt war. Nur die
+Einzelabfrage je Dienst fing es ab (`{{if .State.Health}}…{{else}}KEIN-HEALTHCHECK{{end}}`;
+ein fehlender Healthcheck ist dort ein Fehlschlag, kein leeres Feld). Reihe mit
+B11, B16, B19, B20, B21. **Für P11 relevant:** ein CI-Schritt, der einen Stack
+mit `--wait` hochfährt, belegt für sich genommen nicht, dass die Dienste
+gesund sind.
+
+**B29 — aus dem Code-Review nach der Codierung: die Demo-Anwendung trug
+Zugangsdaten als Fallback im Code.** `getenv('DEMO_DB_PASSWORD') ?: 'demo'` —
+derselbe Bau wie `ARG COMPOSER_VERSION=2.9.3` im Bestand (**D16**): ein
+hartkodierter Default, der die gepflegte Konfiguration still überstimmt, und
+zugleich eine Zweitpflege gegen A2.1. **Behoben in P10**, nicht vertagt: die
+vier Werte werden geprüft und beim Namen genannt, wenn einer fehlt.
+Gegengeprobt — ohne `DEMO_DB_PASSWORD` meldet die Seite
+`FEHLER: nicht gesetzt: DEMO_DB_PASSWORD` und der Prüflauf wird rot, statt sich
+auf `demo` zurückfallen zu lassen. Zwei weitere Punkte desselben Reviews sind
+ebenfalls behoben: `posix_geteuid()` ohne `function_exists`-Prüfung (wäre ein
+Fatal Error der ganzen Seite statt einer fehlenden Zeile) und die festen
+`/tmp`-Pfade im Prüfskript, das seinen Projektnamen bereits mit `$$`
+vereinzelte.
+
+**Bewusst nicht geändert, aber benannt:** die Demo-Seite gibt die
+Datenbank-Fehlermeldung samt Benutzer und Herkunfts-IP aus — nach dem
+Review-Katalog (Security, „keine internen Details in Fehlermeldungen") ein
+Major. Sie bleibt, weil sie der Zweck dieser Seite ist: eine Demo, die eine
+gescheiterte Verbindung als leeres Feld zeigt, meldet Erfolg, wo keiner ist.
+Der Dateikopf sagt jetzt ausdrücklich, dass die Datei **keine Vorlage für
+Produktivcode** ist und wer abschreibt, genau diese Ausgaben weglässt.
+
+**B28 — Port 8080 ist auf dem Entwicklungsrechner dauerhaft belegt.** `make
+demo-up` scheiterte mit „Bind for 0.0.0.0:8080 failed: port is already
+allocated"; ein laufender `host_proxy`-Container hält 80, 443 **und** 8080. Der
+Default steht deshalb auf **8088**, der Prüflauf fährt auf 18080. Kein
+Designfehler, eine Betriebsbedingung — wie B15. Der Fehler ist sichtbar und
+benennt den Port, es geht nichts still schief; Ausweg
+`make demo-up DEMO_HTTP_PORT=8090`.
+
+---
+
 ## Offene Punkte / Risiken
 
 | # | Punkt | Fällig in | Kritikalität |
@@ -1393,20 +1557,33 @@ UID/GID-Neubau (A4/E7 gegen U1–U3). **L-B ist mit dem `test`-Profil erledigt:*
 
 ## Nächste Phase
 
-**P10 — Demo-Stack.** Liefert `compose/demo-stack.yml`: mysql/mariadb + `fpm` +
-**unverändertes** offizielles nginx mit der Vorlage aus P9 (A8.1). Hängt nur noch
-an P9, seit E11 gibt es nur eine Ausprägung (A8.4 entfallen).
+**P11 — CI-Pipeline + Härtung.** Liefert `.github/workflows/ci.yml`, die
+OCI-Labels, Trivy und die SBOM-/Attestations-Schritte. Hängt an P8.
 
-Akzeptanz nach Plan: `docker compose up` ohne Nacharbeit, Health-Checks für alle
-Services (A8.2), die Template-Variablen exemplarisch befüllt (A8.3). Damit fällt
-auch die zweite Hälfte von **AK12** („der Demo-Stack belegt, dass das offizielle
-Image mit der gelieferten Config auskommt") — die erste ist mit P9 erbracht.
+Akzeptanz nach Plan: **ein** Workflow ersetzt beide bestehenden (A9.1), eine
+Änderung an `base` baut alle abhängigen Targets neu (A9.2), die heutigen Trigger
+bleiben erhalten (A9.3), Trivy blockiert bei CRITICAL/HIGH und läuft **nicht**
+mehr mit `continue-on-error` (A7.1, hebt D14 auf) — und der **UID-Nachweis
+(AK4)** wird auf einem echten Linux-Runner geführt, was auf macOS prinzipiell
+nicht geht.
 
-Was aus P9 dafür bereitliegt: `compose/nginx/nginx-defaults.env` wird per
-`env_file:` eingebunden, überschrieben wird nur, was der Stack wirklich anders
-braucht (`HOST`, ggf. `FASTCGI_UPSTREAM`, wenn der PHP-Service nicht `app` heißt).
-Der Aufbau ist in `check-nginx-template.sh` schon einmal gefahren — Netz, gemeinsames
-`/app`, Reihenfolge fpm-vor-nginx. Befund **B23** beachten: nginx löst den
-Upstream-Namen beim Start auf, ein nginx ohne erreichbaren PHP-Service startet nicht.
+Was dabei zu beachten ist:
 
-Danach P11 (CI + Härtung), P12 (Doku + Abschluss).
+- **N6 bleibt die harte Grenze.** Der Workflow darf geschrieben, aber nicht
+  scharf geschaltet werden: kein `docker login`, kein `--push`, keine
+  CI-Auslösung, bis die Tag-Strategie vorliegt und freigegeben ist.
+- **B20** — ein leeres Named Volume bekommt beim ersten Mount die Ownership des
+  Image-Verzeichnisses zurück. Für den UID-Nachweis auf dem Runner maßgeblich.
+- **B23** — ein reiner Lint der nginx-Vorlage in der CI braucht einen
+  auflösbaren Upstream-Namen, sonst scheitert `nginx -t` an DNS statt an der
+  Vorlage.
+- **B27** — ein CI-Schritt, der einen Stack mit `up --wait` hochfährt, belegt
+  für sich genommen **nicht**, dass die Dienste gesund sind. Die Einzelabfrage
+  je Dienst gehört dazu.
+- **B15/B28** — Betriebsbedingungen des Runners: `build-all` übersetzt drei
+  Versionen gleichzeitig (Plattenplatz), und der Demo-Stack belegt einen
+  Host-Port.
+- **O6** wartet weiter auf Entscheidung und gehört sachlich hierher (A7): die
+  zwei Zeilen an der nginx-Vorlage, B24 und B25.
+
+Danach P12 (Doku + Abschluss, Akzeptanz-Gate gegen AK1–AK15).

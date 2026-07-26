@@ -1,0 +1,142 @@
+# =============================================================================
+# Demo-Stack — mariadb + phpfpm + offizielles nginx (A8, P10)
+# =============================================================================
+# Zeigt den Weg, den Projekte gehen sollen: dieses Repo liefert die PHP-Laufzeit
+# und die nginx-Vorlage; Webserver und Datenbank kommen als UNVERAENDERTE
+# offizielle Images (A8.1). Es wird hier nichts gebaut — kein build:-Abschnitt,
+# kein eigener Entrypoint, kein eigenes nginx-Image (E9/AK12).
+#
+# -----------------------------------------------------------------------------
+# AUFRUF
+# -----------------------------------------------------------------------------
+#   make demo-up       starten
+#   make demo-down     abbauen
+#
+# Ohne make:
+#
+#   docker compose -f compose/demo-stack.yml --project-directory . up -d --wait
+#
+# --project-directory ist NICHT verzichtbar und keine Nacharbeit im Sinne von
+# AK9: Compose nimmt sonst compose/ als Projektverzeichnis, liest dort eine
+# .env, die es nicht gibt, und setzt jede Variable auf leer (gemessen
+# 2026-07-25). Alle Pfade in dieser Datei sind deshalb vom Repo-Root aus
+# geschrieben. Die Werte kommen aus der .env im Root — kein Wert ist hier ein
+# zweites Mal gepflegt (A2.1), es steht deshalb auch kein ${VAR:-default} darin.
+#
+# -----------------------------------------------------------------------------
+# WELCHES phpfpm-IMAGE
+# -----------------------------------------------------------------------------
+# Der Verweis unten ist der, den ein Projekt schreibt: headgent/phpfpm:<ver>.
+# Solange die neue Reihe nicht publiziert ist (N6), gibt es unter diesem Namen
+# nur den Bestand — und der ist in allen drei Versionen startunfaehig (B9). Bis
+# zum ersten Push faehrt `make demo-up` den Stack deshalb gegen die lokal
+# gebauten Test-Images, indem es DOCKER_HUB umsetzt. Nach dem Push faellt der
+# Griff weg und der Aufruf oben stimmt woertlich.
+# =============================================================================
+
+name: php-image-builder-demo
+
+services:
+
+  # ---------------------------------------------------------------------------
+  # Datenbank — offizielles Image, unveraendert
+  # ---------------------------------------------------------------------------
+  db:
+    image: mariadb:${MARIADB_VERSION}
+    environment:
+      MARIADB_ROOT_PASSWORD: ${DEMO_DB_ROOT_PASSWORD}
+      MARIADB_DATABASE: ${DEMO_DB_NAME}
+      MARIADB_USER: ${DEMO_DB_USER}
+      MARIADB_PASSWORD: ${DEMO_DB_PASSWORD}
+    # Die Demo-Datenbank ist mit dem Stack weg. Ein Named Volume wuerde
+    # `docker compose down` ueberleben und dem naechsten Lauf still einen alten
+    # Zustand unterschieben. Wer Persistenz braucht, ersetzt tmpfs durch ein
+    # Volume auf /var/lib/mysql.
+    tmpfs:
+      - /var/lib/mysql
+    # A8.2. Das offizielle Image bringt healthcheck.sh mit; --innodb_initialized
+    # meldet erst gruen, wenn die Datenbank Abfragen beantwortet — ein blosses
+    # "Port offen" waere zu frueh, weil der erste Start noch initialisiert.
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 30s
+
+  # ---------------------------------------------------------------------------
+  # PHP-FPM — das Image dieses Repos
+  # ---------------------------------------------------------------------------
+  # Der Dienst heisst `app`, weil FASTCGI_UPSTREAM in nginx-defaults.env genau
+  # so voreingestellt ist. Wer ihn umbenennt, setzt die Variable beim Webserver
+  # mit um — sonst findet nginx den Upstream beim Start nicht (B23).
+  app:
+    image: ${DOCKER_HUB}/${IMAGE_NAME_FPM}:${PHP_VERSION}
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      # Der eine Umgebungsschalter (A10). Das Profil setzt Xdebug, PCOV,
+      # OPcache, JIT und die Fehleranzeige gemeinsam; die Demo-Seite zeigt das
+      # Ergebnis an.
+      APP_ENV: ${APP_ENV}
+      # Zugang zur Datenbank. Der Host ist der Dienstname.
+      DEMO_DB_HOST: db
+      DEMO_DB_NAME: ${DEMO_DB_NAME}
+      DEMO_DB_USER: ${DEMO_DB_USER}
+      DEMO_DB_PASSWORD: ${DEMO_DB_PASSWORD}
+    volumes:
+      # Der Anwendungscode. Schreibbar gemountet, weil eine echte Anwendung hier
+      # Cache und Logs ablegt; der Entrypoint gleicht appuser an den Eigentuemer
+      # dieses Verzeichnisses an (A4).
+      - ./compose/demo-app:${APP_ROOT}
+    # Kein healthcheck:-Block — das Image bringt einen mit (FastCGI-Ping gegen
+    # den eigenen Pool, src/fpm/Dockerfile). A8.2 ist damit erfuellt, ohne ihn
+    # hier ein zweites Mal zu pflegen.
+
+  # ---------------------------------------------------------------------------
+  # Webserver — offizielles Image, unveraendert (E9/A6.3/AK12)
+  # ---------------------------------------------------------------------------
+  web:
+    image: nginx:${NGINX_VERSION}-alpine
+    depends_on:
+      app:
+        # Nicht bloss service_started: nginx loest den Upstream-Namen schon beim
+        # Start auf und beendet sich, wenn er ihn nicht findet (B23).
+        condition: service_healthy
+    env_file:
+      # Die elf Vorlagen-Variablen mit ihren Defaults. envsubst kennt keine
+      # Default-Schreibweise — ohne diese Datei bleiben Platzhalter stehen und
+      # nginx startet nicht (A6.4, in P9 gegengeprueft).
+      - ./compose/nginx/nginx-defaults.env
+    environment:
+      # A8.3 — exemplarisch befuellt. environment schlaegt env_file, dieselbe
+      # Richtung wie die Vorrangregel A10.2 bei den PHP-Werten.
+      #
+      # Gesetzt wird nur, was ein Projekt an dieser Stelle wirklich entscheidet.
+      # Alles Uebrige (APP_ROOT, DOCUMENT_ROOT, INDEX_FILE, FASTCGI_UPSTREAM,
+      # PHP_PORT, CLIENT_MAX_BODY_SIZE, die drei Timeouts) kommt aus der
+      # Defaults-Datei und passt hier unveraendert.
+      HOST: localhost
+      # http = kein vorgelagerter TLS-Proxy: HTTPS wird gar nicht uebergeben,
+      # die Anwendung baut http-URLs (A6.2). Hinter Traefik & Co. steht hier
+      # https — ein Schalter, der HTTPS, REQUEST_SCHEME und
+      # HTTP_X_FORWARDED_PROTO gemeinsam umlegt.
+      REQUEST_SCHEME: http
+    volumes:
+      - ./compose/nginx/templates:/etc/nginx/templates:ro
+      # nginx liest nur — das war der Grund, aus dem es kein eigenes Image mehr
+      # braucht (E9): Lesen verlangt keine angeglichene UID.
+      - ./compose/demo-app:${APP_ROOT}:ro
+    ports:
+      - "${DEMO_HTTP_PORT}:80"
+    # A8.2. Das offizielle nginx bringt keinen Healthcheck mit. Geprueft wird
+    # eine statische Datei und nicht der Front-Controller: dieser Dienst soll
+    # seine eigene Verfuegbarkeit melden, nicht die von php-fpm — die meldet der
+    # Dienst app selbst.
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1/health.txt"]
+      interval: 5s
+      timeout: 3s
+      retries: 6
+      start_period: 5s

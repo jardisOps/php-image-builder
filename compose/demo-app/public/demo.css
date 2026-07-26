@@ -1,0 +1,74 @@
+/*
+ * Statisches Beiwerk der Demo-Anwendung.
+ *
+ * Es hat einen zweiten Zweck: die Datei faellt in die Static-Asset-Location der
+ * nginx-Vorlage (css|js|png|...) und wird damit von nginx direkt ausgeliefert,
+ * ohne php-fpm. Der Stack zeigt dadurch beide Wege, die die Vorlage kennt.
+ */
+
+body {
+    margin: 0 auto;
+    padding: 2rem 1.5rem 4rem;
+    max-width: 52rem;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+    line-height: 1.5;
+    color: #1c1e21;
+    background: #fbfbfa;
+}
+
+h1 {
+    margin: 0 0 0.5rem;
+    font-size: 1.6rem;
+}
+
+h2 {
+    margin: 2.5rem 0 0.75rem;
+    font-size: 1.05rem;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: #6b6f76;
+}
+
+.lead {
+    margin: 0;
+    color: #4a4e55;
+}
+
+.hint {
+    margin-top: 2.5rem;
+    font-size: 0.9rem;
+    color: #6b6f76;
+}
+
+table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+th,
+td {
+    padding: 0.4rem 0.6rem;
+    text-align: left;
+    vertical-align: top;
+    border-bottom: 1px solid #e5e5e2;
+    font-size: 0.92rem;
+}
+
+th {
+    width: 16rem;
+    font-weight: 500;
+    color: #4a4e55;
+}
+
+td,
+code {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+.good {
+    color: #1a7f37;
+}
+
+.bad {
+    color: #b42318;
+}

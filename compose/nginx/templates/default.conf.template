@@ -7,18 +7,20 @@
 # ersetzt jeden Platzhalter aus der Umgebung und schreibt das Ergebnis nach
 # /etc/nginx/conf.d/). Kein eigener Entrypoint, kein eigener Build (A6.3).
 #
-# Einbindung (Pfade wie aus compose/demo-stack.yml, P10):
+# Einbindung — so steht es in compose/demo-stack.yml (P10). Die Pfade sind vom
+# Repo-Root aus geschrieben, weil Compose den Stack mit --project-directory .
+# faehrt:
 #
 #   services:
-#     webserver:
+#     web:
 #       image: nginx:1.28-alpine                   # NGINX_VERSION der .env
 #       env_file:
-#         - ./nginx/nginx-defaults.env               # Defaults (A6.4)
+#         - ./compose/nginx/nginx-defaults.env       # Defaults (A6.4)
 #       environment:
 #         HOST: example.com                          # schlaegt die Defaults
 #       volumes:
-#         - ./nginx/templates:/etc/nginx/templates:ro
-#         - ../:/app:ro                              # nginx liest nur (E9)
+#         - ./compose/nginx/templates:/etc/nginx/templates:ro
+#         - ./compose/demo-app:/app:ro               # nginx liest nur (E9)
 #
 # Alle Variablen, ihre Defaults und ihre Wirkung stehen in nginx-defaults.env.
 # envsubst kennt keine Defaults und keine Validierung — eine Variable, die in

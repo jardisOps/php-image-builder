@@ -1,7 +1,7 @@
 # Handover — Konsolidierung des PHP-Docker-Image-Builders
 
-**Stand:** 2026-07-25, Ende der vierten Umsetzungs-Session. **P1–P6, P8 und P9
-abgeschlossen und committet**, **P7 ist entfallen** (E11) — nächste Phase ist **P10**.
+**Stand:** 2026-07-26, Ende der fünften Umsetzungs-Session. **P1–P6 und P8–P10
+abgeschlossen und committet**, **P7 ist entfallen** (E11) — nächste Phase ist **P11**.
 
 Arbeitsverzeichnis: `/Users/Rolf/Development/headgent/devops/docker/php-image-builder/`
 Projekt- und künftiger Repo-Name: **`php-image-builder`**.
@@ -10,21 +10,22 @@ Vorläuferdokumente unter `devops/image/`.
 
 ---
 
-## Wiedereinstieg — Stand am Abend des 2026-07-25
+## Wiedereinstieg — Stand am 2026-07-26
 
-**Noch offen sind drei Phasen: P10, P11, P12.** Acht sind abgeschlossen (P1–P6,
-P8, P9), P7 ist gestrichen (E11) und die Nummer bleibt frei.
+**Noch offen sind zwei Phasen: P11 und P12.** Neun sind abgeschlossen (P1–P6,
+P8–P10), P7 ist gestrichen (E11) und die Nummer bleibt frei.
 
 | Punkt | Stand |
 |---|---|
-| Arbeitsbaum | **sauber**, alles committet (14 Commits, kein Remote, nie gepusht) |
-| Prüflauf | `make test-all` war zuletzt **grün**, Exit 0, für PHP 8.3 |
+| Arbeitsbaum | **sauber**, alles committet (16 Commits, kein Remote, nie gepusht) |
+| Prüflauf | `make test-all` war zuletzt **grün**, Exit 0, für PHP 8.3 — jetzt **zehn** Stufen |
 | Test-Images | `php-image-builder-test/phpcli:8.3` und `…/phpfpm:8.3` liegen **lokal** — `make test-all` startet damit ohne Neubau |
+| Demo-Stack | läuft: `make demo-up` → drei Dienste `healthy` unter `http://localhost:8088`, `make demo-down` hinterlässt nichts |
 | Aufgeräumt | keine Testcontainer, -volumes oder -netze übrig; `headgent/*` unberührt |
-| Wartet auf Entscheidung | **O6** (zwei Einzeiler an der nginx-Vorlage, B24/B25) — nicht blockierend |
+| Wartet auf Entscheidung | **O6** (zwei Einzeiler an der nginx-Vorlage, B24/B25) — nicht blockierend, gehört sachlich in P11 |
 | Wartet auf Freigabe | **N6** (erster Push, Tag-Strategie), kein GitHub-Repo, kein Remote, keine Archivierung |
 
-Einstieg morgen: `docs/PROMPT-NEUER-KONTEXT.md` ist bereits auf **P10** umgestellt
+Einstieg: `docs/PROMPT-NEUER-KONTEXT.md` ist bereits auf **P11** umgestellt
 und in einen neuen Kontext kopierbar. Kurzform, falls es ohne gehen soll:
 
 ```sh
@@ -33,9 +34,11 @@ make test-all          # Ausgangslage bestätigen (grün)
 make help              # Bedienoberfläche
 ```
 
-P10 liefert `compose/demo-stack.yml` (mysql/mariadb + `fpm` + offizielles nginx
-mit der P9-Vorlage). Den Aufbau fährt `support/tests/check-nginx-template.sh`
-schon einmal vor — Netz, gemeinsames `/app`, fpm vor nginx (Befund **B23**).
+P11 liefert `.github/workflows/ci.yml`, die OCI-Labels, Trivy und die
+SBOM-/Attestations-Schritte — und den **UID-Nachweis (AK4)** auf einem echten
+Linux-Runner, der auf macOS prinzipiell nicht zu führen ist. **N6 bleibt dabei
+die harte Grenze:** der Workflow darf geschrieben, aber nicht scharf geschaltet
+werden.
 
 ---
 
@@ -43,7 +46,7 @@ schon einmal vor — Netz, gemeinsames `/app`, fpm vor nginx (Befund **B23**).
 
 | Datei | Inhalt | Vorrang |
 |---|---|---|
-| `docs/PROGRESS.md` | **Maßgeblich.** Laufender Zustand: P1–P6, P8 und P9 mit Nachweisen, alle Umsetzungsentscheidungen, Befunde B1–B23, offene Punkte, nächste Phase | geht bei Widersprüchen vor |
+| `docs/PROGRESS.md` | **Maßgeblich.** Laufender Zustand: P1–P6 und P8–P10 mit Nachweisen, alle Umsetzungsentscheidungen, Befunde B1–B29, offene Punkte, nächste Phase | geht bei Widersprüchen vor |
 | `docs/PRD.md` | Anforderungen A1–A10, Entscheidungen E1–**E11**, Nicht-Ziele N1–**N8**, Akzeptanzkriterien AK1–AK15, vollständiger Ist-Zustand (Drift D1–D16, UID-Defekte U1–U3, Xdebug/JIT-Lücken L-A–L-G) mit Datei- und Zeilenangaben | bestätigt |
 | `docs/PLAN.md` | Bauform, Zielstruktur, 12 Phasen mit Abhängigkeiten | freigegeben |
 | `docs/HANDOVER.md` | diese Datei — Vorgeschichte und Einstieg | — |
@@ -55,11 +58,13 @@ vollständig mit Fundstellen.
 
 ## Stand
 
-**Vierzehn Commits, 35 Dateien.** Das Repo hat **kein Remote** und ist nie
+**Sechzehn Commits, 41 Dateien.** Das Repo hat **kein Remote** und ist nie
 gepusht worden.
 
 ```
-(HEAD)   docs: Wiedereinstiegs-Block und Phasenzaehlung
+(HEAD)   docs: hand over at end of P10
+(P10)    feat: Demo-Stack — mariadb + fpm + offizielles nginx (P10)
+ca7b87f  docs: Wiedereinstiegs-Block und Phasenzaehlung
 c455ca4  docs: update commit count in the handover
 cbc3d62  docs: Code-Review-Befunde zu P9 (B24, B25, offener Punkt O6)
 b8a4405  docs: hand over at end of P9
@@ -86,8 +91,9 @@ ea450dc  feat: docker-bake.hcl drives base/cli/fpm in one run (P6)
 | ~~P7 `frankenphp`-Target~~ | **entfallen (E11)** — Nummer bleibt frei, P8–P12 rücken nicht nach |
 | P8 Tests | ✅ `make test-all` grün |
 | P9 nginx-Config als Asset | ✅ Vorlage + Defaults, 39/39 gegen das offizielle Image (AK7) |
-| **P10 Demo-Stack** | **← hier weiter** (hängt nur an P9) |
-| P11–P12 | offen |
+| P10 Demo-Stack | ✅ mariadb + fpm + offizielles nginx, 21/21, AK9 und AK12 erbracht |
+| **P11 CI-Pipeline + Härtung** | **← hier weiter** (hängt an P8) |
+| P12 Doku + Abschluss | offen |
 
 Gebaut und geprüft: `base`, `cli` und `fpm` gegen PHP **8.3, 8.4 und 8.5** — in
 **einem** `bake`-Lauf, nativ auf arm64. **amd64 ist seit P6 belegt** (PHP 8.3,
@@ -99,6 +105,7 @@ echten Linux-Runner bleibt P11.
 ```sh
 make build                          # cli + fpm für PHP_VERSION aus der .env
 make build-all                      # cli + fpm für 8.3 / 8.4 / 8.5, ein Lauf
+make demo-up / make demo-down       # Demo-Stack, http://localhost:8088 (seit P10)
 make build BAKE_TARGETS=fpm         # nur ein Target (base kommt automatisch mit)
 make build BUILD_PLATFORM=linux/amd64
 make bake-print                     # aufgelöste Definition, baut nichts
@@ -122,7 +129,7 @@ make test-all          # baut Test-Images fuer PHP_VERSION und prueft alles
 
 | Target | Umfang |
 |---|---|
-| `test-lint` | hadolint ×3, shellcheck über 12 Shell-Dateien |
+| `test-lint` | hadolint ×3, shellcheck über 13 Shell-Dateien |
 | `test-phpini` | 34 Fälle gegen `lib-phpini.sh`, ohne Container |
 | `test-user` | 27 Fälle gegen `lib-user.sh`, in `alpine:3.23` |
 | `test-boot` | cli startet, fpm wird `healthy` |
@@ -131,6 +138,7 @@ make test-all          # baut Test-Images fuer PHP_VERSION und prueft alles
 | `test-uid` | 5 Fälle gegen echte Docker-Volumes (AK4) |
 | `test-opcache` | 14 Fälle inkl. **AK15** im laufenden FPM |
 | `test-nginx` | 39 Fälle gegen das **unveränderte** offizielle nginx-Image (AK7), zwei Instanzen: nur Defaults / alles überschrieben |
+| `test-demo` | 21 Fälle gegen den laufenden Demo-Stack (AK9/AK12, A8.1–A8.3): ein `up --wait`, alle Dienste healthy, DB verbunden, Abbau ohne Reste |
 
 Die Test-Images entstehen unter `php-image-builder-test/` und überschreiben die
 lokalen `headgent/*`-Images nicht. Eine andere Version prüfen:
@@ -149,6 +157,8 @@ lokalen `headgent/*`-Images nicht. Eine andere Version prüfen:
 | — | `bake` bekommt seine Werte **ausschließlich** über den `export` des Makefiles — es liest die `.env` nicht selbst; `args = { X = null }` vererbt nichts | PROGRESS „P6 → Entscheidungen 1 und 2" |
 | — | **nginx-Vorlage: ein Schalter `REQUEST_SCHEME=http\|https`** statt zweier Werte, und die Defaults liegen in `compose/nginx/nginx-defaults.env` — envsubst kennt keine Default-Schreibweise, ohne die Datei startet nginx nicht | PROGRESS „P9 → Entscheidungen 1 und 2" |
 | **E11** | **FrankenPHP entfällt ganz.** Ohne Worker-Mode bringt es nur „ein Container statt zwei", kostet ein drittes publiziertes Image — und hätte mit **null Konsumenten** begonnen, genau der Grund, aus dem `headgent/nginx` gestrichen wurde | PROGRESS „P7 — entfallen", PRD E11 |
+| — | **Demo-Stack: `mariadb:11.8`** (LTS, nicht die kurzlebige 11.2 der Jardis-Projekte), Datenbank im `tmpfs`, und der Stack läuft über `make demo-up` mit `--project-directory .` — sonst findet Compose die `.env` im Root nicht (B26) | PROGRESS „P10 → Entscheidungen 1, 3, 4" |
+| — | **`make demo-up` fährt bis zum ersten Push die Test-Images.** Die Compose-Datei verweist auf `headgent/phpfpm:<ver>`, wie ein Projekt es schreibt — unter dem Namen liegt bis N6 aber nur der startunfähige Bestand (B9) | PROGRESS „P10 → Entscheidung 5" |
 
 ## Die wichtigsten Befunde
 
@@ -163,16 +173,18 @@ lokalen `headgent/*`-Images nicht. Eine andere Version prüfen:
   wie Xdebug.** Die JIT-Automatik kannte nur Xdebug, also warnte ausgerechnet das
   `test`-Profil bei jedem Aufruf („JIT is incompatible…") — L-A wortwörtlich, nur
   mit anderer Extension. In `lib-phpini.sh` behoben.
-- **Fünf Testfallstricke derselben Klasse „der Test misst nichts und meldet
-  trotzdem grün".** Alle fünf haben in diesem Vorhaben schon einmal zugeschlagen:
-  **B11** (`opcache.file_update_protection`, 2 s abwarten und
+- **Sechs Testfallstricke derselben Klasse „der Test misst nichts und meldet
+  trotzdem grün".** Alle sechs haben in diesem Vorhaben schon einmal
+  zugeschlagen: **B11** (`opcache.file_update_protection`, 2 s abwarten und
   `num_cached_scripts`/`hits` mitprüfen), **B16** (unter Emulation trägt ein
   FPM-Worker keinen `pool www`-Titel), **B19** (`--entrypoint php` umgeht den
   Entrypoint — dann gibt es keine Laufzeit-INI und man misst Extension-Defaults),
   **B20** (ein leeres Named Volume bekommt beim ersten Mount die Ownership des
   Image-Verzeichnisses zurück), **B21** (busybox-`wget --post-file` setzt POST,
-  sendet aber keinen Rumpf — ein Body-Size-Limit lässt sich damit nicht prüfen).
-  B20 ist für P11 relevant.
+  sendet aber keinen Rumpf — ein Body-Size-Limit lässt sich damit nicht prüfen),
+  **B27** (`docker compose up --wait` meldet grün für einen Dienst **ohne**
+  Healthcheck — in der Gegenprobe belegt). **B20 und B27 sind für P11
+  relevant.**
 - **B24/B25 — zwei belegte Bestandsdefekte in der nginx-Vorlage, bewusst nicht
   eigenmächtig geändert (O6).** Die `.php`-Fallback-Location hat kein
   `try_files` — der klassische `/upload.jpg/x.php`-Pfad wird derzeit allein von

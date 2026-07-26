@@ -51,6 +51,7 @@ include ./support/makefiles/docker.helper.mk
 include ./support/makefiles/docker.build.local.mk
 include ./support/makefiles/docker.build.push.mk
 include ./support/makefiles/test.mk
+include ./support/makefiles/demo.mk
 
 # ---------------------------------------------------------------------------
 # Setup
@@ -89,6 +90,7 @@ info: ## Build-Konfiguration anzeigen
 	@printf "  %-30s %s\n" "PHP (default):"   "$(PHP_VERSION)"
 	@printf "  %-30s %s\n" "Composer:"        "$(COMPOSER_VERSION)"
 	@printf "  %-30s %s\n" "nginx (Demo):"    "$(NGINX_VERSION)"
+	@printf "  %-30s %s\n" "mariadb (Demo):"  "$(MARIADB_VERSION)"
 	@printf "  %-30s %s\n" "Datums-Tag:"      "$(IMAGE_DATE)"
 	@echo ""
 	@printf "\033[1mPECL-Extensions:\033[0m\n"
@@ -134,6 +136,12 @@ info: ## Build-Konfiguration anzeigen
 	@printf "  %-30s %s\n" "start_servers:"     "$(FPM_PM_START_SERVERS)"
 	@printf "  %-30s %s\n" "min/max_spare:"     "$(FPM_PM_MIN_SPARE_SERVERS)/$(FPM_PM_MAX_SPARE_SERVERS)"
 	@printf "  %-30s %s\n" "max_requests:"      "$(FPM_PM_MAX_REQUESTS)"
+	@echo ""
+	@printf "\033[1mDemo-Stack (compose/demo-stack.yml):\033[0m\n"
+	@printf "  %-30s %s\n" "Host-Port:"     "http://localhost:$(DEMO_HTTP_PORT)"
+	@printf "  %-30s %s\n" "fpm-Image:"     "$(DEMO_REGISTRY)/$(IMAGE_NAME_FPM):$(PHP_VERSION)"
+	@printf "  %-30s %s\n" "Datenbank:"     "mariadb:$(MARIADB_VERSION), $(DEMO_DB_NAME) als $(DEMO_DB_USER)"
+	@printf "  %-30s %s\n" "Passwoerter:"   "$(DEMO_DB_PASSWORD) / root: $(DEMO_DB_ROOT_PASSWORD)"
 .PHONY: info
 
 # ---------------------------------------------------------------------------

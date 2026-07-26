@@ -23,6 +23,12 @@ TEST_REGISTRY  ?= php-image-builder-test
 CLI_TEST_IMAGE  = $(TEST_REGISTRY)/$(IMAGE_NAME_CLI):$(PHP_VERSION)
 FPM_TEST_IMAGE  = $(TEST_REGISTRY)/$(IMAGE_NAME_FPM):$(PHP_VERSION)
 
+# Eigener Host-Port fuer den Demo-Stack im Prueflauf: ein per `make demo-up`
+# laufender Stack belegt DEMO_HTTP_PORT, und ein Testlauf soll ihn nicht
+# abschiessen. Aus demselben Grund faehrt check-demo-stack.sh unter einem
+# eigenen Projektnamen.
+DEMO_TEST_PORT ?= 18080
+
 TESTS_DIR = support/tests
 
 # ---------------------------------------------------------------------------
@@ -101,6 +107,10 @@ test-nginx: test-images ## nginx-Vorlage gegen das UNVERAENDERTE offizielle Imag
 	@bash $(TESTS_DIR)/check-nginx-template.sh $(FPM_TEST_IMAGE) nginx:$(NGINX_VERSION)-alpine
 .PHONY: test-nginx
 
+test-demo: test-images ## Demo-Stack: ein `up`, alle Dienste healthy, DB verbunden (A8/AK9/AK12)
+	@bash $(TESTS_DIR)/check-demo-stack.sh $(TEST_REGISTRY) $(DEMO_TEST_PORT)
+.PHONY: test-demo
+
 test-boot: test-images ## cli und fpm starten; fpm wird healthy (FastCGI-Ping)
 	@echo ">>> Start von cli und fpm"
 	@docker run --rm --entrypoint php $(CLI_TEST_IMAGE) --version >/dev/null \
@@ -126,7 +136,7 @@ test-boot: test-images ## cli und fpm starten; fpm wird healthy (FastCGI-Ping)
 # ---------------------------------------------------------------------------
 # Reihenfolge nach Laufzeit: was ohne Image auskommt, laeuft zuerst und faellt
 # damit frueh durch, statt erst nach einem Build.
-test-all: test-lint test-phpini test-user test-boot test-extensions test-app-env test-uid test-opcache test-nginx ## Alle Pruefungen
+test-all: test-lint test-phpini test-user test-boot test-extensions test-app-env test-uid test-opcache test-nginx test-demo ## Alle Pruefungen
 	@echo ""
 	@echo "✅ Alle Pruefungen bestanden — PHP $(PHP_VERSION)"
 .PHONY: test-all
