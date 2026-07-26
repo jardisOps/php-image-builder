@@ -22,6 +22,18 @@ push: buildx-builder-create .check-docker-login ## Build and push cli and fpm fo
 	@echo "✅ Pushed — PHP $(PHP_VERSION) (+ :$(PHP_VERSION)-$(IMAGE_DATE))"
 .PHONY: push
 
+# The dry run for the two targets above: identical flags, --print instead of
+# --push. It exists because a wrong flag in the push line could previously only
+# be discovered by pushing — `--attest` (a `buildx build` flag that `bake` does
+# not have) aborted the first real publish run before a single layer was built.
+# Needs no login, no builder, and no network.
+push-print: ## Resolved push definition (dry run — same flags as push, pushes nothing)
+	@$(call cache_flags) >/dev/null; \
+	 PHP_VERSIONS="$(PHP_VERSION)" docker buildx bake -f $(BAKE_FILE) --print \
+	   --set '*.platform=$(PLATFORMS_CSV)' \
+	   $$CFROM $$CTO $(BUILD_ATTEST_FLAGS) $(BUILD_EXTRA_FLAGS) $(BAKE_TARGETS)
+.PHONY: push-print
+
 push-all: buildx-builder-create .check-docker-login ## Build and push cli and fpm for ALL PHP_VERSIONS (multi-arch)
 	@echo "🚀 Building and pushing $(if $(strip $(BAKE_TARGETS)),$(BAKE_TARGETS),cli + fpm) for PHP $(PHP_VERSIONS) ..."
 	@$(call cache_flags); \

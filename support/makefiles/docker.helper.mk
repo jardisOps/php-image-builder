@@ -72,7 +72,12 @@ space         := $(empty) $(empty)
 PLATFORMS_CSV  = $(subst $(space),$(comma),$(strip $(PLATFORMS)))
 
 BUILD_EXTRA_FLAGS  ?=
-BUILD_ATTEST_FLAGS ?= --provenance=mode=max --attest=type=sbom
+
+# --sbom, not --attest: `docker buildx build` knows --attest, `docker buildx
+# bake` does not. There the two shorthands --provenance and --sbom stand for
+# --set='*.attest=type=...'. The push targets call bake, so an --attest here
+# aborts the whole run with "unknown flag" before a single layer is built.
+BUILD_ATTEST_FLAGS ?= --provenance=mode=max --sbom=true
 
 # ---------------------------------------------------------------------------
 # Cache backend: auto|none|local|registry|gha

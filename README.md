@@ -56,6 +56,7 @@ make demo-up       # demo stack: mariadb + fpm + official nginx
 | `make disk-usage` | what Docker occupies and how much of it comes from this repo — **deletes nothing** |
 | `make clean` / `clean-all` | clean up; `clean-system` is global and guarded by `CONFIRM=ja` |
 | `make push` / `push-all` | **blocked**, see below |
+| `make push-print` | the resolved push definition — same flags as `push`, but `--print`. Pushes nothing, needs no login |
 
 A value on the `make` command line beats `.env`:
 
@@ -118,9 +119,14 @@ is four lines: `max_execution_time=0`, `STOPSIGNAL SIGTERM`, a health check on
 ## Publishing is blocked
 
 The CI's `publish` job only runs when the repository variable
-`PUBLISH_ENABLED` is set to `true` — it does not exist, so the job is skipped.
-No `docker login`, no `--push`. `make push` and `make push-all` are written and
-have never been run.
+`PUBLISH_ENABLED` holds exactly `true`. It currently holds `false`, so the job
+is skipped. Note what that switch does **not** do: it is not limited to one PHP
+version. With it on, every push to `main` that touches a build path publishes
+the whole matrix. Narrowing to a single version is a property of the
+`workflow_dispatch` input `php_versions`, not of the variable.
+No `docker login`, no `--push`. `make push-print` resolves the exact same
+command line without executing it — that is where a wrong flag surfaces, rather
+than in the middle of a publish run.
 
 The block stays until the tag strategy is approved. Nothing is currently
 published under `headgent/phpcli` or `headgent/phpfpm`: the registry entries

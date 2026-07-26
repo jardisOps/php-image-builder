@@ -116,6 +116,58 @@ check "there are date tags to check at all" \
 check "all date tags of one run carry the same date" \
       "$(ask "len(set(tag.rsplit('-',1)[1] for tag in $date_tags if '-' in tag))")" "1"
 
+# --- the push invocation, resolved but not executed ---------------------------
+# Everything above checks `bake-print`, which uses neither the platform flag nor
+# the attestation flags. The push line therefore went unchecked until it ran for
+# real — and it failed on `--attest`, a `buildx build` flag that `bake` does not
+# have, before a single layer was built. `push-print` carries the identical
+# flags with --print, so the same mistake now fails here instead of mid-publish.
+echo
+echo ">>> Push invocation (resolved, pushes nothing)"
+
+# stderr stays on the terminal and is NOT captured: bake writes its progress
+# there, and folding it into the JSON would make every run look broken. The
+# reason for a failure therefore remains readable above this line.
+if PUSH_DEF=$(cd "$REPO_ROOT" && make --no-print-directory push-print); then
+  case "$PUSH_DEF" in
+    '{'*) ok "the push flags parse" ;;
+    *)    bad "'make push-print' returned no JSON. First line: $(printf '%s\n' "$PUSH_DEF" | head -1)" ;;
+  esac
+else
+  bad "'make push-print' failed — the message stands above this line"
+fi
+
+case "$PUSH_DEF" in
+  '{'*)
+    # sorted(...) and NOT the brace set notation, same reason as above: the
+    # expression passes through the shell, which tears {a,b} apart as brace
+    # expansion. Both sides then come back empty and compare equal — the check
+    # reports green while measuring nothing. Cost one round to relearn.
+    pask() { echo "$PUSH_DEF" | python3 -c "
+import json,sys
+d = json.load(sys.stdin)
+pub = sorted(n for n in d['target'] if not n.startswith('base-'))
+print($1)
+"; }
+
+    expected=$(pask "len(pub)")
+    case "$expected" in
+      '' | *[!0-9]* | 0) bad "could not count the published targets (got '$expected') — the two checks below would measure nothing" ;;
+      *)
+        ok "published targets counted ($expected)"
+
+        check "every published target is attested (sbom + provenance)" \
+              "$(pask "sum(1 for n in pub if sorted(a['type'] for a in d['target'][n].get('attest',[])) == sorted(['provenance','sbom']))")" \
+              "$expected"
+
+        check "every published target builds both architectures" \
+              "$(pask "sum(1 for n in pub if sorted(p.strip() for s in d['target'][n].get('platforms',[]) for p in s.split(',')) == sorted(['linux/amd64','linux/arm64']))")" \
+              "$expected"
+        ;;
+    esac
+    ;;
+esac
+
 echo
 echo "  passed: $PASS   failed: $FAIL"
 [ "$FAIL" -eq 0 ] || exit 1
