@@ -62,8 +62,8 @@ vollständig mit Fundstellen.
 gepusht worden.
 
 ```
-(HEAD)   docs: hand over at end of P10
-(P10)    feat: Demo-Stack — mariadb + fpm + offizielles nginx (P10)
+(HEAD)   docs: Commit-Zahl und Log im Handover richtigstellen
+90b7aeb  feat: Demo-Stack — mariadb + fpm + offizielles nginx (P10)
 ca7b87f  docs: Wiedereinstiegs-Block und Phasenzaehlung
 c455ca4  docs: update commit count in the handover
 cbc3d62  docs: Code-Review-Befunde zu P9 (B24, B25, offener Punkt O6)
