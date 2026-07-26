@@ -78,8 +78,12 @@ vollständig mit Fundstellen.
 
 ## Stand
 
-**Vierundzwanzig Commits** (dieser mitgezählt). Das Repo hat **kein Remote** und
-ist nie gepusht worden.
+Die Historie steht im `git log` — **der Auszug unten ist ein Schnappschuss vom
+2026-07-26 und altert.** Eine exakte Commit-Zahl steht hier bewusst nicht mehr:
+sie war viermal falsch und hat jedes Mal einen weiteren Commit erzeugt, der sie
+erneut falsch machte. `git rev-list --count HEAD` sagt es jederzeit richtig.
+
+Das Repo hat **kein Remote** und ist nie gepusht worden.
 
 ```
 (HEAD)   docs: Commit-Zahl und Log im Handover nachziehen
