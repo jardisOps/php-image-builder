@@ -21,67 +21,49 @@ conditions.
 ## Usage
 
 A root `Makefile` includes the modules from `support/makefiles/`. Every target
-carries its own help text; `make help` reads them out.
+carries its own help text; `make help` lists all of them with a one-line
+description — this section only adds what that line does not say.
 
 ### Building
 
-| Target | Effect |
-|---|---|
-| `make build` | `cli` + `fpm` for the single `PHP_VERSION` from `.env`, `--load` into the local daemon |
-| `make build-all` | the same for the **entire** matrix (8.3 / 8.4 / 8.5) in one run |
-| `make bake-print` | the resolved bake definition, builds nothing |
-| `make buildx-builder-create` | create or activate the multiarch builder |
-| `make builder-reset` | delete the builder and create it again |
-| `make build-cache-delete` | discard all cached layers (`buildx prune -a`) |
-| `make init` | points the git remote at `GITHUB_ORG`/`GITHUB_REPO` from `.env` — **never run**, see [CI and publishing](#ci-and-publishing) |
-
-Useful overrides — the environment beats `.env`:
+A value on the `make` command line beats `.env`:
 
 ```sh
-PHP_VERSION=8.5 make build
+make build PHP_VERSION=8.5
 make build BAKE_TARGETS=fpm            # one target only; base is pulled in automatically
 make build BUILD_PLATFORM=linux/amd64  # a single platform instead of the host architecture
 make build CACHE_BACKEND=none          # auto | gha | registry | local | none
 ```
 
+(The leading-variable form, `PHP_VERSION=8.5 make build`, does **not** work —
+for a plain environment variable the included `.env` file wins.)
+
+**`make init` must never run outside an approved push** — it points the git
+remote at `GITHUB_ORG`/`GITHUB_REPO` from `.env`; see [CI and
+publishing](#ci-and-publishing).
+
 ### Publishing
 
-| Target | Effect |
-|---|---|
-| `make push` | multi-arch build **and** push for one PHP version, with SBOM and provenance attestation |
-| `make push-all` | the same for the whole matrix |
-
-> **Both targets are written but have never been executed.** The first push is
-> the only operation in this repository with outside effect and is explicitly
-> blocked — see [CI and publishing](#ci-and-publishing).
+> Written but never executed — see [Publishing is
+> blocked](../README.md#publishing-is-blocked).
 
 ### Testing
 
 `make test-all` bundles everything; the stages can be run individually
 (→ [The test run](#the-test-run)).
 
-### Demo stack
+### Demo stack targets
 
-| Target | Effect |
-|---|---|
-| `make demo-up` | start the stack and wait until it is healthy |
-| `make demo-down` | remove containers, network, and volumes |
-| `make demo-logs` | follow the logs |
-| `make demo-config` | the resolved stack definition, starts nothing |
+`make demo-up` / `demo-down` / `demo-logs` / `demo-config` — one-line
+descriptions via `make help`; the full walkthrough is in [Demo
+stack](#demo-stack) below.
 
-### Cleaning up
+### Cleanup targets
 
-| Target | Effect |
-|---|---|
-| `make disk-usage` | shows what Docker occupies and how much comes from this repo — **deletes nothing** |
-| `make clean` | the common case: demo leftovers, test images, dangling layers |
-| `make clean-test-images` | only the test images of the test run, all versions |
-| `make clean-images` | the locally built `headgent/*` images, all versions |
-| `make clean-dangling` | dangling layers (`<none>`) |
-| `make clean-cache` | empty the buildx cache |
-| `make clean-demo` | containers, network, and volumes of the demo stack |
-| `make clean-all` | everything from this repo: `clean` plus `headgent/*` plus cache |
-| `make clean-system` | **global**, requires `CONFIRM=ja` — see [Cleaning up](#cleaning-up) |
+One-line descriptions via `make help`; the nuances worth knowing —
+`clean-images` also hits the previous registry images, `clean-dangling` is
+machine-wide, `clean-system` needs `CONFIRM=ja` — are in [Cleaning
+up](#cleaning-up) below.
 
 ### SSH keys
 
@@ -105,22 +87,14 @@ A value always travels the same path:
 
 `support/docker-bake.hcl` does **not** read `.env` itself — every value reaches
 it through the environment exported by the Makefile. That is why
-`PHP_VERSION=8.5 make build` reliably works; in the previous repositories such a
-call had no effect.
+`make build PHP_VERSION=8.5` reliably overrides it; in the previous
+repositories such a call had no effect.
 
-Groups in `.env`:
-
-| Group | Keys (excerpt) |
-|---|---|
-| Repository and registry | `GITHUB_ORG`, `GITHUB_REPO`, `DOCKER_HUB`, `IMAGE_NAME_CLI`, `IMAGE_NAME_FPM`, `MAINTAINER_EMAIL` |
-| Base versions | `PHP_VERSION`, `ALPINE_VERSION`, `COMPOSER_VERSION`, `NGINX_VERSION`, `MARIADB_VERSION` |
-| PECL versions | `APCU_VERSION`, `REDIS_VERSION`, `XDEBUG_VERSION`, `PCOV_VERSION`, `AMQP_VERSION`, `RDKAFKA_VERSION` |
-| Database clients | `INSTALL_DB_CLIENTS` (empty, or `mysql,postgres,sqlite`) |
-| Container user | `PUID`, `PGID`, `APP_ROOT` |
-| Environment | `APP_ENV` plus eight **empty override slots** (see below) |
-| PHP, profile-independent | `PHP_MEMORY_LIMIT`, `PHP_TIMEZONE`, `PHP_LOG_ERRORS`, `PHP_MAX_EXECUTION_TIME_CLI`, `PHP_MAX_EXECUTION_TIME_WEB`, `APCU_SHM_SIZE`, `OPCACHE_*`, `XDEBUG_*` |
-| FPM pool | `FPM_PM`, `FPM_PM_MAX_CHILDREN`, `FPM_PM_START_SERVERS`, `FPM_PM_MIN_SPARE_SERVERS`, `FPM_PM_MAX_SPARE_SERVERS`, `FPM_PM_MAX_REQUESTS` |
-| Demo stack | `DEMO_DB_*`, `DEMO_HTTP_PORT` |
+Every key is grouped and commented directly in `.env` — repository/registry,
+base versions, PECL versions, database clients, container user, `APP_ENV` plus
+its eight empty override slots (see below), profile-independent PHP settings,
+the FPM pool, and the demo stack. Read `.env` itself for the current list; a
+table here would drift with every added key.
 
 The extension list is **not** in `.env` and not in a Dockerfile, but in
 `src/shared/php-extensions.env` — once for all targets.
@@ -134,8 +108,11 @@ fails visibly instead of quietly building something other than what `.env`
 declares. That was a latent defect in the previous setup: `phpcli` hard-coded
 `COMPOSER_VERSION=2.9.3` while `.env` maintained 2.9.5.
 
-The price is three hadolint warnings on every build — see
-[operating conditions](#operating-conditions-and-known-quirks).
+The price is three hadolint warnings on every build, `InvalidDefaultArgInFrom`,
+one each for `PHP_VERSION`, `ALPINE_VERSION`, and `COMPOSER_VERSION` in the
+`FROM` lines — precisely the requirement, since a default there could override
+`.env`. They cannot be silenced without bringing the defect back and are
+**not** an error.
 
 ---
 
@@ -276,7 +253,7 @@ compose file references `headgent/phpfpm:<ver>` the way a project would write it
 
 ```sh
 make test-all                     # PHP_VERSION from .env
-PHP_VERSION=8.5 make test-all     # check a different version
+make test-all PHP_VERSION=8.5     # check a different version
 ```
 
 Thirteen stages, ordered by runtime — whatever needs no image runs first:
@@ -375,9 +352,14 @@ keepalive job against GitHub's 60-day shutdown).
 
 | Job | Contents |
 |---|---|
-| `lint` | `make test-lint`, `make test-bake` |
-| `build-test` | matrix 8.3 / 8.4 / 8.5, each `make test-all`, then Trivy |
+| `lint` | `make test-static` (`test-lint` + `test-bake`, version-independent) |
+| `build-test` | matrix 8.3 / 8.4 / 8.5, each `make test-image-suite`, then Trivy |
 | `publish` | multi-arch build and push with SBOM and provenance attestation |
+
+`test-static` and `test-image-suite` (`support/makefiles/test.mk`) split
+`make test-all` into its version-independent and per-version halves so the
+former doesn't rerun in every matrix job. Locally, `make test-all` still runs
+all thirteen stages in one go.
 
 **Trivy blocks** on CRITICAL/HIGH **with an available fix** (`ignore-unfixed`).
 Such a finding means our image is behind the patch level — so the gate is
@@ -387,14 +369,8 @@ reported in full in the job summary instead of blocking.
 
 > ### Publishing is blocked
 >
-> This repository has **no GitHub remote**, has never been pushed, and the
-> `publish` job only runs when the repository variable `PUBLISH_ENABLED` is set
-> to `true` — it does not exist. No `docker login`, no `--push`, no CI trigger.
->
-> The block stays until the **tag strategy** is approved. `headgent/phpcli` is a
-> published series with consumers — counted: **26 active references, all on
-> `headgent/phpcli:8.3`**. The first push out of this repository must not swap
-> that tag underneath running projects.
+> See [Publishing is blocked](../README.md#publishing-is-blocked) in the README
+> for the full block (`PUBLISH_ENABLED`, reference count, first-push rule).
 >
 > The plan is two channels (`next` and `stable`): the first push goes exclusively
 > to `:<ver>-next` and `:<ver>-<date>`, promotion happens later via a registry
@@ -406,12 +382,8 @@ reported in full in the job summary instead of blocking.
 
 ## Operating conditions and known quirks
 
-**Three hadolint warnings on every build are intended.**
-`InvalidDefaultArgInFrom` appears three times because `PHP_VERSION`,
-`ALPINE_VERSION`, and `COMPOSER_VERSION` have no default in the `FROM` lines —
-which is precisely the requirement. A default could override `.env`. The warnings
-cannot be silenced without bringing the defect back, and they are **not** an
-error.
+**Three hadolint warnings on every build are intended** — see [No Dockerfile
+carries a version default](#no-dockerfile-carries-a-version-default).
 
 **`make build-all` needs disk space.** bake builds all three PHP versions
 **simultaneously**. On a full Docker VM that ends in "No space left on device".

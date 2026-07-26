@@ -57,9 +57,9 @@ check "JIT runs in prod"                      "$(jit_enabled prod)" "yes"
 check "JIT off in dev (Xdebug active)"        "$(jit_enabled dev)"  "no"
 check "JIT off in test (PCOV active)"         "$(jit_enabled test)" "no"
 
-# The warning itself must not appear in ANY profile. This is exactly where it
-# was once found: test warned on every call because the JIT automatic logic
-# only knew about Xdebug, not PCOV.
+# The warning itself must not appear in ANY profile — the JIT auto-disable
+# logic must cover PCOV as well as Xdebug, since both take over
+# zend_execute_ex().
 for profile in dev test prod; do
   if docker run --rm -e APP_ENV="$profile" "$IMAGE" php -r 'exit(0);' 2>&1 | grep -qi 'JIT is incompatible'; then
     bad "JIT warning in profile $profile"

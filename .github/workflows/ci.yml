@@ -82,9 +82,11 @@ jobs:
   # ===========================================================================
   # lint — static checks, no image needed
   # ===========================================================================
-  # Runs via `make test-lint` rather than a dedicated action: the list of
-  # Dockerfiles and shell files stays in one place (support/makefiles/test.mk)
-  # and applies locally and in CI alike.
+  # Runs via `make test-static` (test-lint + test-bake) rather than a
+  # dedicated action: the list of Dockerfiles and shell files stays in one
+  # place (support/makefiles/test.mk) and applies locally and in CI alike.
+  # Both stages are PHP-version-independent, so this runs once for all three
+  # matrix jobs below instead of once per job.
   #
   # test-bake belongs here because it builds nothing: it checks the resolved
   # bake definition — every published target depends on `base` for its own PHP
@@ -95,18 +97,16 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v6
 
-      - name: hadolint + shellcheck
-        run: make test-lint
-
-      - name: Bake definition — base dependency and tag set
-        run: make test-bake
+      - name: Static checks (hadolint, shellcheck, bake definition)
+        run: make test-static
 
   # ===========================================================================
   # build-test — one PHP version per job
   # ===========================================================================
   # This is where the Linux-only proof happens that macOS runners can't
-  # provide: `make test-all` includes test-uid (real Docker volumes) and
-  # test-uid-linux (a real bind mount).
+  # provide: `make test-image-suite` includes test-uid (real Docker volumes)
+  # and test-uid-linux (a real bind mount). The version-independent stages ran
+  # once already, in the lint job above.
   #
   # Native amd64, no emulation: booting an arm64 image on this amd64 runner
   # would mean QEMU, which is slow and prone to hanging without a timeout
@@ -128,7 +128,7 @@ jobs:
           driver-opts: image=moby/buildkit:buildx-stable-1
 
       - name: Test run (PHP ${{ matrix.php_version }})
-        run: make test-all PHP_VERSION=${{ matrix.php_version }} CACHE_BACKEND=gha
+        run: make test-image-suite PHP_VERSION=${{ matrix.php_version }} CACHE_BACKEND=gha
 
       # -----------------------------------------------------------------------
       # Trivy — blocking CVE gate

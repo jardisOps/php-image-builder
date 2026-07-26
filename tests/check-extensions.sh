@@ -6,10 +6,10 @@
 # src/shared/php-extensions.env. Adding an extension changes exactly one
 # file, and this test follows along.
 #
-# A second, independent assurance: curl, dom and mbstring are deliberately
-# NOT rebuilt anymore because the official image compiles them in
-# statically. They still must be loaded — if one dropped from the base
-# image, nobody would notice until an application broke.
+# A second, independent assurance: curl, dom and mbstring come compiled in
+# statically by the official base image rather than being built here. They
+# still must be loaded — if one dropped from the base image, nobody would
+# notice until an application broke.
 #
 # Exactly ONE container start for all extensions, not one per extension.
 #

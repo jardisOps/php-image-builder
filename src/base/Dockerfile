@@ -68,17 +68,10 @@ COPY src/shared/php-extensions.env /tmp/php-extensions.env
 # ("error: 'opcache' does not exist"), since there is no opcache.so there.
 # Verified for 8.3, 8.4, and 8.5.
 #
-# `oniguruma-dev` and `curl-dev` are the headers for mbstring and curl. Both
-# extensions are no longer built here because they are already compiled into
-# the official image, so listing these headers claimed a need that does not
-# exist (verified for 8.3 and 8.5: 21/21 extensions, mb_ereg* and
-# curl_version() work unchanged).
-#
-# Removing them brings nothing but accuracy: image size is byte-identical
-# (the build stage is discarded anyway), the build-time difference is noise,
-# and `curl-dev` is still installed because `librdkafka-dev` pulls it in via
-# `pc:libcurl`. Only one package actually drops from the apk set:
-# oniguruma-dev (0.8 MiB) — the build image is not free of libcurl headers.
+# The headers for mbstring and curl are deliberately absent: both extensions
+# are already compiled into the official image. `curl-dev` is nevertheless
+# present in this stage, because `librdkafka-dev` pulls it in via
+# `pc:libcurl`.
 #
 # SC2086 is intentional here, not an oversight: the extension lists must be
 # word-split. Quoted, docker-php-ext-install would receive the whole list as

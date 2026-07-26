@@ -4,9 +4,10 @@
 # Each build-arg is defined exactly once here; the local and push targets are
 # thin wrappers around it (support/makefiles/docker.build.*.mk).
 #
-# VALUES COME FROM THE ENVIRONMENT ONLY. The Makefile loads ./.env, gives the
-# calling environment priority, and exports everything; bake reads the
-# variables from there — it does not read .env itself.
+# VALUES COME FROM THE ENVIRONMENT ONLY. The Makefile loads ./.env and exports
+# everything; a `make ... KEY=value` command-line assignment overrides it
+# before the export, a plain shell environment variable does not. Bake reads
+# the variables from there — it does not read .env itself.
 #
 # NO DEFAULTS: no `variable` carries a value. A missing value must abort
 # visibly rather than build something else silently:

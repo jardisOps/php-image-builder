@@ -9,10 +9,10 @@
 # local headgent/*-Images while still testing exactly the artifact that would
 # later be pushed.
 #
-# ONE PHP version per run (PHP_VERSION from .env, overridable via the
-# environment): `make build-all` compiles three versions at once and needs
-# noticeable disk space, which a test run should not trigger incidentally. The
-# CI drives the full matrix, building one job per version.
+# ONE PHP version per run (PHP_VERSION from .env, override with
+# `make test-all PHP_VERSION=8.5`): `make build-all` compiles three versions at
+# once and needs noticeable disk space, which a test run should not trigger
+# incidentally. The CI drives the full matrix, building one job per version.
 # ---------------------------------------------------------------------------
 ##@ Test
 
@@ -150,9 +150,25 @@ test-boot: test-images ## Start cli and fpm; fpm becomes healthy (FastCGI ping)
 # ---------------------------------------------------------------------------
 # Bundle
 # ---------------------------------------------------------------------------
+# Two groups so the stage list is maintained in exactly one place: CI runs
+# test-static once (lint job) and test-image-suite once per PHP_VERSION
+# (build-test matrix), instead of pulling the full test-all through both.
+#
+# TEST_STATIC_STAGES are PHP-version-independent (no PHP_VERSION, no
+# CLI/FPM_TEST_IMAGE, no test-images dependency). TEST_IMAGE_STAGES is
+# everything else, unchanged in order.
+TEST_STATIC_STAGES = test-lint test-bake
+TEST_IMAGE_STAGES  = test-phpini test-user test-boot test-labels test-extensions test-app-env test-uid test-uid-linux test-opcache test-nginx test-demo
+
+test-static: $(TEST_STATIC_STAGES) ## Version-independent checks only (no image)
+.PHONY: test-static
+
+test-image-suite: $(TEST_IMAGE_STAGES) ## All checks that need a built image, for PHP_VERSION
+.PHONY: test-image-suite
+
 # Ordered by runtime: what runs without an image goes first, failing fast
 # instead of only after a build.
-test-all: test-lint test-bake test-phpini test-user test-boot test-labels test-extensions test-app-env test-uid test-uid-linux test-opcache test-nginx test-demo ## All checks
+test-all: test-static test-image-suite ## All checks
 	@echo ""
 	@echo "✅ All checks passed — PHP $(PHP_VERSION)"
 .PHONY: test-all

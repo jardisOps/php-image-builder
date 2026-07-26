@@ -23,24 +23,14 @@ OVERRIDE_SLOTS := $(shell awk \
 	 inblock && /^\# ---/     { inblock = 0 } \
 	 inblock && /^[A-Z_]+=/   { sub(/=.*/, ""); print }' ./.env)
 
-# All keys in .env — the basis for giving the environment precedence.
-ENV_KEYS := $(shell awk '/^[A-Z_][A-Z0-9_]*=/ { sub(/=.*/, ""); print }' ./.env)
-
-# Save keys the calling environment already set, BEFORE the include: after
-# that their origin can no longer be determined, because `include` rewrites
-# them to "file".
-ENV_SET_KEYS := $(foreach k,$(ENV_KEYS),$(if $(filter environment,$(origin $(k))),$(k)))
-$(foreach k,$(ENV_SET_KEYS),$(eval SAVED_$(k) := $($(k))))
-
 include ./.env
 export
 
-# The environment beats .env — the same semantics docker compose uses, and a
-# precondition for the precedence rule. In plain Make the file always wins
-# instead: `XDEBUG_MODE=develop make shell` or `APP_ENV=prod make info` would
-# silently have no effect. Only .env keys are overridden this way — unlike
-# `make -e`, which also affects Make's own variables like SHELL.
-$(foreach k,$(ENV_SET_KEYS),$(eval $(k) := $(SAVED_$(k))))
+# Overriding a single value goes on the command line: `make build
+# PHP_VERSION=8.5`. Make gives a command-line assignment precedence over
+# every assignment in an included file, so this needs no mechanism of its
+# own. The leading-variable form (`PHP_VERSION=8.5 make build`) does NOT
+# work — for a plain environment variable the file wins.
 
 # ---------------------------------------------------------------------------
 # Include modules

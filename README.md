@@ -60,38 +60,34 @@ make demo-up       # demo stack: mariadb + fpm + official nginx
 | `make clean` / `clean-all` | clean up; `clean-system` is global and guarded by `CONFIRM=ja` |
 | `make push` / `push-all` | **blocked**, see below |
 
-The environment beats `.env`:
+A value on the `make` command line beats `.env`:
 
 ```sh
-PHP_VERSION=8.5 make build
+make build PHP_VERSION=8.5
 make build BAKE_TARGETS=fpm            # one target only; base is pulled in automatically
 make build BUILD_PLATFORM=linux/amd64  # a single platform instead of the host architecture
 ```
 
+(The leading-variable form, `PHP_VERSION=8.5 make build`, does **not** work —
+for a plain environment variable the included `.env` file wins.)
+
 ## Configuration
 
-**The `.env` in the repository root is the only source.** It feeds build
-arguments and runtime defaults alike; no value is maintained in two places. A
-value always travels the same path:
-
-```
-.env → Makefile (export) → support/docker-bake.hcl (build-arg) → Dockerfile (ARG → ENV) → entrypoint (INI)
-```
-
-`support/docker-bake.hcl` does **not** read `.env` itself — every value reaches
-it through the environment exported by the Makefile. That is why
-`PHP_VERSION=8.5 make build` reliably works; in the previous repositories such a
-call had no effect.
+**The `.env` in the repository root is the only source of configuration** —
+build arguments and runtime defaults alike, reaching `support/docker-bake.hcl`
+only through the Makefile's `export`, never read directly. Full pipeline
+diagram and `.env` groups: [Configuration in the
+handbook](support/HANDBOOK.md#configuration).
 
 Two things deliberately live elsewhere: the extension list in
 `src/shared/php-extensions.env` (once for all targets) and the `APP_ENV` profile
 table in `src/shared/entrypoint/lib-phpini.sh`. `make info` always shows what
 actually applies.
 
-**No `ARG` in this repository carries a default.** If a value is missing, the
-build fails visibly instead of quietly building something other than what `.env`
-declares. The price is three `InvalidDefaultArgInFrom` warnings from hadolint on
-every build — they are intended and are **not** an error.
+No `ARG` in this repository carries a default — a missing value fails the build
+visibly instead of silently building something other than `.env` declares.
+Three intended hadolint warnings are the price: [No Dockerfile carries a
+version default](support/HANDBOOK.md#no-dockerfile-carries-a-version-default).
 
 ## Repository layout
 

@@ -4,9 +4,10 @@
 # Thin wrapper around support/docker-bake.hcl; the build-args live there, not
 # here.
 #
-# Values come through the environment because the root Makefile exports
-# everything, so the precedence rule applies here too:
-#   PHP_VERSION=8.5 make build     builds 8.5, not the 8.3 from .env
+# Values reach bake through the environment because the root Makefile exports
+# everything after resolving overrides — a command-line assignment therefore
+# reaches bake too:
+#   make build PHP_VERSION=8.5     builds 8.5, not the 8.3 from .env
 #
 # Two optional switches:
 #   BAKE_TARGETS    empty = group "default" (cli + fpm). `make build

@@ -67,9 +67,8 @@ O=$(run_case "${IMG[@]}" APP_ENV=test)
 check "xdebug off"                   "$O" "XDEBUG_MODE=off"
 check "pcov on"                      "$O" "PCOV_ENABLED=1"
 # PCOV takes over zend_execute_ex() the same way Xdebug does, so PHP disables
-# JIT on its own and warns on every call. Since the test profile has PCOV on,
-# every test run used to warn — the JIT auto-disable logic now covers both
-# extensions, and the expectation follows the corrected behavior.
+# JIT on its own and would warn on every call unless the auto-disable logic
+# covers PCOV as well as Xdebug.
 check "jit off because PCOV is active" "$O" "OPCACHE_JIT=off"
 check "jit_buffer_size=0"              "$O" "OPCACHE_JIT_BUFFER_SIZE=0"
 

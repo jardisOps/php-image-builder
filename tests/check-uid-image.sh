@@ -13,10 +13,8 @@
 #
 #   Host UID != 1000     volume owned by 1234:1234
 #   occupied target GID  volume owned by 1234:20 — GID 20 is "dialout" in
-#                        Alpine. Exactly here the legacy code failed
-#                        silently: groupmod failed, `2>/dev/null || true`
-#                        swallowed it, and the error later surfaced as an
-#                        unexplained "Permission denied".
+#                        Alpine, so this case exercises group reassignment
+#                        against an already-occupied GID.
 #   root-owned volume    fresh volume, as Docker creates it
 #
 # NOT covered: a bind mount from a real Linux host — check-uid-linux-host.sh
