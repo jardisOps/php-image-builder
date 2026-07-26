@@ -22,7 +22,16 @@
 name: Build, Test and Push PHP Images
 
 on:
-  workflow_dispatch: {}
+  # php_versions narrows the publish matrix for a deliberate, staged rollout —
+  # e.g. bring :8.3 back first, check it, then the rest. It affects ONLY the
+  # publish job; lint and build-test always cover the whole matrix. Every other
+  # trigger falls back to the default, so schedule and push publish all three.
+  workflow_dispatch:
+    inputs:
+      php_versions:
+        description: 'PHP versions to publish, JSON array'
+        required: false
+        default: '["8.3","8.4","8.5"]'
   schedule:
     # Monthly on the 1st at 02:00 UTC. Cron cannot express "every four weeks":
     # a day-of-month step like */28 fires on the 1st and the 29th, so the gap
@@ -208,8 +217,10 @@ jobs:
     if: ${{ vars.PUBLISH_ENABLED == 'true' && github.event_name != 'pull_request' }}
     runs-on: ubuntu-latest
     strategy:
+      # `inputs` is null for every trigger other than workflow_dispatch, so the
+      # fallback is what schedule and push use.
       matrix:
-        php_version: ['8.3', '8.4', '8.5']
+        php_version: ${{ fromJSON(inputs.php_versions || '["8.3","8.4","8.5"]') }}
       fail-fast: false
     permissions:
       contents: read
