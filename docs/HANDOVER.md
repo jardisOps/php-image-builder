@@ -80,11 +80,13 @@ vollständig mit Fundstellen.
 
 ## Stand
 
-**Neunzehn Commits.** Das Repo hat **kein Remote** und ist nie
+**Einundzwanzig Commits.** Das Repo hat **kein Remote** und ist nie
 gepusht worden.
 
 ```
-(HEAD)   feat: CI-Workflow, OCI-Labels und der Linux-UID-Nachweis (P11)
+(HEAD)   docs: README, Arbeitsanweisung und das Akzeptanz-Gate (P12)
+9f1d51d  docs: Commit-Zahl und Log im Handover nachziehen
+1858f8b  feat: CI-Workflow, OCI-Labels und der Linux-UID-Nachweis (P11)
 01db7bb  feat: nginx-Vorlage gehaertet — try_files und Security-Header (O6)
 a3ac9a3  docs: O6 freigegeben, Folgeprompt auf O6 + P11 umgestellt
 0c7d7f2  docs: Commit-Zahl und Log im Handover richtigstellen
