@@ -196,8 +196,8 @@ check "GET /info.php — status"            "$(status "$r")" "200"
 check "  hits the fallback location"      "$(field "$(body "$r")" PROBE)" "info"
 check "  SCRIPT_FILENAME"                 "$(field "$(body "$r")" SCRIPT_FILENAME)" "/app/public/info.php"
 
-# Default page: without a TLS proxy, HTTPS must NOT be set. That was exactly
-# what the legacy setup hardcoded, and it was wrong.
+# Default page: without a TLS proxy, HTTPS must NOT be set. Hardcoding it is
+# the tempting shortcut and wrong in every stack without TLS termination.
 b=$(body "$(resp "$WEB_A" /index.php)")
 check "REQUEST_SCHEME (default)"          "$(field "$b" REQUEST_SCHEME)" "http"
 check "HTTPS not passed"                  "$(field "$b" HTTPS)" "-"

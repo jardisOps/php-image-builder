@@ -14,7 +14,7 @@ conditions.
 - [Cleaning up](#cleaning-up)
 - [CI and publishing](#ci-and-publishing)
 - [Operating conditions and known quirks](#operating-conditions-and-known-quirks)
-- [Migrating from the previous images](#migrating-from-the-previous-images)
+- [Properties worth knowing about the images](#properties-worth-knowing-about-the-images)
 
 ---
 
@@ -61,16 +61,15 @@ stack](#demo-stack) below.
 ### Cleanup targets
 
 One-line descriptions via `make help`; the nuances worth knowing —
-`clean-images` also hits the previous registry images, `clean-dangling` is
-machine-wide, `clean-system` needs `CONFIRM=ja` — are in [Cleaning
-up](#cleaning-up) below.
+`clean-dangling` is machine-wide, `clean-system` needs `CONFIRM=ja` — are in
+[Cleaning up](#cleaning-up) below.
 
 ### SSH keys
 
 `make ssh-generate-ed25519`, `ssh-generate-rsa`, `ssh-show-keys`, `ssh-add-key`,
-`ssh-start-agent` — interactive wrappers around `ssh-keygen` and `ssh-add`, taken
-over unchanged from the previous repositories. They have nothing to do with
-building images and only exist here because they existed there too.
+`ssh-start-agent` — interactive wrappers around `ssh-keygen` and `ssh-add`. They
+have nothing to do with building images and are kept only because existing usage
+relies on them.
 
 ---
 
@@ -87,8 +86,7 @@ A value always travels the same path:
 
 `support/docker-bake.hcl` does **not** read `.env` itself — every value reaches
 it through the environment exported by the Makefile. That is why
-`make build PHP_VERSION=8.5` reliably overrides it; in the previous
-repositories such a call had no effect.
+`make build PHP_VERSION=8.5` reliably overrides it.
 
 Every key is grouped and commented directly in `.env` — repository/registry,
 base versions, PECL versions, database clients, container user, `APP_ENV` plus
@@ -105,8 +103,9 @@ The extension list is **not** in `.env` and not in a Dockerfile, but in
 
 No `ARG` in this repository has a default value. If a value is missing, the build
 fails visibly instead of quietly building something other than what `.env`
-declares. That was a latent defect in the previous setup: `phpcli` hard-coded
-`COMPOSER_VERSION=2.9.3` while `.env` maintained 2.9.5.
+declares. The failure mode this prevents is a `COMPOSER_VERSION` baked into a
+Dockerfile while `.env` maintains a different one — the build stays green and
+nobody sees which of the two won.
 
 The price is three hadolint warnings on every build, `InvalidDefaultArgInFrom`,
 one each for `PHP_VERSION`, `ALPINE_VERSION`, and `COMPOSER_VERSION` in the
@@ -169,8 +168,9 @@ it are ephemeral.
 ## Runtime UID/GID
 
 The container starts as root, aligns `appuser` with the owner of `APP_ROOT`
-(`/app`), and drops privileges via `su-exec`. This is where the previous images
-failed on Linux; here it is rebuilt structurally:
+(`/app`), and drops privileges via `su-exec`. Every branch of that alignment is
+handled explicitly — this is the part that silently misbehaves on Linux when it
+is not:
 
 - An **occupied target GID/UID** leads either to reusing the existing identity or
   to a visible error — never to silent swallowing. (Alpine occupies GID 20 and
@@ -218,13 +218,13 @@ official `nginx` image through its built-in substitution (`/etc/nginx/templates`
 
 `REQUEST_SCHEME` is deliberately a single switch: it sets `HTTPS` and
 `REQUEST_SCHEME` in the fastcgi parameters together. Two separate values could
-contradict each other, and the previous version reported `HTTPS=on` to PHP under
-all circumstances — correct behind a TLS-terminating Traefik, wrong in every
-other stack.
+contradict each other. A configuration that reports `HTTPS=on` to PHP under all
+circumstances is correct behind a TLS-terminating Traefik and wrong in every
+other stack — hence one switch, filled per deployment.
 
-It also contains the hardening the previous version lacked: `try_files` in the
-`.php` fallback location (the `/upload.jpg/x.php` path no longer reaches php-fpm)
-and security headers for static files as well.
+The template also carries `try_files` in the `.php` fallback location (so the
+`/upload.jpg/x.php` path never reaches php-fpm) and security headers for static
+files as well.
 
 ---
 
@@ -244,8 +244,8 @@ nginx variables from the table above are filled in as an example. The host port
 is configurable via `DEMO_HTTP_PORT` in `.env`.
 
 Until the first push, `make demo-up` runs the locally built test images. The
-compose file references `headgent/phpfpm:<ver>` the way a project would write it
-— but under that name the registry still holds the previous images.
+compose file references `headgent/phpfpm:<ver>` the way a project would write it;
+nothing is published under that name yet.
 
 ---
 
@@ -322,9 +322,11 @@ Two limitations that deserve to be named rather than glossed over:
   name, so there is no way to tell whose build it came from. The operation is the
   usual and harmless one — a layer without a tag is referenced by no image — but
   it is not scoped to this repository.
-- **`clean-images` also hits the previous images.** Until the first push,
-  `headgent/phpcli` and `headgent/phpfpm` hold the images pulled from the
-  registry. They are recoverable, but they are gone.
+- **`clean-images` also hits `headgent/*` images that this repository did not
+  build.** The targets go by the references in `.env`, and those name the
+  published series. Nothing is published under it at the moment, so whatever a
+  machine still holds under that name is a local copy — and `clean-images`
+  removes it without a way back.
 
 There is a separate target for the sledgehammer, and it is guarded:
 
@@ -346,9 +348,11 @@ test run checks against — they belong beside it, not inside it.
 
 ## CI and publishing
 
-`.github/workflows/ci.yml` replaces the two previous workflows. Triggers: push to
-`main`, pull requests, manual dispatch, and a schedule every three days (with a
-keepalive job against GitHub's 60-day shutdown).
+`.github/workflows/ci.yml` is the single workflow. Triggers: push to `main`,
+pull requests, manual dispatch, and a monthly schedule on the 1st at 02:00 UTC
+(with a keepalive job against GitHub's 60-day shutdown). The monthly run is what
+keeps the base-image patch level current; cron cannot express "every four weeks"
+without the interval jumping between 28 and 3 days.
 
 | Job | Contents |
 |---|---|
@@ -407,22 +411,19 @@ official base image and are purely informational.
 
 ---
 
-## Migrating from the previous images
+## Properties worth knowing about the images
 
-What consumers of the previous images will notice once the first push is
-approved:
+Nothing here is a defect; they are consequences of the design that a consumer
+can run into without warning.
 
-| Change | Effect |
+| Property | Reason |
 |---|---|
-| **`php-cgi` and `phpdbg` are gone** from `headgent/phpcli` | consequence of basing `base` on `php:<ver>-fpm-alpine`: that image is a measured 16.7 MB **smaller** than the cli image and carries a byte-identical PHP CLI. Workers, queue consumers, cron, Composer, and CI need neither — whoever uses `phpdbg` has to know |
-| **PHP 8.2 is no longer built**, 8.5 is added | the matrix is 8.3 / 8.4 / 8.5 |
-| **`APP_ENV` controls the environment** | the image ships with `APP_ENV=dev`. Production now explicitly means `APP_ENV=prod` — otherwise Xdebug is active, which it was not in the previous `fpm` image |
-| **The Unix group is called `appuser` in both images** | `headgent/phpcli` previously called it `appgroup` |
-| **`pcntl` is now in the `fpm` image too** | costs nothing at runtime |
-| **`INSTALL_DB_CLIENTS` now applies to both targets** | it previously existed only in `phpcli` |
-| **`headgent/nginx` is no longer built** | the replacement is the template in this repository plus the official image. The existing image stays in the registry without a maintenance promise — it has no consumers |
-| **`headgent/phpfpm` starts again** | all three published versions of the previous image fail to start: the `chown` on `/proc/self/fd/{1,2}` returns exit 0 without effect, and FPM then fails on `error_log` |
-| **`STOPSIGNAL` in the cli image is `SIGTERM`** | instead of the `SIGQUIT` inherited from the fpm base image, which a pcntl worker loop does not listen for |
-
-`EXPOSE 9000` is also present in the cli image — an inherited metadata line
-without effect; Docker has no "unexpose".
+| **`php-cgi` and `phpdbg` are absent** from `headgent/phpcli` | `base` builds on `php:<ver>-fpm-alpine`, a measured 16.7 MB smaller than the cli image and carrying a byte-identical PHP CLI. Workers, queue consumers, cron, Composer and CI need neither — whoever uses `phpdbg` has to know |
+| **The matrix is 8.3 / 8.4 / 8.5** | one series, `:latest` follows the last entry |
+| **`APP_ENV` ships as `dev`** | production has to say `APP_ENV=prod` explicitly; otherwise Xdebug is active. `prod` with active Xdebug aborts startup rather than starting quietly |
+| **The Unix group is `appuser` in both images**, not `appgroup` | one name across both targets; anything addressing the group by name has to match. The numeric GID is unaffected |
+| **`pcntl` is in the `fpm` image as well** | costs nothing at runtime, and leaving it out was a usage limit rather than a safeguard |
+| **`INSTALL_DB_CLIENTS` applies to both targets** | one switch, not one per image |
+| **`STOPSIGNAL` in the cli image is `SIGTERM`** | the fpm base image passes down `SIGQUIT`, which a pcntl worker loop does not listen for |
+| **`EXPOSE 9000` also appears in the cli image** | inherited metadata without effect; Docker has no "unexpose" |
+| **There is no `headgent/nginx`** | the replacement is the template in this repository plus the unmodified official image |

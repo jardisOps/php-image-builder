@@ -24,7 +24,11 @@ name: Build, Test and Push PHP Images
 on:
   workflow_dispatch: {}
   schedule:
-    - cron: '0 2 */3 * *'  # every three days at 02:00 UTC
+    # Monthly on the 1st at 02:00 UTC. Cron cannot express "every four weeks":
+    # a day-of-month step like */28 fires on the 1st and the 29th, so the gap
+    # jumps between 28 and 3 days. Monthly is the closest regular interval and
+    # keeps the base-image patch level under a fixed cadence.
+    - cron: '0 2 1 * *'
   push:
     branches:
       - main
@@ -232,7 +236,11 @@ jobs:
 
       # `make push` is a thin wrapper around support/docker-bake.hcl: platforms,
       # tag set and attestations live there in one place.
+      # The namespace comes from DOCKER_HUB in .env — the single source of
+      # configuration. It is deliberately NOT set from the login secret here:
+      # as an environment variable it would have no effect at all, because the
+      # Makefile's `include ./.env` overrides it, and the line would suggest a
+      # control that does not exist. The account behind DOCKER_USER_NAME must
+      # therefore have write access to that namespace.
       - name: Build and push (PHP ${{ matrix.php_version }}, multi-arch)
-        env:
-          DOCKER_HUB: ${{ secrets.DOCKER_USER_NAME }}
         run: make push PHP_VERSION=${{ matrix.php_version }} CACHE_BACKEND=gha

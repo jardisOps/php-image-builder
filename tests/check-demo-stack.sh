@@ -126,8 +126,8 @@ fi
 has   "SERVER_NAME from HOST" "$body" "<th>SERVER_NAME</th>"
 has   "REQUEST_SCHEME=http"  "$body" "<td>http</td>"
 # Without a TLS proxy, HTTPS must not arrive at all. The row exists, its
-# value is "<not passed>" — an "on" anywhere in the table would be the
-# hardcoded legacy behavior.
+# value is "<not passed>" — an "on" anywhere in the table would mean the
+# scheme is hardcoded instead of coming from REQUEST_SCHEME.
 has   "HTTPS row present" "$body" "<th>HTTPS</th>"
 hasnt "HTTPS is not passed" "$body" "<td>on</td>"
 

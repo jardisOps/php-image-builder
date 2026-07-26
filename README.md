@@ -5,10 +5,8 @@ A repository that builds Headgent's PHP runtime images: **`headgent/phpcli`** an
 and `linux/arm64`, from **one** source of configuration and in **one**
 `docker buildx bake` run.
 
-It replaces the two separate repositories `jardisOps/phpcli` and
-`jardisOps/phpfpm`, whose entrypoints were roughly 80 % identical code and whose
-configuration had diverged in sixteen places. The published image names stay the
-same — consumers do not have to change anything.
+Both images share one `base` target, one entrypoint core and one `.env`, so no
+value and no piece of shell exists twice.
 
 | Target | Published as | Base | Purpose |
 |---|---|---|---|
@@ -22,8 +20,7 @@ the fully parameterised server configuration as a versioned asset
 
 > **The detailed version lives in the [handbook](support/HANDBOOK.md)** — every
 > target, all `.env` groups, the `APP_ENV` profiles, runtime UID/GID, the nginx
-> template, the thirteen test stages, CI, and the migration from the previous
-> images.
+> template, the thirteen test stages and CI.
 
 ---
 
@@ -120,15 +117,18 @@ is four lines: `max_execution_time=0`, `STOPSIGNAL SIGTERM`, a health check on
 
 ## Publishing is blocked
 
-This repository has **no GitHub remote**, has never been pushed, and the CI's
-`publish` job only runs when the repository variable `PUBLISH_ENABLED` is set to
-`true` — it does not exist. No `docker login`, no `--push`, no CI trigger.
-`make push` and `make push-all` are written and have never been run.
+The CI's `publish` job only runs when the repository variable
+`PUBLISH_ENABLED` is set to `true` — it does not exist, so the job is skipped.
+No `docker login`, no `--push`. `make push` and `make push-all` are written and
+have never been run.
 
-The block stays until the tag strategy is approved. `headgent/phpcli` is a
-published series with consumers — counted: **26 active references, all on
-`headgent/phpcli:8.3`**. The first push out of this repository must not swap that
-tag underneath running projects.
+The block stays until the tag strategy is approved. Nothing is currently
+published under `headgent/phpcli` or `headgent/phpfpm`: the registry entries
+were removed on 2026-07-26, so the **26 active references — all on
+`headgent/phpcli:8.3`** — can no longer pull. Machines with a filled Docker
+cache keep working; a fresh CI runner or `docker compose pull` does not.
+The first push out of this repository therefore restores service, and the tag
+set it writes decides what those 26 get.
 
 ## Known operating conditions
 
