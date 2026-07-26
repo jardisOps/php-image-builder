@@ -1,8 +1,11 @@
 # Handover — Konsolidierung des PHP-Docker-Image-Builders
 
-**Stand:** 2026-07-26, Ende der sechsten Umsetzungs-Session. **P1–P6, P8–P10 und
-O6 abgeschlossen**, **P11 weit gediehen** (Workflow geschrieben, **AK4 erbracht**),
-**P7 ist entfallen** (E11).
+**Stand:** 2026-07-26, Ende der siebten Umsetzungs-Session. **Alle Phasen sind
+abgeschlossen** — P1–P6, P8–P12 und O6; **P7 ist entfallen** (E11). Das
+Akzeptanz-Gate ist gegen AK1–AK15 geführt: **vierzehn der fünfzehn wirksamen
+Kriterien sind erfüllt**, AK8 ist teilweise erfüllt und wartet auf eine
+Entscheidung (O7). Offen sind damit nur noch Entscheidungen, keine Arbeit:
+**N6** (erster Push), **O7** (AK8/Trivy), **O8** (`ssh.mk`).
 
 Arbeitsverzeichnis: `/Users/Rolf/Development/headgent/devops/docker/php-image-builder/`
 Projekt- und künftiger Repo-Name: **`php-image-builder`**.
@@ -13,20 +16,21 @@ Vorläuferdokumente unter `devops/image/`.
 
 ## Wiedereinstieg — Stand am 2026-07-26
 
-**Offen sind der Rest von P11 (Review + Commit) und P12.** Zehn Einheiten sind
-abgeschlossen (P1–P6, P8–P10, O6), P7 ist gestrichen (E11) und die Nummer bleibt frei.
+**Die Umsetzung ist fertig.** Elf Einheiten sind abgeschlossen (P1–P6, P8–P12,
+O6), P7 ist gestrichen (E11) und die Nummer bleibt frei. Was noch aussteht, sind
+drei **Entscheidungen**, keine Arbeitspakete.
 
 | Punkt | Stand |
 |---|---|
-| Arbeitsbaum | **sauber**, alles committet (19 Commits, kein Remote, nie gepusht) |
-| Prüflauf | **grün, Exit 0** für PHP 8.3 — seit P11 **dreizehn** Stufen; `test-nginx` 55/55, `test-uid-linux` 13/13, shellcheck über 16 Dateien |
+| Arbeitsbaum | alles committet, kein Remote, nie gepusht |
+| Prüflauf | **grün, Exit 0** für PHP 8.3 — **dreizehn** Stufen; `test-nginx` 55/55, `test-uid-linux` 13/13, shellcheck über 16 Dateien |
 | Test-Images | `php-image-builder-test/phpcli:8.3` und `…/phpfpm:8.3` liegen **lokal** — `make test-all` startet damit ohne Neubau |
 | Demo-Stack | läuft: `make demo-up` → drei Dienste `healthy` unter `http://localhost:8088`, `make demo-down` hinterlässt nichts |
 | Aufgeräumt | keine Testcontainer, -volumes oder -netze übrig; `headgent/*` unberührt |
-| **O6** | **umgesetzt und belegt am 2026-07-26** — beide Härtungen an der nginx-Vorlage (B24/B25) stehen, `test-nginx` 55/55, Gegenprobe gefahren |
-| **P11** | **grösstenteils geliefert:** `.github/workflows/ci.yml` (vier Jobs, alle Trigger, `publish` abgeschaltet), OCI-Labels, drei neue Prüfstufen. **AK4 ist erbracht** — Details in PROGRESS „P11 — in Arbeit" |
-| **AK4** | **erledigt.** Nachweis in einem `docker:28-dind`-Linux-Host statt auf einem GitHub-Runner (deine Entscheidung, 2026-07-26). Gegenprobe gegen `headgent/phpcli:8.3` zeigt U1 und U2 erstmals **gemessen** |
-| Wartet auf Freigabe | **N6** (erster Push, Tag-Strategie), kein GitHub-Repo, kein Remote, keine Archivierung |
+| **P11** | **abgeschlossen.** `.github/workflows/ci.yml` (vier Jobs, alle Trigger, `publish` abgeschaltet), OCI-Labels, drei neue Prüfstufen, **AK4 erbracht** |
+| **P12** | **abgeschlossen.** `README.md` (gegengeprüft, nicht nur geschrieben), `.claude/CLAUDE.md` (unversioniert, wie im Bestand), Akzeptanz-Gate gegen AK1–AK15 |
+| **Akzeptanz** | **14 von 15 wirksamen Kriterien erfüllt** (AK5/AK6 entfallen mit E11). **AK11** ist erstmals vollständig geführt: 15 von 16 Drifts aufgehoben, genau eine (D10) bleibt begründetes Delta. **AK8 teilweise** — siehe O7 |
+| Wartet auf Entscheidung | **N6** (erster Push, Tag-Strategie), **O7** (AK8/Trivy-Nachweis), **O8** (`ssh.mk`, Befund B32) |
 
 Einstieg: Kurzform:
 
@@ -36,19 +40,27 @@ make test-all          # Ausgangslage bestätigen (grün)
 make help              # Bedienoberfläche
 ```
 
-**Womit die nächste Session beginnt — P12:**
+Die Bedienung steht jetzt vollständig in der **`README.md`** — Targets,
+Konfigurationsweg, `APP_ENV`-Profile, nginx-Vorlage, Prüfstufen,
+Betriebsbedingungen und eine Umstiegs-Tabelle für Konsumenten. Die
+Arbeitsanweisung für Änderungen am Repo steht in `.claude/CLAUDE.md`.
 
-1. **P12 — Doku + Abschluss:** `README.md`, `.claude/CLAUDE.md`, Akzeptanz-Gate
-   gegen AK1–AK15. Für die README vorgemerkt: **B7** (die drei
-   `InvalidDefaultArgInFrom`-Warnungen sind gewollt, nicht behebbar), **B15**
-   (Plattenplatz bei `build-all`), **B28** (Host-Port), der Verlust von
-   `php-cgi`/`phpdbg` im cli-Image (P3) und der Rückbau von `curl-dev`/
-   `oniguruma-dev` (seit B12 vermutlich überflüssig).
+**Womit die nächste Session beginnt — drei Entscheidungen:**
 
-**N6 bleibt die harte Grenze:** der Workflow ist geschrieben, aber nicht scharf.
-`publish` läuft nur bei `vars.PUBLISH_ENABLED == 'true'` — die Variable
-existiert nicht. Kein `docker login`, kein `--push`, keine CI-Auslösung, bis die
-Tag-Strategie vorliegt und freigegeben ist.
+1. **N6 — der erste Push.** Der Workflow ist geschrieben, aber nicht scharf:
+   `publish` läuft nur bei `vars.PUBLISH_ENABLED == 'true'`, und diese Variable
+   existiert nicht. Kein `docker login`, kein `--push`, keine CI-Auslösung, bis
+   eine Tag-Strategie vorliegt und freigegeben ist. Der Vorschlag steht in
+   PROGRESS: Nebentag `:<ver>-next`, `:latest` und `:<ver>` unangetastet, bis in
+   einem Projekt gegengeprüft. Die Umstiegs-Tabelle der README ist zugleich der
+   Entwurf der Release-Notiz.
+2. **O7 — AK8.** H2–H5 und H10 sind am Artefakt belegt; der Trivy-Lauf selbst
+   (H1) braucht einen CI-Lauf, den N6 verbietet. Lokal nachgeholt: **0
+   CRITICAL/HIGH** auf beiden Test-Images, mit und ohne `ignore-unfixed`. Gilt
+   das als Ersatznachweis, oder bleibt AK8 bis zum ersten CI-Lauf offen?
+3. **O8 — Befund B32.** `support/makefiles/ssh.mk` steht in der Zielstruktur des
+   Plans, wurde in P1 aber nie übernommen. Empfehlung: ersatzlos streichen, mit
+   Nachtrag im Plan.
 
 ---
 
@@ -107,7 +119,7 @@ ea450dc  feat: docker-bake.hcl drives base/cli/fpm in one run (P6)
 | P10 Demo-Stack | ✅ mariadb + fpm + offizielles nginx, 21/21, AK9 und AK12 erbracht |
 | O6 Härtung der nginx-Vorlage (B24/B25) | ✅ vorgezogen vor P11, `test-nginx` 39 → 55 |
 | P11 CI-Pipeline + Härtung | ✅ Workflow, OCI-Labels, AK4, drei neue Prüfstufen; Review gelaufen. **Der Workflow selbst ist nie gelaufen** (N6) |
-| **P12 Doku + Abschluss** | **← hier weiter** |
+| P12 Doku + Abschluss | ✅ `README.md`, `.claude/CLAUDE.md`, Akzeptanz-Gate gegen AK1–AK15 (14/15, AK8 teilweise), Befund **B32** |
 
 Gebaut und geprüft: `base`, `cli` und `fpm` gegen PHP **8.3, 8.4 und 8.5** — in
 **einem** `bake`-Lauf, nativ auf arm64. **amd64 ist seit P6 belegt** (PHP 8.3,
@@ -222,7 +234,12 @@ lokalen `headgent/*`-Images nicht. Eine andere Version prüfen:
 
 - **Sprache Deutsch.**
 - **Keine Subagenten, kein Experten-Gremium** — der User hat beides ausdrücklich
-  ausgeschlossen, sofern er sie nicht anfordert.
+  ausgeschlossen, sofern er sie nicht anfordert. **Ausnahme P12:** für die
+  Abschluss-Session hat er die Orchestrierung mit Subagenten angefordert
+  (Bestandsaufnahme, Akzeptanz-Gate, Faktencheck der README, Build-Test des
+  `curl-dev`-Rückbaus). Das Akzeptanz-Gate und der Faktencheck haben dabei je
+  einen Befund geliefert, den der Hauptlauf nicht hatte — AK11 als lückenlose
+  Drift-Tabelle und **B32**. Der Default bleibt trotzdem: nicht ohne Anforderung.
 - **Bauform der Bestands-Repos bleibt erhalten und wird nur optimiert:**
   Makefile-Struktur mit `support/makefiles/`, `##@`-Hilfesystem, `.env` als
   Single Source of Truth. Details in `PLAN.md`, Abschnitt „Bauform".
@@ -242,6 +259,10 @@ lokalen `headgent/*`-Images nicht. Eine andere Version prüfen:
 - **N6 — der erste Push ist der einzige Punkt mit Außenwirkung.** Vorher eine
   Tag-Strategie vorlegen (Vorschlag: Nebentag `:<ver>-next`, `:latest` und
   `:<ver>` unangetastet, bis in einem Projekt gegengeprüft).
+- **O7 — AK8/H1**: gilt die lokale Trivy-Verifikation als Ersatznachweis,
+  solange N6 den CI-Lauf verbietet?
+- **O8 — B32**: `support/makefiles/ssh.mk` streichen (mit Nachtrag im Plan) oder
+  nachziehen?
 - Kein GitHub-Repo, kein Remote (`make init` steht bereit, ist nie gelaufen).
 - `jardisOps/phpcli` und `jardisOps/phpfpm` sind unberührt und **nicht**
   archiviert (E8).

@@ -69,6 +69,20 @@ COPY src/shared/php-extensions.env /tmp/php-extensions.env
 # Aufruf sogar ab ("error: 'opcache' does not exist"), weil es dort keine
 # opcache.so mehr gibt. Geprueft am 2026-07-25 fuer 8.3, 8.4 und 8.5.
 #
+# `oniguruma-dev` und `curl-dev` standen bis P12 in der Paketliste. Sie sind die
+# Header von mbstring bzw. curl — und beide Extensions bauen wir seit B12 nicht
+# mehr, weil sie im offiziellen Image einkompiliert sind. Die Zeile behauptete
+# also einen Bedarf, den es nicht gibt (gemessen fuer 8.3 und 8.5: Extensions
+# 21/21, mb_ereg* und curl_version() funktionieren unveraendert).
+#
+# Der Rueckbau bringt allerdings NICHTS ausser Ehrlichkeit, und das ist wichtig
+# zu wissen: die Image-Groesse ist byte-identisch (die Build-Stage wird ohnehin
+# verworfen), die Bauzeit-Differenz liegt im Rauschen — und `curl-dev` wird
+# weiterhin installiert, weil `librdkafka-dev` es ueber `pc:libcurl` hart
+# nachzieht. Vom apk-Satz entfaellt genau EIN Paket: oniguruma-dev (0,8 MiB).
+# Wer diese Zeile liest, soll nicht glauben, das Build-Image sei jetzt frei von
+# libcurl-Headern.
+#
 # SC2086 ist hier kein Versehen, sondern der Zweck: die Extension-Listen
 # MUESSEN wortweise aufgespalten werden. Gequotet bekaeme docker-php-ext-install
 # die ganze Liste als EIN Argument und suchte nach einer Extension namens
@@ -79,7 +93,7 @@ RUN set -eu; \
     . /tmp/php-extensions.env; \
     apk upgrade --no-cache; \
     apk add --no-cache \
-      autoconf make g++ gcc libc-dev linux-headers libzip-dev libxml2-dev oniguruma-dev icu-dev curl-dev \
+      autoconf make g++ gcc libc-dev linux-headers libzip-dev libxml2-dev icu-dev \
       libjpeg-turbo-dev libpng-dev freetype-dev pcre2-dev re2c pkgconf flex bison libxslt-dev python3 perl gperf \
       gawk sed grep findutils coreutils postgresql-dev \
       rabbitmq-c-dev librdkafka-dev; \

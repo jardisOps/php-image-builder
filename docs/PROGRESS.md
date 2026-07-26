@@ -1544,7 +1544,7 @@ Sollwert liest; gleiche Klasse wie B14.
 
 ---
 
-## P11 — in Arbeit (Stand 2026-07-26, Ende der sechsten Session)
+## P11 — abgeschlossen (2026-07-26)
 
 ### Geliefert
 
@@ -1606,7 +1606,7 @@ rot.
    YAML-Anker **nicht** auf — ein Anker wäre hier ein stiller Ausfall des
    Filters, nicht eine Ersparnis.
 
-### Noch offen in P11
+### Was in P11 offenblieb — und wo es hingegangen ist
 
 - **Der Workflow ist nie gelaufen** und kann es nicht: kein GitHub-Repo, kein
   Remote, N6. Geprüft ist er statisch (YAML parst, vier Jobs, Trigger
@@ -1617,8 +1617,8 @@ rot.
   `test-nginx` 55/55, `test-demo` 21/21, shellcheck über **16** Shell-Dateien.
 - ~~Code Review~~ — **gelaufen**, drei Minors, alle behoben (Trivy-Bericht
   begründet, SC2016 durch Umbau der Quotierung, ARG-Zahl richtiggestellt).
-- **`test-all` setzt seit `test-uid-linux` `--privileged` voraus** — gehört in
-  die README (P12).
+- ~~**`test-all` setzt seit `test-uid-linux` `--privileged` voraus** — gehört in
+  die README~~ — **erledigt in P12**, Abschnitt „Betriebsbedingungen".
 - **`.trivyignore`** existiert bewusst nicht.
 - **A7.5/H5** (`.dockerignore`) und **A7.7/H10** (`apk upgrade`) waren schon
   vorher erfüllt (P1 bzw. P3) — für AK8 nachzuweisen bleibt der Trivy-Lauf
@@ -1639,6 +1639,177 @@ Gegenprobe-Pflicht selbst gefunden hat.
 
 ---
 
+## P12 — abgeschlossen (2026-07-26, siebte Session)
+
+### Geliefert
+
+| Datei | Inhalt |
+|---|---|
+| `README.md` | **neu.** Die Bedienoberfläche des Repos: Targets, Konfigurationsweg, `APP_ENV`-Profiltabelle mit den vier Sicherungen, UID/GID-Verhalten, nginx-Vorlage mit allen elf Variablen, Demo-Stack, die dreizehn Prüfstufen, Aufbau, CI samt N6-Sperre, die Betriebsbedingungen und eine Umstiegs-Tabelle für Konsumenten |
+| `.claude/CLAUDE.md` | **neu.** Nur, was beim *Arbeiten* am Repo gilt: die Außengrenze N6, die Dokumentenordnung, der Prüflauf samt der sieben „grün ohne zu messen"-Fallen, sieben nicht verhandelbare Bauregeln, die Arbeitsweise. **Nicht versioniert** — `.gitignore:3` schließt `.claude` aus, genau wie in beiden Bestands-Repos (dort ebenfalls vorhanden und ungetrackt). Bewusst so belassen; wer die Konvention ändern will, entscheidet das getrennt |
+| `src/base/Dockerfile` | **geändert:** `oniguruma-dev` und `curl-dev` aus der apk-Liste der Build-Stage entfernt, mit dem Messergebnis als Kommentar (siehe B33) |
+| `docs/PROGRESS.md` | **geändert:** P11 auf abgeschlossen, dieser Abschnitt, Befunde B32 und B33 |
+| `docs/HANDOVER.md` | **geändert:** Stand nachgezogen |
+
+### Akzeptanz-Gate gegen AK1–AK15
+
+Geführt gegen das PRD, mit eigener Nachprüfung am Artefakt statt Übernahme aus
+diesem Dokument. **Vierzehn der fünfzehn wirksamen Kriterien sind erfüllt**
+(AK5/AK6 sind mit E11 entfallen), eines ist teilweise erfüllt:
+
+| AK | Verdikt | Trägt den Nachweis |
+|---|---|---|
+| AK1 | ✅ | `docker-bake.hcl`, Gruppe `default`; `test-bake` 8/8 gegen die **aufgelöste** Definition |
+| AK2 | ✅ | `.env` + `php-extensions.env`; `test-extensions` 21/21 in beiden Images, Sollmenge aus derselben Datei abgeleitet |
+| AK3 | ✅ | `IMAGE_NAME_CLI`/`IMAGE_NAME_FPM` unverändert, `image_tags()` erzeugt dieselbe Tag-Form wie der Bestand. „Fortsetzbar", nicht „fortgesetzt" — der Push bleibt durch N6 gesperrt |
+| AK4 | ✅ | `check-uid-linux-host.sh` 13/13 auf echtem Linux-Host, Gegenprobe gegen den Bestand meldet 4 Fehlschläge |
+| AK5/AK6 | — | entfallen (E11) |
+| AK7 | ✅ | `test-nginx` 55/55 gegen das unveränderte offizielle Image, zwei Instanzen |
+| AK8 | **⚠️ teilweise** | H2/H3/H4/H5/H10 einzeln am Artefakt belegt. **H1 offen** — siehe unten |
+| AK9 | ✅ | `test-demo` 21/21, `up -d --wait` ohne Nacharbeit |
+| AK10 | ✅ | ein Workflow; `test-bake` beweist strukturell, dass jedes Ziel an `target:base-<eigene-version>` hängt |
+| AK11 | ✅ | die D1–D16-Tabelle unten — erstmals vollständig geführt |
+| AK12 | ✅ | kein nginx-Target in `docker-bake.hcl`; `demo-stack.yml` fährt `nginx:<ver>-alpine` ohne `build:` |
+| AK13 | ✅ | `test-phpini` 34/34, `test-app-env` 15/15 am gebauten Image |
+| AK14 | ✅ | `enforce_jit_policy()` deckt Xdebug **und** PCOV ab (B18), `guard_production()` bricht ab |
+| AK15 | ✅ | `test-opcache` 14/14, davon 4 für AK15, mit Cache-Treffer-Nachweis gegen B11 |
+
+#### AK11 — die Drift-Tabelle, erstmals vollständig geführt
+
+AK11 war das einzige Kriterium ohne jeden Nachweisblock in diesem Dokument.
+**Fünfzehn der sechzehn Drifts sind aufgehoben, genau eine bleibt als benanntes
+Delta** — damit mehr, als A2.5 verlangt (das ließe für D3, D4, D5, D9 und D11
+eine Begründung genügen; sie sind stattdessen vereinheitlicht worden).
+
+| # | Status | Beleg |
+|---|---|---|
+| D1 `pcntl` | aufgehoben | `php-extensions.env`, `PHP_EXT_CORE` → beide Targets (E5) |
+| D2 Redis-Variablenname | aufgehoben | nur noch `REDIS_VERSION` |
+| D3 `OPCACHE_VALIDATE_TIMESTAMPS` | aufgehoben | Profiltabelle setzt ihn in allen drei Profilen (A10.6) |
+| D4 `XDEBUG_IDEKEY` | aufgehoben | `.env` global, `base/Dockerfile` ARG→ENV |
+| D5 `INSTALL_DB_CLIENTS` | aufgehoben | `base/Dockerfile:104,169-171` |
+| D6 Konfigurationsmuster | aufgehoben | durchgängig ARG→ENV aus der `.env` |
+| D7 Gruppenname | aufgehoben | `APP_USER=appuser` für Nutzer **und** Gruppe |
+| D8 `apk upgrade` im Build-Stage | aufgehoben | `base/Dockerfile:80` **und** `:167` |
+| D9 Default `XDEBUG_MODE` | aufgehoben | kommt nur noch aus dem Profil, für beide Targets dieselbe Logik |
+| **D10 `max_execution_time`** | **bewusstes Delta** | Prozesstyp, nicht Target: Worker `0`, Request `30` (A2.5) — begründet in `cli/Dockerfile:25-31` |
+| D11 `OPCACHE_REVALIDATE_FREQ` | aufgehoben | `lib-phpini.sh:60-62`, in allen Umgebungen `0` |
+| D12 Makefile-Verzeichnis | aufgehoben | ein `support/makefiles/` (Plural) |
+| D13 CI-Rechte | aufgehoben (Code) | `publish`-Job, `id-token` + `attestations` |
+| D14 Trivy | aufgehoben (Code) | `exit-code: 1`, kein `continue-on-error` |
+| D15 `.hadolint.yaml` | aufgehoben | eine Datei, gilt für alle drei Dockerfiles |
+| D16 `COMPOSER_VERSION`-Default | aufgehoben | kein `ARG` trägt einen Default; Gegenprobe P3 |
+
+#### AK8 — was offenbleibt, und warum es nicht an fehlender Arbeit liegt
+
+H2 (SBOM/Provenance), H3 (CI-Rechte), H4 (OCI-Labels, `test-labels` 7/7 je
+Image), H5 (`.dockerignore`) und H10 (`apk upgrade` in beiden Stages) sind
+einzeln am Artefakt belegt. **H1 — „Trivy blockiert" — ist im Code korrekt
+verdrahtet, aber der Workflow ist nie gelaufen und kann es nicht: N6.**
+
+Das Gate hat den Scan deshalb lokal nachgeholt, gegen beide Test-Images, jeweils
+mit **und** ohne `--ignore-unfixed`:
+
+> **0 CRITICAL/HIGH** in `php-image-builder-test/phpcli:8.3` und `…/phpfpm:8.3`.
+
+Das belegt, dass das Gate im Ist-Zustand passieren würde, und es belegt die
+Wirksamkeit von `apk upgrade` (A7.7/H10). Was es **nicht** belegt, ist die
+GitHub-Actions-Verdrahtung selbst — Job-Reihenfolge, die Parameter der
+`trivy-action`, der Summary-Schritt. Dafür gibt es keinen Ersatz für einen
+echten CI-Lauf.
+
+**Das ist keine Umsetzungslücke, sondern eine Spannung im PRD selbst:** AK8
+verlangt einen Nachweis, den N6 verbietet. Auflösbar nur durch Entscheidung —
+entweder gilt die lokale Verifikation als Ersatznachweis, solange N6 steht, oder
+AK8 bleibt bis zum ersten CI-Lauf ausdrücklich offen. **Vorgelegt am 2026-07-26,
+Entscheidung steht aus.**
+
+### Umsetzungsentscheidungen
+
+1. **Zwei Dokumente mit zwei Adressaten.** Die `README.md` richtet sich an den,
+   der die Images *benutzt* oder das Repo *bedient*; `.claude/CLAUDE.md` an den,
+   der *daran arbeitet*. Was in beide gehört (N6, der Prüflauf), steht kurz in
+   der README und mit der Begründung in der Arbeitsanweisung — keine
+   Doppelpflege der Substanz.
+2. **Die README trägt eine Umstiegs-Tabelle.** Neun Punkte, die Konsumenten
+   tatsächlich merken werden — vom Verlust von `php-cgi`/`phpdbg` (N1) bis
+   dazu, dass `headgent/phpfpm` überhaupt erst wieder startet (B9). Der
+   wichtigste: das Image bringt `APP_ENV=dev` mit, Produktionsbetrieb heißt
+   ausdrücklich `APP_ENV=prod` — im `fpm`-Image war Xdebug bisher per Default
+   aus. Diese Tabelle ist zugleich der Entwurf der Release-Notiz zum ersten Push.
+3. **Die sieben Testfallstricke stehen in der Arbeitsanweisung, nicht nur in der
+   Chronik.** B11, B16, B19, B20, B21, B27 und B31 sind die einzige Lehre dieses
+   Vorhabens, die bei der *nächsten* Änderung sofort gebraucht wird. Regel:
+   ein neuer Prüffall braucht den Nachweis, dass er am defekten Zustand rot wird.
+4. **Die README ist gegengeprüft worden, nicht nur geschrieben.** Jede
+   überprüfbare Behauptung — Targets, Übersteuerungen, `.env`-Schlüssel, jede
+   Zelle der Profiltabelle, alle elf nginx-Variablen, jede Fallzahl der dreizehn
+   Stufen durch Auszählen der Zusicherungen — wurde gegen die Dateien geprüft.
+   Zwei Fehler kamen dabei heraus: ein Target fehlte (`init`) und eine Datei war
+   genannt, die es nicht gibt (`ssh.mk` — daraus wurde B32).
+
+### Befund aus P12
+
+**B32 — die Zielstruktur des Plans nennt `support/makefiles/ssh.mk`; das Repo hat
+sie nie bekommen.** `PLAN.md` führt sie zweimal: in der Bauform-Tabelle
+(„`ssh.mk` | beide | unverändert") und in der Zielstruktur. Im Bestand existiert
+sie in beiden Repos (`phpcli/support/makefile/ssh.mk`,
+`phpfpm/support/makefiles/ssh.mk`) und enthält interaktive Wrapper um
+`ssh-keygen` — Schlüssel erzeugen, anzeigen, kopieren. In P1 wurde sie nicht
+übernommen, und in sechs Sessions ist es niemandem aufgefallen; gefunden hat es
+erst der Faktencheck der README gegen den tatsächlichen Verzeichnisbaum.
+
+Fachlich ist das Weglassen vermutlich richtig — SSH-Schlüsselverwaltung ist
+keine PHP-Laufzeit, dieselbe Grenze, aus der heraus nginx kein Build-Target mehr
+ist (E9). **Aber es war keine Entscheidung, sondern eine Auslassung**, und der
+Plan sagt etwas anderes. Vorgelegt zur Entscheidung: ersatzlos streichen (mit
+Nachtrag im Plan) oder nachziehen.
+
+Die Lehre reiht sich neben B14 und B30: **eine Zielstruktur im Plan ist eine
+Zusage, die niemand nachzählt.** Erst der Abgleich Dokument gegen Dateibaum
+findet, was fehlt.
+
+**B33 — der Rückbau von `curl-dev`/`oniguruma-dev` ist richtig und bringt
+nichts.** Seit P8 stand der Verdacht im Raum, die beiden Header-Pakete in der
+Build-Stage seien seit B12 überflüssig (`curl` und `mbstring` werden nicht mehr
+nachgebaut, sie sind im offiziellen Image einkompiliert). Der Verdacht stimmt —
+gemessen für **8.3 und 8.5**, jeweils `--no-cache`:
+
+| | vorher | nachher |
+|---|---|---|
+| apk-Satz der Build-Stage | 153 Pakete / 744,4 MiB | 152 Pakete / **743,6 MiB** |
+| cli-Image 8.3 | 127.807.016 B | **127.807.016 B** |
+| fpm-Image 8.5 | 145.556.942 B | **145.556.942 B** |
+| Bauzeit | 88,9 s / 106,1 s | 87,7 s / 106,4 s |
+
+`test-extensions` 21/21 in beiden Versionen und beiden Images, `test-boot` grün,
+`test-lint` sauber — und anschließend der volle `make test-all` für 8.3:
+**grün, Exit 0**, alle dreizehn Stufen. Zusätzlich mit echten Aufrufen statt `php -m` geprüft:
+`curl_version()` samt HTTPS-Abruf, `mb_strlen`/`mb_substr`/`mb_convert_encoding`
+und — der schärfste Fall — die Oniguruma-gestützte Familie `mb_ereg`,
+`mb_ereg_search`, `mb_ereg_replace`. Die Laufzeit-Bibliothek `oniguruma` in der
+Runtime-Stage bleibt und ist nachweislich nötig (`ldd php-fpm` →
+`libonig.so.5`).
+
+**Die zwei Punkte, die den Fund erst interessant machen:**
+
+1. **`curl-dev` verschwindet gar nicht.** `librdkafka-dev` zieht es über
+   `pc:libcurl` hart nach; im Build-Log steht es weiterhin. Vom apk-Satz
+   entfällt genau **ein** Paket: `oniguruma-dev`. Wer die bereinigte Zeile liest
+   und schließt, das Build-Image sei jetzt frei von libcurl-Headern, irrt —
+   deshalb steht das jetzt als Kommentar im Dockerfile.
+2. **Die Image-Größe ist byte-identisch**, und das ist kein Zufall, sondern
+   zwangsläufig: die Build-Stage wird verworfen, die Runtime-Stage kopiert nur
+   `extensions/` und `conf.d/`. Die Bauzeit-Differenz (−1,2 s / +0,3 s) liegt
+   beidseitig im Rauschen.
+
+**Nicht mit B12 in einen Topf werfen.** Dort verhinderte der Rückbau einen
+Build-Abbruch unter 8.5; hier passiert schlicht nichts. Die Änderung bleibt
+trotzdem stehen — nicht als Optimierung, sondern weil die Zeile einen Bedarf
+behauptete, den es nicht gibt. Die Messung ist das Ergebnis, nicht die Ersparnis.
+
+---
+
 ## Offene Punkte / Risiken
 
 | # | Punkt | Fällig in | Kritikalität |
@@ -1651,6 +1822,8 @@ Gegenprobe-Pflicht selbst gefunden hat.
 | ~~N3~~ | ~~FrankenPHP-OS-Variante~~ — **entschieden 2026-07-25: Alpine**, wenige Minuten später mit dem ganzen Target gestrichen (E11). Der offene Default-Port ist im Abschnitt „P7 — entfallen" trotzdem belegt festgehalten | — | erledigt |
 | ~~O1~~ | ~~Image-Name für FrankenPHP~~ — **entschieden: `headgent/frankenphp`**, dann mit E11 gegenstandslos | — | erledigt |
 | ~~AK4~~ | ~~UID-Nachweis ist auf macOS prinzipiell nicht führbar~~ — **erbracht am 2026-07-26** in einem `docker:28-dind`-Linux-Host statt auf einem GitHub-Runner (Entscheidung Rolf; N6 verbietet die CI-Auslösung). 13 Zusicherungen, Gegenprobe gegen den Bestand zeigt U1 und U2 erstmals **gemessen** | — | erledigt |
+| **O7** | **AK8/H1 — der Trivy-Lauf selbst ist nicht nachweisbar, solange N6 gilt.** Die Konfiguration ist korrekt und lokal verifiziert (0 CRITICAL/HIGH auf beiden Test-Images, mit und ohne `ignore-unfixed`), die GitHub-Actions-Verdrahtung ist es nicht. Zu entscheiden: gilt die lokale Verifikation als Ersatznachweis, oder bleibt AK8 bis zum ersten CI-Lauf offen? | P12-Abschluss | mittel |
+| **O8** | **B32 — `support/makefiles/ssh.mk` steht im Plan, existiert aber nicht.** Zu entscheiden: ersatzlos streichen (Empfehlung — SSH-Schlüsselverwaltung ist keine PHP-Laufzeit, dieselbe Grenze wie E9) mit Nachtrag in `PLAN.md`, oder aus dem Bestand nachziehen | P12-Abschluss | niedrig |
 | ~~O6~~ | ~~Zwei Härtungen an der nginx-Vorlage warten auf Entscheidung~~ — **entschieden 2026-07-26 (Freigabe Rolf): beide umsetzen.** `try_files $uri =404;` in der `.php`-Fallback-Location (**B24**) und die verlorenen Security-Header bei statischen Dateien (**B25**, nach der dokumentierten Empfehlung **Variante (b)**: die Zeile `add_header Cache-Control "public";` löschen, damit die Location die Server-Header wieder erbt). **Umgesetzt und belegt am 2026-07-26** — Abschnitt „O6 — umgesetzt", `test-nginx` steht bei 55/55 | — | erledigt |
 
 ### Wartet auf ausdrückliche Freigabe (nach außen wirkend)
@@ -1740,8 +1913,20 @@ UID/GID-Neubau (A4/E7 gegen U1–U3). **L-B ist mit dem `test`-Profil erledigt:*
 
 ## Nächste Phase
 
-**P12 — Doku + Abschluss** (Akzeptanz-Gate gegen AK1–AK15), nachdem der offene
-Rest von P11 abgeräumt ist — siehe „Noch offen in P11".
+**Keine mehr.** Alle Phasen des Plans sind abgeschlossen (P1–P6, P8–P12; P7
+entfallen mit E11). Was aussteht, sind drei Entscheidungen und keine Arbeit:
+
+1. **N6** — der erste Push, nach vorgelegter Tag-Strategie. Der einzige Punkt
+   mit Außenwirkung. Die Umstiegs-Tabelle der `README.md` ist der Entwurf der
+   Release-Notiz dazu.
+2. **O7** — AK8/H1: gilt die lokale Trivy-Verifikation als Ersatznachweis,
+   solange N6 den CI-Lauf verbietet?
+3. **O8** — Befund B32: `support/makefiles/ssh.mk` streichen oder nachziehen?
+
+Weiter liegen unverändert und ohne Termin: die Archivierung von
+`jardisOps/phpcli` und `jardisOps/phpfpm` (E8), das gegenstandslose
+Vorgriff-Verzeichnis `devops/image/docker-php-builder/`, und die zurückgestellten
+Härtungen H7–H9 (N5).
 
 <details><summary>Ursprüngliche P11-Vorgabe (weitgehend eingelöst)</summary>
 
