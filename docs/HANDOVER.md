@@ -78,11 +78,12 @@ vollständig mit Fundstellen.
 
 ## Stand
 
-**Einundzwanzig Commits.** Das Repo hat **kein Remote** und ist nie
+**Zweiundzwanzig Commits.** Das Repo hat **kein Remote** und ist nie
 gepusht worden.
 
 ```
-(HEAD)   docs: README, Arbeitsanweisung und das Akzeptanz-Gate (P12)
+(HEAD)   feat: Aufraeum-Targets, ssh.mk nachgezogen, AK8 abgehakt
+ced3aa7  docs: README, Arbeitsanweisung und das Akzeptanz-Gate (P12)
 9f1d51d  docs: Commit-Zahl und Log im Handover nachziehen
 1858f8b  feat: CI-Workflow, OCI-Labels und der Linux-UID-Nachweis (P11)
 01db7bb  feat: nginx-Vorlage gehaertet — try_files und Security-Header (O6)
