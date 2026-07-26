@@ -68,6 +68,10 @@ test-phpini: ## APP_ENV-Profile, Vorrangregel und Validierung (lib-phpini.sh)
 	@bash $(TESTS_DIR)/check-phpini.sh
 .PHONY: test-phpini
 
+test-bake: ## Aufgeloeste Bake-Definition: base-Abhaengigkeit und Tag-Satz (A1.2/A1.3/A9.2)
+	@bash $(TESTS_DIR)/check-bake-graph.sh
+.PHONY: test-bake
+
 test-user: ## UID/GID-Angleichung in Isolation (lib-user.sh, in alpine)
 	@docker run --rm --platform linux/amd64 \
 	  -v "$(CURDIR)/src/shared/entrypoint/lib-user.sh:/lib-user.sh:ro" \
@@ -103,6 +107,15 @@ test-uid: test-images ## UID/GID gegen echte Docker-Volumes (AK4, soweit ohne Li
 	@bash $(TESTS_DIR)/check-uid-image.sh $(CLI_TEST_IMAGE)
 .PHONY: test-uid
 
+# Braucht --privileged: der Linux-Host ist ein docker:*-dind-Container mit
+# eigenem Daemon. Das ist der Preis dafuer, den Bind-Mount-Nachweis ohne
+# GitHub-Runner fuehren zu koennen (AK4/A4.5).
+DIND_IMAGE ?= docker:28-dind
+
+test-uid-linux: test-images ## UID/GID gegen einen ECHTEN Linux-Bind-Mount (AK4/A4.5, letzte Haelfte)
+	@bash $(TESTS_DIR)/check-uid-linux-host.sh $(CLI_TEST_IMAGE) $(DIND_IMAGE)
+.PHONY: test-uid-linux
+
 test-nginx: test-images ## nginx-Vorlage gegen das UNVERAENDERTE offizielle Image (A6/AK7)
 	@bash $(TESTS_DIR)/check-nginx-template.sh $(FPM_TEST_IMAGE) nginx:$(NGINX_VERSION)-alpine
 .PHONY: test-nginx
@@ -110,6 +123,11 @@ test-nginx: test-images ## nginx-Vorlage gegen das UNVERAENDERTE offizielle Imag
 test-demo: test-images ## Demo-Stack: ein `up`, alle Dienste healthy, DB verbunden (A8/AK9/AK12)
 	@bash $(TESTS_DIR)/check-demo-stack.sh $(TEST_REGISTRY) $(DEMO_TEST_PORT)
 .PHONY: test-demo
+
+test-labels: test-images ## OCI-Labels in cli UND fpm, ueber `FROM base` vererbt (A7.4/AK8)
+	@bash $(TESTS_DIR)/check-oci-labels.sh $(CLI_TEST_IMAGE) $(PHP_VERSION)-$(IMAGE_DATE)
+	@bash $(TESTS_DIR)/check-oci-labels.sh $(FPM_TEST_IMAGE) $(PHP_VERSION)-$(IMAGE_DATE)
+.PHONY: test-labels
 
 test-boot: test-images ## cli und fpm starten; fpm wird healthy (FastCGI-Ping)
 	@echo ">>> Start von cli und fpm"
@@ -136,7 +154,7 @@ test-boot: test-images ## cli und fpm starten; fpm wird healthy (FastCGI-Ping)
 # ---------------------------------------------------------------------------
 # Reihenfolge nach Laufzeit: was ohne Image auskommt, laeuft zuerst und faellt
 # damit frueh durch, statt erst nach einem Build.
-test-all: test-lint test-phpini test-user test-boot test-extensions test-app-env test-uid test-opcache test-nginx test-demo ## Alle Pruefungen
+test-all: test-lint test-bake test-phpini test-user test-boot test-labels test-extensions test-app-env test-uid test-uid-linux test-opcache test-nginx test-demo ## Alle Pruefungen
 	@echo ""
 	@echo "✅ Alle Pruefungen bestanden — PHP $(PHP_VERSION)"
 .PHONY: test-all

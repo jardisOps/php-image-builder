@@ -1,0 +1,265 @@
+# =============================================================================
+# ci.yml — der EINE Workflow (A9.1)
+# =============================================================================
+# Loest die beiden Bestands-Workflows ab:
+#   jardisOps/phpcli   .github/workflows/ci.yml      (Matrix, Attestations)
+#   jardisOps/phpfpm   .github/workflows/phpfpm.yml  (Matrix, hadolint, Trivy)
+#
+# Uebernommen sind daraus alle Trigger samt Keepalive-Job (A9.3) und die
+# Push-Guard-Logik (PRs bauen und pruefen, publizieren aber nie). Was hier NEU
+# ist, steht im PRD unter A7 und A9.2.
+#
+# -----------------------------------------------------------------------------
+# NICHT SCHARF — N6
+# -----------------------------------------------------------------------------
+# Der publish-Job ist geschrieben, aber abgeschaltet: er laeuft nur, wenn die
+# Repository-Variable PUBLISH_ENABLED auf 'true' steht. Diese Variable existiert
+# nicht, und sie anzulegen ist eine bewusste Handlung.
+#
+# Grund (N6 in docs/PROGRESS.md): der erste Push auf headgent/phpcli bzw.
+# headgent/phpfpm ist der einzige Punkt dieses Vorhabens mit Aussenwirkung. Er
+# ueberschreibt die wandernden Tags :<ver> und :latest, die laufende Projekte
+# ziehen. Vor dem ersten Lauf wird eine Tag-Strategie vorgelegt und freigegeben
+# (Vorschlag: Nebentag :<ver>-next, :latest und :<ver> unangetastet, bis in
+# einem Projekt gegengeprueft).
+#
+# Bis dahin gilt: kein docker login, kein --push, keine CI-Ausloesung.
+# =============================================================================
+name: Build, Test and Push PHP Images
+
+on:
+  workflow_dispatch: {}
+  schedule:
+    - cron: '0 2 */3 * *'  # alle drei Tage um 02:00 UTC — wie in beiden Bestands-Repos
+  push:
+    branches:
+      - main
+    # Die Liste steht zweimal, obwohl YAML dafuer Anker kennt: GitHub Actions
+    # loest &anker/*verweis nicht auf. Ein Anker waere hier also kein Kunstgriff,
+    # sondern ein stiller Ausfall des Pfadfilters — dieselbe Fehlerklasse, die
+    # dieses Vorhaben ueberall austreibt. Beide Listen sind deshalb identisch
+    # ausgeschrieben und muessen gemeinsam gepflegt werden.
+    paths:
+      - '.env'
+      - 'src/**'
+      - 'support/**'
+      - 'compose/**'
+      - 'docker-bake.hcl'
+      - 'Makefile'
+      - '.hadolint.yaml'
+      - '.dockerignore'
+      - '.github/workflows/ci.yml'
+      - '!**/*.md'
+  pull_request:
+    branches:
+      - main
+      - develop
+    paths:
+      - '.env'
+      - 'src/**'
+      - 'support/**'
+      - 'compose/**'
+      - 'docker-bake.hcl'
+      - 'Makefile'
+      - '.hadolint.yaml'
+      - '.dockerignore'
+      - '.github/workflows/ci.yml'
+      - '!**/*.md'
+
+concurrency:
+  group: ${{ github.ref }}-build
+  cancel-in-progress: true
+
+# Grundrechte fuer alle Jobs; einzelne Jobs erweitern sie unten.
+permissions:
+  contents: read
+
+jobs:
+  # ===========================================================================
+  # keepalive — GitHubs 60-Tage-Inaktivitaetsschalter zuruecksetzen
+  # ===========================================================================
+  # Woertlich aus beiden Bestands-Workflows uebernommen (A9.3). Ohne ihn faellt
+  # der geplante Rebuild irgendwann in disabled_inactivity — genau das ist
+  # jardisOps/phpfpm vom 2026-05-31 bis 06-12 passiert.
+  keepalive:
+    if: github.event_name == 'schedule'
+    runs-on: ubuntu-latest
+    permissions:
+      actions: write
+    steps:
+      - name: Workflow wieder aktivieren (keepalive)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh api -X PUT repos/${{ github.repository }}/actions/workflows/ci.yml/enable
+
+  # ===========================================================================
+  # lint — statische Pruefung, braucht kein Image
+  # ===========================================================================
+  # Ueber `make test-lint` und nicht ueber hadolint-action: die Liste der
+  # Dockerfiles und der Shell-Dateien steht damit an EINER Stelle (A2.1,
+  # support/makefiles/test.mk) und gilt lokal wie in der CI. Der Bestand
+  # pflegte je Dockerfile einen eigenen Action-Schritt.
+  #
+  # test-bake gehoert dazu, weil es nichts baut: es prueft die aufgeloeste
+  # Bake-Definition und belegt A9.2/AK10 — jedes publizierte Ziel haengt an
+  # `base` seiner eigenen PHP-Version, eine base-Aenderung baut also alle
+  # abhaengigen Targets neu.
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Repository auschecken
+        uses: actions/checkout@v6
+
+      - name: hadolint + shellcheck
+        run: make test-lint
+
+      - name: Bake-Definition — base-Abhaengigkeit und Tag-Satz (A9.2/AK10)
+        run: make test-bake
+
+  # ===========================================================================
+  # build-test — eine PHP-Version je Job
+  # ===========================================================================
+  # Hier faellt der Nachweis, den macOS prinzipiell nicht fuehren kann: der
+  # Runner IST ein Linux-Host. `make test-all` enthaelt test-uid (echte Docker-
+  # Volumes) und test-uid-linux (echter Bind-Mount) — zusammen A4.5/AK4.
+  #
+  # Native amd64, keine Emulation: ein arm64-Image auf dem amd64-Runner zu
+  # booten hiesse QEMU, und das ist beim `--load` sowohl sehr langsam als auch
+  # anfaellig fuers Haengen ohne Timeout (Begruendung woertlich aus
+  # phpfpm/.github/workflows/phpfpm.yml:115-119). Die Korrektheit des
+  # arm64-Builds prueft der publish-Job beim Multi-Arch-Bau.
+  build-test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        php_version: ['8.3', '8.4', '8.5']
+      fail-fast: false
+    steps:
+      - name: Repository auschecken
+        uses: actions/checkout@v6
+
+      - name: Docker Buildx einrichten
+        uses: docker/setup-buildx-action@v4
+        with:
+          driver-opts: image=moby/buildkit:buildx-stable-1
+
+      - name: Prueflauf (PHP ${{ matrix.php_version }})
+        run: make test-all PHP_VERSION=${{ matrix.php_version }} CACHE_BACKEND=gha
+
+      # -----------------------------------------------------------------------
+      # Trivy — blockierendes CVE-Gate (A7.1/H1, hebt D14 auf)
+      # -----------------------------------------------------------------------
+      # Gescannt wird das TEST-Image, also exakt das Artefakt, das der
+      # publish-Job spaeter pusht — und zwar VOR dem Push. Der Bestand scannte
+      # erst danach und mit continue-on-error, was den Befund folgenlos machte.
+      #
+      # ignore-unfixed: true — Entscheidung Rolf, 2026-07-26. Blockiert wird
+      # bei jeder CRITICAL/HIGH, fuer die es einen Fix GIBT: dann ist unser
+      # Image hinter dem Patchstand zurueck und `apk upgrade` (H10) haette es
+      # geholt. CVEs ohne verfuegbaren Fix koennen wir nicht beheben; sie
+      # blockierten die Pipeline dauerhaft, ohne dass jemand etwas tun kann.
+      # Sie werden stattdessen berichtet (Schritt darunter) und gehen damit
+      # nicht verloren. Abweichung vom Wortlaut A7.1, nicht von seinem Zweck.
+      - name: Trivy — blockierendes Gate (behebbare CRITICAL/HIGH)
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          image-ref: php-image-builder-test/phpcli:${{ matrix.php_version }}
+          format: table
+          severity: CRITICAL,HIGH
+          ignore-unfixed: true
+          exit-code: '1'
+
+      - name: Trivy — blockierendes Gate, fpm
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          image-ref: php-image-builder-test/phpfpm:${{ matrix.php_version }}
+          format: table
+          severity: CRITICAL,HIGH
+          ignore-unfixed: true
+          exit-code: '1'
+
+      # Der Rest — CVEs ohne verfuegbaren Fix. Blockiert nicht, verschwindet
+      # aber auch nicht: `if: always()` sorgt dafuer, dass der Bericht selbst
+      # dann erscheint, wenn das Gate darueber schon abgebrochen hat.
+      #
+      # Nur fpm und nicht zusaetzlich cli: beide Images sind bis auf einen
+      # Metadaten-Layer identisch — sie stammen aus demselben `base` und
+      # unterscheiden sich um ENV, STOPSIGNAL, HEALTHCHECK und CMD. Ein
+      # zweiter Bericht truege dieselbe Liste. Das GATE oben laeuft trotzdem
+      # ueber beide: dort geht es nicht um den Inhalt, sondern darum, dass kein
+      # publiziertes Artefakt ungeprueft durchrutscht.
+      - name: Trivy — Bericht ueber ALLE CRITICAL/HIGH (auch unbehebbare)
+        if: always()
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          image-ref: php-image-builder-test/phpfpm:${{ matrix.php_version }}
+          format: table
+          severity: CRITICAL,HIGH
+          exit-code: '0'
+          output: trivy-vollstaendig.txt
+
+      - name: Bericht in die Job-Summary
+        if: always()
+        run: |
+          {
+            echo "## Trivy — PHP ${{ matrix.php_version }}, alle CRITICAL/HIGH"
+            echo ""
+            echo "Das Gate blockiert nur bei behebbaren Befunden. Diese Liste"
+            echo "enthaelt zusaetzlich die (noch) nicht behebbaren."
+            echo '```'
+            cat trivy-vollstaendig.txt 2>/dev/null || echo "kein Bericht erzeugt"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  # ===========================================================================
+  # publish — multi-arch Build mit Push, SBOM und Attestations
+  # ===========================================================================
+  # ABGESCHALTET, siehe N6 im Dateikopf. Die drei Bedingungen zusammen:
+  #   vars.PUBLISH_ENABLED == 'true'   die Repository-Variable existiert nicht
+  #   github.event_name != 'pull_request'   Push-Guard aus dem Bestand
+  #   needs: [lint, build-test]        nichts wird publiziert, was nicht durch
+  #                                    das Trivy-Gate gekommen ist (A7.1)
+  #
+  # A7.3/H3 — id-token: write + attestations: write stehen hier fuer ALLE
+  # Build-Jobs (im Bestand hatte nur phpcli sie, phpfpm nicht: Drift D13).
+  # A7.2/H2 — die SBOM- und Provenance-Attestation entsteht im Build selbst
+  # ueber BUILD_ATTEST_FLAGS (support/makefiles/docker.helper.mk), nicht ueber
+  # einen nachgelagerten Schritt: sie gehoert an das Manifest, das gepusht wird.
+  publish:
+    needs: [lint, build-test]
+    if: ${{ vars.PUBLISH_ENABLED == 'true' && github.event_name != 'pull_request' }}
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        php_version: ['8.3', '8.4', '8.5']
+      fail-fast: false
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+      attestations: write
+    steps:
+      - name: Repository auschecken
+        uses: actions/checkout@v6
+
+      - name: An Docker Hub anmelden
+        uses: docker/login-action@v4
+        with:
+          username: ${{ secrets.DOCKER_USER_NAME }}
+          password: ${{ secrets.DOCKER_PAT }}
+
+      - name: Docker Buildx einrichten
+        uses: docker/setup-buildx-action@v4
+        with:
+          driver-opts: image=moby/buildkit:buildx-stable-1
+
+      - name: QEMU einrichten (arm64)
+        uses: docker/setup-qemu-action@v4
+
+      # `make push` ist der duenne Wrapper um docker-bake.hcl: Plattformen,
+      # Tag-Satz und Attestations stehen dort an genau einer Stelle. Der
+      # Bestand trug dieselben ~35 --build-arg-Zeilen viermal.
+      - name: Bauen und pushen (PHP ${{ matrix.php_version }}, multi-arch)
+        env:
+          DOCKER_HUB: ${{ secrets.DOCKER_USER_NAME }}
+        run: make push PHP_VERSION=${{ matrix.php_version }} CACHE_BACKEND=gha

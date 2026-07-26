@@ -1,7 +1,8 @@
 # Handover — Konsolidierung des PHP-Docker-Image-Builders
 
 **Stand:** 2026-07-26, Ende der sechsten Umsetzungs-Session. **P1–P6, P8–P10 und
-O6 abgeschlossen**, **P7 ist entfallen** (E11) — nächste Phase ist **P11**.
+O6 abgeschlossen**, **P11 weit gediehen** (Workflow geschrieben, **AK4 erbracht**),
+**P7 ist entfallen** (E11).
 
 Arbeitsverzeichnis: `/Users/Rolf/Development/headgent/devops/docker/php-image-builder/`
 Projekt- und künftiger Repo-Name: **`php-image-builder`**.
@@ -12,17 +13,19 @@ Vorläuferdokumente unter `devops/image/`.
 
 ## Wiedereinstieg — Stand am 2026-07-26
 
-**Noch offen sind zwei Phasen: P11 und P12.** Neun sind abgeschlossen (P1–P6,
-P8–P10), P7 ist gestrichen (E11) und die Nummer bleibt frei.
+**Offen sind der Rest von P11 (Review + Commit) und P12.** Zehn Einheiten sind
+abgeschlossen (P1–P6, P8–P10, O6), P7 ist gestrichen (E11) und die Nummer bleibt frei.
 
 | Punkt | Stand |
 |---|---|
 | Arbeitsbaum | **sauber**, alles committet (17 Commits, kein Remote, nie gepusht) |
-| Prüflauf | `make test-all` war zuletzt **grün**, Exit 0, für PHP 8.3 — **zehn** Stufen, `test-nginx` seit O6 bei **55** Zusicherungen |
+| Prüflauf | **grün, Exit 0** für PHP 8.3 — seit P11 **dreizehn** Stufen; `test-nginx` 55/55, `test-uid-linux` 13/13, shellcheck über 16 Dateien |
 | Test-Images | `php-image-builder-test/phpcli:8.3` und `…/phpfpm:8.3` liegen **lokal** — `make test-all` startet damit ohne Neubau |
 | Demo-Stack | läuft: `make demo-up` → drei Dienste `healthy` unter `http://localhost:8088`, `make demo-down` hinterlässt nichts |
 | Aufgeräumt | keine Testcontainer, -volumes oder -netze übrig; `headgent/*` unberührt |
 | **O6** | **umgesetzt und belegt am 2026-07-26** — beide Härtungen an der nginx-Vorlage (B24/B25) stehen, `test-nginx` 55/55, Gegenprobe gefahren |
+| **P11** | **grösstenteils geliefert:** `.github/workflows/ci.yml` (vier Jobs, alle Trigger, `publish` abgeschaltet), OCI-Labels, drei neue Prüfstufen. **AK4 ist erbracht** — Details in PROGRESS „P11 — in Arbeit" |
+| **AK4** | **erledigt.** Nachweis in einem `docker:28-dind`-Linux-Host statt auf einem GitHub-Runner (deine Entscheidung, 2026-07-26). Gegenprobe gegen `headgent/phpcli:8.3` zeigt U1 und U2 erstmals **gemessen** |
 | Wartet auf Freigabe | **N6** (erster Push, Tag-Strategie), kein GitHub-Repo, kein Remote, keine Archivierung |
 
 Einstieg: Kurzform:
@@ -33,10 +36,19 @@ make test-all          # Ausgangslage bestätigen (grün)
 make help              # Bedienoberfläche
 ```
 
-Weiter geht es mit **P11**: `.github/workflows/ci.yml`, OCI-Labels, Trivy,
-SBOM/Attestations und der **UID-Nachweis (AK4)** auf einem echten Linux-Runner,
-der auf macOS prinzipiell nicht zu führen ist. **N6 bleibt dabei die harte
-Grenze:** der Workflow darf geschrieben, aber nicht scharf geschaltet werden.
+**Womit die nächste Session beginnt — P12:**
+
+1. **P12 — Doku + Abschluss:** `README.md`, `.claude/CLAUDE.md`, Akzeptanz-Gate
+   gegen AK1–AK15. Für die README vorgemerkt: **B7** (die drei
+   `InvalidDefaultArgInFrom`-Warnungen sind gewollt, nicht behebbar), **B15**
+   (Plattenplatz bei `build-all`), **B28** (Host-Port), der Verlust von
+   `php-cgi`/`phpdbg` im cli-Image (P3) und der Rückbau von `curl-dev`/
+   `oniguruma-dev` (seit B12 vermutlich überflüssig).
+
+**N6 bleibt die harte Grenze:** der Workflow ist geschrieben, aber nicht scharf.
+`publish` läuft nur bei `vars.PUBLISH_ENABLED == 'true'` — die Variable
+existiert nicht. Kein `docker login`, kein `--push`, keine CI-Auslösung, bis die
+Tag-Strategie vorliegt und freigegeben ist.
 
 ---
 
@@ -44,7 +56,7 @@ Grenze:** der Workflow darf geschrieben, aber nicht scharf geschaltet werden.
 
 | Datei | Inhalt | Vorrang |
 |---|---|---|
-| `docs/PROGRESS.md` | **Maßgeblich.** Laufender Zustand: P1–P6 und P8–P10 mit Nachweisen, alle Umsetzungsentscheidungen, Befunde B1–B29, offene Punkte, nächste Phase | geht bei Widersprüchen vor |
+| `docs/PROGRESS.md` | **Maßgeblich.** Laufender Zustand: P1–P6, P8–P10, O6 und P11 mit Nachweisen, alle Umsetzungsentscheidungen, Befunde **B1–B31**, offene Punkte, nächste Phase | geht bei Widersprüchen vor |
 | `docs/PRD.md` | Anforderungen A1–A10, Entscheidungen E1–**E11**, Nicht-Ziele N1–**N8**, Akzeptanzkriterien AK1–AK15, vollständiger Ist-Zustand (Drift D1–D16, UID-Defekte U1–U3, Xdebug/JIT-Lücken L-A–L-G) mit Datei- und Zeilenangaben | bestätigt |
 | `docs/PLAN.md` | Bauform, Zielstruktur, 12 Phasen mit Abhängigkeiten | freigegeben |
 | `docs/HANDOVER.md` | diese Datei — Vorgeschichte und Einstieg | — |
@@ -92,13 +104,13 @@ ea450dc  feat: docker-bake.hcl drives base/cli/fpm in one run (P6)
 | P9 nginx-Config als Asset | ✅ Vorlage + Defaults, 39/39 gegen das offizielle Image (AK7) |
 | P10 Demo-Stack | ✅ mariadb + fpm + offizielles nginx, 21/21, AK9 und AK12 erbracht |
 | O6 Härtung der nginx-Vorlage (B24/B25) | ✅ vorgezogen vor P11, `test-nginx` 39 → 55 |
-| **P11 CI-Pipeline + Härtung** | **← hier weiter** (hängt an P8) |
-| P12 Doku + Abschluss | offen |
+| P11 CI-Pipeline + Härtung | ✅ Workflow, OCI-Labels, AK4, drei neue Prüfstufen; Review gelaufen. **Der Workflow selbst ist nie gelaufen** (N6) |
+| **P12 Doku + Abschluss** | **← hier weiter** |
 
 Gebaut und geprüft: `base`, `cli` und `fpm` gegen PHP **8.3, 8.4 und 8.5** — in
 **einem** `bake`-Lauf, nativ auf arm64. **amd64 ist seit P6 belegt** (PHP 8.3,
-emuliert gebaut, `uname -m` = `x86_64`, fpm `healthy`); der Nachweis auf einem
-echten Linux-Runner bleibt P11.
+emuliert gebaut, `uname -m` = `x86_64`, fpm `healthy`). Der Linux-Nachweis für
+die UID-Behandlung ist seit P11 erbracht (`docker:28-dind`, siehe AK4 oben).
 
 ## Bedienung seit P6
 
@@ -129,7 +141,7 @@ make test-all          # baut Test-Images fuer PHP_VERSION und prueft alles
 
 | Target | Umfang |
 |---|---|
-| `test-lint` | hadolint ×3, shellcheck über 13 Shell-Dateien |
+| `test-lint` | hadolint ×3, shellcheck über **16** Shell-Dateien |
 | `test-phpini` | 34 Fälle gegen `lib-phpini.sh`, ohne Container |
 | `test-user` | 27 Fälle gegen `lib-user.sh`, in `alpine:3.23` |
 | `test-boot` | cli startet, fpm wird `healthy` |
@@ -137,6 +149,9 @@ make test-all          # baut Test-Images fuer PHP_VERSION und prueft alles
 | `test-app-env` | 15 Fälle: AK13, AK14/L-F, A10.2, A10.5, A10.7 |
 | `test-uid` | 5 Fälle gegen echte Docker-Volumes (AK4) |
 | `test-opcache` | 14 Fälle inkl. **AK15** im laufenden FPM |
+| `test-bake` | 8 Fälle gegen die aufgelöste Bake-Definition (A1.2/A1.3/**A9.2/AK10**), ohne Build |
+| `test-labels` | 7 Fälle je Image: die OCI-Labels, über `FROM base` vererbt (A7.4) |
+| `test-uid-linux` | 13 Fälle gegen einen **echten Linux-Bind-Mount** in `docker:28-dind` (**AK4**) |
 | `test-nginx` | **55** Fälle gegen das **unveränderte** offizielle nginx-Image (AK7), zwei Instanzen: nur Defaults / alles überschrieben, seit O6 plus die Härtungs-Prüffälle B24/B25 |
 | `test-demo` | 21 Fälle gegen den laufenden Demo-Stack (AK9/AK12, A8.1–A8.3): ein `up --wait`, alle Dienste healthy, DB verbunden, Abbau ohne Reste |
 

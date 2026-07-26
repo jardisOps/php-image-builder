@@ -25,7 +25,7 @@ Repo und sind mitversioniert. Bestandscode unverändert unter
 - [x] **P9  nginx-Config als Asset** — abgeschlossen 2026-07-25
 - [x] **P10 Demo-Stack** — abgeschlossen 2026-07-26
 - [x] **O6  Härtung der nginx-Vorlage (B24/B25)** — umgesetzt 2026-07-26, vorgezogen vor P11
-- [ ] P11 CI-Pipeline + Härtung
+- [~] **P11 CI-Pipeline + Härtung** — Workflow, OCI-Labels und **AK4 erbracht** (2026-07-26); der Workflow ist nie gelaufen (N6)
 - [ ] P12 Doku + Abschluss
 
 ---
@@ -1544,6 +1544,101 @@ Sollwert liest; gleiche Klasse wie B14.
 
 ---
 
+## P11 — in Arbeit (Stand 2026-07-26, Ende der sechsten Session)
+
+### Geliefert
+
+| Datei | Inhalt |
+|---|---|
+| `.github/workflows/ci.yml` | **neu.** Der eine Workflow (A9.1): vier Jobs `keepalive`, `lint`, `build-test`, `publish`. Alle Trigger der beiden Bestands-Workflows samt Keepalive (A9.3). **`publish` ist abgeschaltet** (N6) |
+| `src/base/Dockerfile` | **geändert:** die vier OCI-Labels (A7.4/H4) am Ende der Runtime-Stage |
+| `support/makefiles/docker.helper.mk` | **geändert:** `IMAGE_SOURCE`/`IMAGE_REVISION`/`IMAGE_CREATED` abgeleitet |
+| `docker-bake.hcl` | **geändert:** drei `variable`-Blöcke, vier Args ans `base`-Target; `IMAGE_VERSION` = `<php>-<datum>` aus der Matrix |
+| `support/tests/check-oci-labels.sh` | **neu.** 7 Zusicherungen je Image |
+| `support/tests/check-bake-graph.sh` | **neu.** 8 Zusicherungen gegen die aufgelöste Bake-Definition (A1.2/A1.3/**A9.2/AK10**) |
+| `support/tests/check-uid-linux-host.sh` | **neu.** 13 Zusicherungen — **AK4/A4.5** gegen einen echten Linux-Bind-Mount |
+| `support/makefiles/test.mk` | **geändert:** `test-bake`, `test-labels`, `test-uid-linux`; `test-all` hat jetzt **13** Stufen |
+| `docs/PRD.md` | **geändert:** A7.1 präzisiert (`ignore-unfixed`), A4.5 mit dem gewählten Nachweisweg |
+
+### Was fertig und belegt ist
+
+**AK4 ist erbracht** — der Punkt, der seit P2 offen stand. `check-uid-linux-host.sh`
+fährt einen `docker:28-dind`-Container hoch (ein echter Linux-Host mit eigenem
+Daemon), lädt unser Testimage per `save`/`load` hinein (keine Registry, N6) und
+prüft die Angleichung gegen **echte Bind-Mounts** vom Linux-Dateisystem:
+
+| Fall | Vorgabe | Ergebnis |
+|---|---|---|
+| A4.1 Host-UID ≠ 1000 | `4711:4711` | Prozess `4711:4711`, schreibbar |
+| A4.1/**U1** belegte Ziel-GID | `1234:20` (dialout) | Prozess `1234:20`, schreibbar |
+| A4.2/**U2** root-eigenes Verzeichnis, leer | `0:0` | Prozess `1000:1000`, Verzeichnis übertragen, schreibbar |
+| A4.2 root-eigen **mit Inhalt** | `0:0` + Datei | Verzeichnis übertragen, Inhalt bleibt `0:0` (bewusst nicht rekursiv) |
+| A4.4 `--user 4711:4711` | — | keine Anpassung |
+| Bind-Mount-Beleg | — | die vom Container geschriebene Datei trägt **auf dem Linux-Host** `4711:4711` |
+
+**Die Gegenprobe ist der eigentliche Gewinn:** dasselbe Skript gegen das
+Bestands-Image `headgent/phpcli:8.3` meldet **4 Fehlschläge** — U1 (Prozessgruppe
+bleibt `1000` statt `20`) und U2 (`/app` bleibt `0:0` und **nicht schreibbar**)
+sind damit erstmals **auf Linux gemessen** statt nur aus dem Code gelesen.
+
+**OCI-Labels** sitzen in beiden publizierten Images, obwohl sie nur in `base`
+stehen — die Vererbung über `FROM base` trägt (gemessen). **A9.2/AK10** ist von
+`check-bake-graph.sh` abgesichert: alle sechs publizierten Ziele ziehen
+`target:base-<eigene-version>`; Gegenprobe mit verbogener Abhängigkeit meldet
+rot.
+
+### Umsetzungsentscheidungen
+
+1. **Trivy blockiert nur bei behebbaren Befunden** (`ignore-unfixed: true`,
+   Entscheidung Rolf 2026-07-26). Unbehebbare Basis-CVEs würden die Pipeline
+   dauerhaft rot legen; sie werden vollständig in die Job-Summary berichtet.
+   Begründung im PRD bei A7.1.
+2. **Gescannt wird das Test-Image vor dem Push**, nicht das publizierte danach.
+   Der Bestand scannte hinterher und mit `continue-on-error` — der Befund war
+   folgenlos. `publish` hängt per `needs` am Gate.
+3. **Die OCI-Labels stehen nur in `base`.** Labels werden vererbt; sie in `cli`
+   und `fpm` zu wiederholen wäre Doppelpflege (A2.1). Sie stehen **am Ende** der
+   Stage, weil `revision`/`created` sich bei jedem Build ändern und ein ARG den
+   Cache ab seiner Zeile invalidiert.
+4. **`make test-lint` statt `hadolint-action`** in der CI: die Datei-Listen
+   stehen damit an einer Stelle und gelten lokal wie in der CI.
+5. **Die Pfadfilter stehen zweimal ausgeschrieben.** GitHub Actions löst
+   YAML-Anker **nicht** auf — ein Anker wäre hier ein stiller Ausfall des
+   Filters, nicht eine Ersparnis.
+
+### Noch offen in P11
+
+- **Der Workflow ist nie gelaufen** und kann es nicht: kein GitHub-Repo, kein
+  Remote, N6. Geprüft ist er statisch (YAML parst, vier Jobs, Trigger
+  vollständig, Push- und PR-Pfadfilter identisch, `publish` dreifach
+  abgeriegelt).
+- ~~`make test-all` mit der 13. Stufe~~ — **grün, Exit 0** (PHP 8.3):
+  `test-bake` 8/8, `test-labels` 7/7 je Image, `test-uid-linux` 13/13,
+  `test-nginx` 55/55, `test-demo` 21/21, shellcheck über **16** Shell-Dateien.
+- ~~Code Review~~ — **gelaufen**, drei Minors, alle behoben (Trivy-Bericht
+  begründet, SC2016 durch Umbau der Quotierung, ARG-Zahl richtiggestellt).
+- **`test-all` setzt seit `test-uid-linux` `--privileged` voraus** — gehört in
+  die README (P12).
+- **`.trivyignore`** existiert bewusst nicht.
+- **A7.5/H5** (`.dockerignore`) und **A7.7/H10** (`apk upgrade`) waren schon
+  vorher erfüllt (P1 bzw. P3) — für AK8 nachzuweisen bleibt der Trivy-Lauf
+  selbst, der einen CI-Lauf braucht.
+
+### Befund aus P11
+
+**B31 — siebter Fall der Klasse „der Test misst nichts": die erste Fassung von
+`check-uid-linux-host.sh` prüfte den falschen Wert.** Sie meldete den
+Eigentümer des *Verzeichnisses* — und der ist in fast allen Fällen die
+**Eingabe** des Prüffalls und ändert sich nicht. Aufgefallen ist es nur, weil
+die Gegenprobe gegen `headgent/phpcli:8.3` gefahren wurde: das nachweislich
+defekte Bestands-Image bestand den U1-Fall genauso wie unseres. Ob die
+Angleichung stattgefunden hat, sagt allein `id -u`/`id -g` des Prozesses. Die
+Sonde meldet seither Prozesskennung **zuerst**. Reihe mit B11, B16, B19, B20,
+B21, B27 — und der erste Fall, den nicht ein Zufall, sondern die
+Gegenprobe-Pflicht selbst gefunden hat.
+
+---
+
 ## Offene Punkte / Risiken
 
 | # | Punkt | Fällig in | Kritikalität |
@@ -1555,7 +1650,7 @@ Sollwert liest; gleiche Klasse wie B14.
 | ~~N4~~ | ~~FPM-Privilegienwechsel: zwei tragfähige Wege~~ — **entschieden 2026-07-25: Variante (b)**, und zwar zwingend: (a) ist nachweislich nicht lauffähig (Befund **B9** — der `chown`-Griff ist wirkungslos, `headgent/phpfpm` startet deshalb in keiner Version). Es war keine Abwägung | — | erledigt |
 | ~~N3~~ | ~~FrankenPHP-OS-Variante~~ — **entschieden 2026-07-25: Alpine**, wenige Minuten später mit dem ganzen Target gestrichen (E11). Der offene Default-Port ist im Abschnitt „P7 — entfallen" trotzdem belegt festgehalten | — | erledigt |
 | ~~O1~~ | ~~Image-Name für FrankenPHP~~ — **entschieden: `headgent/frankenphp`**, dann mit E11 gegenstandslos | — | erledigt |
-| AK4 | UID-Nachweis ist auf macOS prinzipiell nicht führbar. P8 liefert den Test, P11 den Nachweis auf dem Linux-Runner. | P8/P11 | bekannt |
+| ~~AK4~~ | ~~UID-Nachweis ist auf macOS prinzipiell nicht führbar~~ — **erbracht am 2026-07-26** in einem `docker:28-dind`-Linux-Host statt auf einem GitHub-Runner (Entscheidung Rolf; N6 verbietet die CI-Auslösung). 13 Zusicherungen, Gegenprobe gegen den Bestand zeigt U1 und U2 erstmals **gemessen** | — | erledigt |
 | ~~O6~~ | ~~Zwei Härtungen an der nginx-Vorlage warten auf Entscheidung~~ — **entschieden 2026-07-26 (Freigabe Rolf): beide umsetzen.** `try_files $uri =404;` in der `.php`-Fallback-Location (**B24**) und die verlorenen Security-Header bei statischen Dateien (**B25**, nach der dokumentierten Empfehlung **Variante (b)**: die Zeile `add_header Cache-Control "public";` löschen, damit die Location die Server-Header wieder erbt). **Umgesetzt und belegt am 2026-07-26** — Abschnitt „O6 — umgesetzt", `test-nginx` steht bei 55/55 | — | erledigt |
 
 ### Wartet auf ausdrückliche Freigabe (nach außen wirkend)
@@ -1645,6 +1740,11 @@ UID/GID-Neubau (A4/E7 gegen U1–U3). **L-B ist mit dem `test`-Profil erledigt:*
 
 ## Nächste Phase
 
+**P12 — Doku + Abschluss** (Akzeptanz-Gate gegen AK1–AK15), nachdem der offene
+Rest von P11 abgeräumt ist — siehe „Noch offen in P11".
+
+<details><summary>Ursprüngliche P11-Vorgabe (weitgehend eingelöst)</summary>
+
 **P11 — CI-Pipeline + Härtung.** Liefert `.github/workflows/ci.yml`, die
 OCI-Labels, Trivy und die SBOM-/Attestations-Schritte. Hängt an P8.
 
@@ -1676,3 +1776,5 @@ Was dabei zu beachten ist:
   gewachsen. Siehe Abschnitt „O6 — umgesetzt".
 
 Danach P12 (Doku + Abschluss, Akzeptanz-Gate gegen AK1–AK15).
+
+</details>

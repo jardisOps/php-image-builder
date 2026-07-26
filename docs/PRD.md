@@ -162,6 +162,7 @@ Zweiter Befund: Die Template-Config ist **unvollständig parametrisiert**. Subst
 - A4.3 Nach einer UID/GID-Änderung sind alle vom Image angelegten, `appuser` zugeordneten Pfade nachgezogen (behebt U3).
 - A4.4 Wird der Container von außen bereits mit `--user <uid>:<gid>` gestartet, unternimmt der Entrypoint keine Anpassung und das Image funktioniert dennoch mit einer im Image unbekannten UID.
 - A4.5 Das Verhalten ist auf Linux mit Host-UID ≠ 1000, mit belegter Ziel-GID und mit frischem Named Volume nachweislich geprüft.
+  > **Erbracht am 2026-07-26 (P11).** Der Nachweis läuft nicht auf einem GitHub-Runner — N6 verbietet die CI-Auslösung, und es gibt kein Repo. Stattdessen in einem `docker:28-dind`-Container: der **ist** ein Linux-Host mit echtem Linux-Dateisystem und eigenem Docker-Daemon, ein Bind-Mount daraus geht durch keine macOS-Dateibrücke. Entscheidung Rolf, 2026-07-26. Gleichwertig zum Runner-Nachweis und in einem Punkt strenger: die Fremd-UID ist frei wählbar (4711) statt vom Runner vorgegeben (1001). `support/tests/check-uid-linux-host.sh`, 13 Zusicherungen.
 
 ### ~~A5 — FrankenPHP als Docker-Image~~ — gestrichen (E11, 2026-07-25)
 
@@ -194,6 +195,7 @@ Xdebug, PCOV und OPcache/JIT bleiben in allen Targets fest eingebaut (E10). Ihre
 Die dort als H1–H6 priorisierten Maßnahmen werden im konsolidierten Repo umgesetzt:
 
 - A7.1 CVE-Scanning (Trivy) in der CI für **alle** Targets, CRITICAL/HIGH blockieren den Push (H1; hebt D14 auf, das heute `continue-on-error` ist).
+  > **Präzisiert am 2026-07-26 (Entscheidung Rolf, umgesetzt in P11):** blockierend sind CRITICAL/HIGH **mit verfügbarem Fix** (`ignore-unfixed: true`). Ein solcher Befund heißt, dass unser Image hinter dem Patchstand zurück ist — `apk upgrade` (A7.7/H10) hätte ihn geholt, das Gate ist also handlungsfähig. CVEs **ohne** verfügbaren Fix stecken im offiziellen `php:X-fpm-alpine` und sind von uns nicht behebbar; würden sie blockieren, wäre die Pipeline dauerhaft rot und der einzige Ausweg eine gepflegte `.trivyignore` mit Einzelfällen. Sie werden stattdessen vollständig in die Job-Summary berichtet und gehen damit nicht verloren. Abweichung vom Wortlaut, nicht vom Zweck.
 - A7.2 SBOM-Attestation für alle Targets (H2).
 - A7.3 CI-Permissions `id-token: write` + `attestations: write` für alle Build-Jobs (H3; hebt D13 auf).
 - A7.4 OCI-Labels `org.opencontainers.image.{source,version,revision,created}` in allen Dockerfiles (H4).

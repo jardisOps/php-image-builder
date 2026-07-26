@@ -41,6 +41,28 @@ FPM_IMAGE = $(DOCKER_HUB)/$(IMAGE_NAME_FPM)
 IMAGE_DATE ?= $(shell date -u +%Y%m%d)
 
 # ---------------------------------------------------------------------------
+# OCI-Labels (A7.4/H4)
+# ---------------------------------------------------------------------------
+# Drei abgeleitete Werte — deshalb hier und nicht in der .env, dieselbe
+# Begruendung wie bei IMAGE_DATE: ein von Hand gepflegter Commit-Hash oder
+# Zeitstempel verrottet ab dem naechsten Commit.
+#
+# IMAGE_SOURCE wird aus GITHUB_ORG/GITHUB_REPO der .env zusammengesetzt, statt
+# die URL ein zweites Mal zu pflegen (A2.1) — dieselben zwei Schluessel, die
+# `make init` fuer das Remote nutzt. HINWEIS: das Repo existiert noch nicht
+# (N6), die URL ist die in E8 festgelegte Zieladresse.
+#
+# IMAGE_REVISION meldet `unknown`, wenn ausserhalb eines Git-Arbeitsbaums
+# gebaut wird (Tarball, Build-Kontext ohne .git). Ein sichtbarer Platzhalter,
+# kein stiller Leerstring — dieselbe Linie wie ueberall sonst in diesem Repo.
+#
+# IMAGE_VERSION steht NICHT hier: es ist je Matrix-Eintrag verschieden
+# (<php>-<datum>) und entsteht deshalb in docker-bake.hcl.
+IMAGE_SOURCE   ?= https://github.com/$(GITHUB_ORG)/$(GITHUB_REPO)
+IMAGE_REVISION ?= $(shell git rev-parse HEAD 2>/dev/null || echo unknown)
+IMAGE_CREATED  ?= $(shell date -u +%Y-%m-%dT%H:%M:%SZ)
+
+# ---------------------------------------------------------------------------
 # Build-Schalter
 # ---------------------------------------------------------------------------
 PLATFORMS ?= linux/amd64 linux/arm64

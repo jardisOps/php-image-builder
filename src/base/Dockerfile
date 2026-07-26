@@ -228,3 +228,28 @@ WORKDIR ${APP_ROOT}
 # CMD, EXPOSE, STOPSIGNAL und HEALTHCHECK setzen cli (P4) und fpm (P5) — sie
 # folgen dem Einsatzzweck, nicht der gemeinsamen Grundlage.
 ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
+
+# ---------------------------------------------------------------------------
+# OCI-Labels (A7.4/H4)
+# ---------------------------------------------------------------------------
+# Sie stehen NUR hier und nicht zusaetzlich in cli/fpm: Labels werden ueber
+# `FROM base` vererbt, beide publizierten Images tragen sie also. Sie zu
+# wiederholen waere Doppelpflege (A2.1) — dieselbe Linie, aus der cli und fpm
+# auch WORKDIR und LABEL maintainer nicht wiederholen.
+#
+# Ganz am Ende der Stage, weil `revision` und `created` sich bei jedem Build
+# aendern: ein ARG invalidiert den Cache ab seiner Zeile. Hier steht nichts mehr
+# dahinter, was neu gebaut werden muesste.
+#
+# Kein ARG traegt einen Default (A2.4). Die Werte kommen aus
+# support/makefiles/docker.helper.mk ueber docker-bake.hcl; `revision` meldet
+# ausdruecklich `unknown`, wenn ausserhalb eines Git-Arbeitsbaums gebaut wird —
+# ein sichtbarer Platzhalter statt eines stillen Leerstrings.
+ARG IMAGE_SOURCE
+ARG IMAGE_VERSION
+ARG IMAGE_REVISION
+ARG IMAGE_CREATED
+LABEL org.opencontainers.image.source="${IMAGE_SOURCE}" \
+      org.opencontainers.image.version="${IMAGE_VERSION}" \
+      org.opencontainers.image.revision="${IMAGE_REVISION}" \
+      org.opencontainers.image.created="${IMAGE_CREATED}"

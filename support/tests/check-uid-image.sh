@@ -19,9 +19,11 @@
 #                        unerklaerliches "Permission denied" auf.
 #   root-eigenes Volume  frisches Volume, wie Docker es anlegt (U2)
 #
-# NICHT abgedeckt und bewusst offen: der Bind-Mount von einem echten Linux-Host.
-# Der bleibt P11 auf dem Linux-Runner — dort ist die Quelle der
-# Eigentuemerangabe eine andere, der Mechanismus derselbe.
+# NICHT abgedeckt: der Bind-Mount von einem echten Linux-Host. Den fuehrt seit
+# P11 check-uid-linux-host.sh in einem docker-in-docker-Linux-Host — dort ist
+# die Quelle der Eigentuemerangabe eine andere, der Mechanismus derselbe.
+# Beide Skripte bleiben nebeneinander: dieses laeuft ohne --privileged und
+# faengt denselben Fehler frueher.
 set -eu
 
 IMAGE=${1:?Aufruf: check-uid-image.sh <cli-image>}

@@ -34,7 +34,11 @@ variable "IMAGE_NAME_CLI" {}
 variable "IMAGE_NAME_FPM" {}
 
 # --- Build-Args des base-Targets --------------------------------------------
-# 27 Stueck; PHP_VERSION ist das 27. und kommt aus der Matrix, nicht aus der .env.
+# 31 Stueck (27 + die vier OCI-Label-Args aus P11). Nicht alle stehen als
+# `variable`: PHP_VERSION und IMAGE_VERSION kommen aus der Matrix bzw. werden
+# daraus gebildet, nicht aus der .env. Die Zahl ist per `bake --print`
+# gegengeprueft und keine Anforderung — sie stand hier schon einmal falsch
+# (Befund B14).
 variable "ALPINE_VERSION" {}
 variable "COMPOSER_VERSION" {}
 variable "APCU_VERSION" {}
@@ -61,6 +65,15 @@ variable "XDEBUG_CLIENT_HOST" {}
 variable "XDEBUG_CLIENT_PORT" {}
 variable "XDEBUG_LOG_LEVEL" {}
 variable "XDEBUG_IDEKEY" {}
+
+# --- OCI-Labels (A7.4/H4) ---------------------------------------------------
+# Abgeleitet in support/makefiles/docker.helper.mk. IMAGE_VERSION steht nicht
+# dabei: es ist je Matrix-Eintrag verschieden und entsteht unten aus php und
+# IMAGE_DATE — demselben Paar, das nach A1.3 auch den unveraenderlichen Tag
+# bildet. Damit sagt das Label genau, welchen Tag das Artefakt trägt.
+variable "IMAGE_SOURCE" {}
+variable "IMAGE_REVISION" {}
+variable "IMAGE_CREATED" {}
 
 # --- Build-Args des cli-Targets ---------------------------------------------
 variable "PHP_MAX_EXECUTION_TIME_CLI" {}
@@ -148,6 +161,11 @@ target "base" {
     XDEBUG_CLIENT_PORT            = XDEBUG_CLIENT_PORT
     XDEBUG_LOG_LEVEL              = XDEBUG_LOG_LEVEL
     XDEBUG_IDEKEY                 = XDEBUG_IDEKEY
+
+    IMAGE_SOURCE                  = IMAGE_SOURCE
+    IMAGE_VERSION                 = "${php}-${IMAGE_DATE}"
+    IMAGE_REVISION                = IMAGE_REVISION
+    IMAGE_CREATED                 = IMAGE_CREATED
   }
 }
 
