@@ -48,6 +48,15 @@ Arbeitsanweisung für Änderungen am Repo steht in `.claude/CLAUDE.md`.
 
 **Womit die nächste Session beginnt — der eine offene Punkt:**
 
+**Die Tag-Strategie dazu liegt vor: `docs/TAG-STRATEGIE.md`** (2026-07-26,
+Freigabe steht aus). Kernzahl der Recherche: **26 aktive Fundstellen hängen an
+genau einem Tag, `headgent/phpcli:8.3`** — `phpfpm`, `nginx`, `:latest` und 8.2
+haben null Konsumenten. Vorgeschlagen sind zwei Kanäle (`next`/`stable`),
+Beförderung per Registry-Retag statt Rebuild, sieben Stufen nach Schadensradius
+und ein Rettungstag `:<ver>-legacy` vor der ersten Beförderung. Neun
+Entscheidungspunkte T1–T9 warten dort auf Antwort; T9 (GitHub-Repo, Remote,
+Secrets, `PUBLISH_ENABLED`) ist der Moment, in dem N6 fällt.
+
 1. **N6 — der erste Push.** Der Workflow ist geschrieben, aber nicht scharf:
    `publish` läuft nur bei `vars.PUBLISH_ENABLED == 'true'`, und diese Variable
    existiert nicht. Kein `docker login`, kein `--push`, keine CI-Auslösung, bis

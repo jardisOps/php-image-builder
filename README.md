@@ -478,12 +478,15 @@ blockieren.
 > `true` steht — sie existiert nicht. Kein `docker login`, kein `--push`, keine
 > CI-Auslösung.
 >
-> Die Sperre bleibt, bis eine **Tag-Strategie** vorliegt und freigegeben ist.
-> `headgent/phpcli` und `headgent/phpfpm` sind publizierte Reihen mit
-> Konsumenten; der erste Push aus diesem Repo darf `:latest` und `:<ver>` nicht
-> unter den laufenden Projekten austauschen. Der Vorschlag steht in
-> `docs/PROGRESS.md`: zunächst nur ein Nebentag `:<ver>-next`, bis in einem
-> echten Projekt gegengeprüft.
+> Die Sperre bleibt, bis die **Tag-Strategie** freigegeben ist.
+> `headgent/phpcli` ist eine publizierte Reihe mit Konsumenten — gezählt: **26
+> aktive Fundstellen, alle auf `headgent/phpcli:8.3`**. Der erste Push aus
+> diesem Repo darf diesen Tag nicht unter den laufenden Projekten austauschen.
+>
+> Die Vorlage liegt in **`docs/TAG-STRATEGIE.md`**: zwei Kanäle (`next` und
+> `stable`), erster Push ausschließlich nach `:<ver>-next` und `:<ver>-<datum>`,
+> Beförderung später per Registry-Retag des geprüften Digests statt durch einen
+> zweiten Build.
 
 ---
 
@@ -548,6 +551,7 @@ Docker kennt kein „unexpose".
 | `docs/PLAN.md` | Bauform, Zielstruktur, Phasen |
 | `docs/PROGRESS.md` | **maßgeblich** — was jede Phase geliefert und nachgewiesen hat, jede Umsetzungsentscheidung mit Begründung, alle Befunde |
 | `docs/HANDOVER.md` | Einstieg und Stand |
+| `docs/TAG-STRATEGIE.md` | Entscheidungsvorlage für den ersten Push: Kanalmodell, Stufenplan, Rückweg |
 
 ## Lizenz
 
