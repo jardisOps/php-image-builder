@@ -2,8 +2,8 @@
 .DS_Store
 .claude
 
-# Arbeitsunterlagen — nicht Teil des Repos. Was dauerhaft gilt, steht in
-# README.md und support/HANDBOOK.md.
+# Working material, not part of the repository. What applies permanently lives
+# in README.md and support/HANDBOOK.md.
 docs/
 
 # Lokales buildx-Cache-Verzeichnis (CACHE_BACKEND=local, CACHE_DIR)

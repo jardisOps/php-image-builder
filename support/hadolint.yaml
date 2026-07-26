@@ -1,16 +1,10 @@
-# hadolint-Konfiguration fuer alle Dockerfiles dieses Repos:
-# src/base, src/cli und src/fpm.
-# Jeder Ignore unten ist eine bewusste Entscheidung fuer ein Basis-Image, kein
-# Versehen. (nginx wird hier nicht mehr gebaut — E9; das offizielle Image wird
-# unveraendert verwendet und bringt seinen Patch-Stand selbst mit.)
+# hadolint configuration for all Dockerfiles in this repo: src/base, src/cli,
+# and src/fpm. Each ignore below is a deliberate choice, not an oversight.
 ignored:
-  # DL3018 — "Pin versions in apk add". Die apk-Pakete sind Alpine-Systembibliotheken,
-  # die dem gepinnten ALPINE_VERSION-Build-Arg folgen. Jede Bibliotheksversion
-  # einzeln zu pinnen waere bruechig (die Versionen wechseln mit jedem
-  # Alpine-Point-Release) und pflegeintensiv fuer ein Basis-Image, dessen Aufgabe
-  # gerade darin besteht, mit Sicherheitspatches aktuell zu bleiben.
+  # DL3018 (pin apk versions): these packages follow the pinned ALPINE_VERSION
+  # build-arg, so pinning each library individually would be brittle and defeats
+  # the point of a base image that must stay current with security patches.
   - DL3018
-  # DL4006 — "Set pipefail before RUN with a pipe". Die einzige Pipe ist
-  # `yes "" | pecl install`; die linke Seite (`yes`) kann nicht sinnvoll
-  # fehlschlagen, pipefail bringt hier also keine zusaetzliche Sicherheit.
+  # DL4006 (set pipefail before a piped RUN): the only pipe is
+  # `yes "" | pecl install`, and its left side cannot meaningfully fail.
   - DL4006

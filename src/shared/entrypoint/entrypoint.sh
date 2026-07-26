@@ -1,23 +1,21 @@
 #!/bin/sh
 # ---------------------------------------------------------------------------
-# entrypoint.sh — gemeinsamer Entrypoint-Kern aller PHP-Targets
+# entrypoint.sh - shared entrypoint core for all PHP targets
 # ---------------------------------------------------------------------------
-# Existiert genau einmal (A3.1) und wird von cli und fpm unveraendert verwendet. In den Bestands-Repos war dieser Code zu rund 80 % dupliziert.
+# Used unchanged by both cli and fpm so the logic is not duplicated per target.
 #
-# Ablauf:
-#   1. Laufzeit-Benutzer an den Eigentuemer von /app angleichen   (lib-user.sh)
-#   2. PHP-Konfiguration aus APP_ENV-Profil + Overrides erzeugen  (lib-phpini.sh)
-#   3. Target-Ergaenzungen ausfuehren                             (entrypoint.d/)
-#   4. Rechte abgeben und die Nutzlast starten
+# Flow:
+#   1. Align the runtime user with the owner of /app        (lib-user.sh)
+#   2. Build the PHP configuration from APP_ENV + overrides  (lib-phpini.sh)
+#   3. Run target-specific extensions                        (entrypoint.d/)
+#   4. Drop privileges and hand over to the payload
 #
-# Target-spezifische Anteile — etwa die FPM-Pool-Erzeugung — liegen als eigene
-# Skripte in /usr/local/lib/entrypoint.d/ und werden hier nur eingesammelt
-# (A3.2). Dieser Kern kennt kein einziges Target namentlich.
+# Target-specific parts (e.g. FPM pool generation) live as separate scripts in
+# /usr/local/lib/entrypoint.d/ and are only collected here; this core knows no
+# target by name.
 #
-# POSIX-sh, nicht bash: derselbe Kern soll auch in einem Image ohne bash laufen.
-# Der urspruengliche Anlass (FrankenPHP-Alpine) ist mit E11 entfallen, die
-# Entscheidung bleibt — sie kostet nichts und haelt den Kern unabhaengig vom
-# Basis-Image. Geprueft wird mit shellcheck im dash-Dialekt.
+# POSIX sh, not bash, so the same core also runs on an image without bash.
+# Checked with shellcheck in the dash dialect.
 # ---------------------------------------------------------------------------
 set -eu
 
@@ -25,22 +23,21 @@ ENTRYPOINT_LIB_DIR='/usr/local/lib/entrypoint'
 ENTRYPOINT_EXT_DIR='/usr/local/lib/entrypoint.d'
 
 # ---------------------------------------------------------------------------
-# Meldungen
+# Logging
 # ---------------------------------------------------------------------------
-# Alles geht nach stderr, damit die Nutzlast-Ausgabe auf stdout unberuehrt
-# bleibt — wichtig, weil `docker run ... php -r ...` maschinell gelesen wird.
+# Everything goes to stderr so stdout stays clean for the payload - this
+# matters because `docker run ... php -r ...` output may be parsed by tooling.
 log_info() { printf 'entrypoint: %s\n' "$1" >&2; }
-log_warn() { printf 'entrypoint: WARNUNG: %s\n' "$1" >&2; }
+log_warn() { printf 'entrypoint: WARNING: %s\n' "$1" >&2; }
 
-# Bricht sichtbar ab. Kein Aufrufer unterdrueckt diesen Pfad — genau daran
-# scheiterte die bisherige UID-Behandlung (U1).
+# Aborts visibly. No caller suppresses this path.
 die() {
-    printf 'entrypoint: FEHLER: %s\n' "$1" >&2
+    printf 'entrypoint: ERROR: %s\n' "$1" >&2
     exit 1
 }
 
 # ---------------------------------------------------------------------------
-# Bibliotheken
+# Libraries
 # ---------------------------------------------------------------------------
 # shellcheck source=./lib-user.sh
 . "$ENTRYPOINT_LIB_DIR/lib-user.sh"
@@ -48,48 +45,37 @@ die() {
 . "$ENTRYPOINT_LIB_DIR/lib-phpini.sh"
 
 # ---------------------------------------------------------------------------
-# Target-Ergaenzungen
+# Target extensions
 # ---------------------------------------------------------------------------
-# Jede *.sh in entrypoint.d wird gesourct und darf die bereits aufgeloesten
-# Werte sowie INI_DIR, APP_USER und die Log-Funktionen nutzen. Reihenfolge ist
-# die lexikalische Sortierung.
+# Every *.sh in entrypoint.d is sourced and may use the already-resolved
+# values plus INI_DIR, APP_USER, and the log functions. Order is lexical.
 run_target_extensions() {
     [ -d "$ENTRYPOINT_EXT_DIR" ] || return 0
 
     for _ep_ext in "$ENTRYPOINT_EXT_DIR"/*.sh; do
         [ -f "$_ep_ext" ] || continue
-        log_info "Target-Ergaenzung: $(basename "$_ep_ext")"
+        log_info "target extension: $(basename "$_ep_ext")"
         # shellcheck source=/dev/null
         . "$_ep_ext"
     done
 }
 
 # ---------------------------------------------------------------------------
-# Uebergabe an die Nutzlast
+# Handover to the payload
 # ---------------------------------------------------------------------------
-# Der Container startet als root nur fuer die Einmal-Initialisierung und gibt die
-# Rechte hier ab. `exec` ersetzt die Shell, damit die Nutzlast PID 1 wird und
-# Signale unmittelbar erhaelt.
+# The container runs as root only for one-time initialization and drops
+# privileges here. `exec` replaces the shell so the payload becomes PID 1 and
+# receives signals directly.
 #
-# Ein leeres RUNTIME_USER heisst: kein Wechsel, die Nutzlast laeuft als root und
-# regelt den Rechtewechsel selbst. Genau das braucht php-fpm — siehe unten.
+# An empty RUNTIME_USER means no switch: the payload runs as root and handles
+# the privilege change itself - that is what php-fpm needs, see below.
 #
-# ENTFERNT (P5, 2026-07-25): hier stand ein `chown` auf /proc/self/fd/{1,2},
-# uebernommen aus beiden Bestands-Entrypoints samt der Begruendung, er sei fuer
-# php-fpm zwingend. Diese Begruendung ist falsch, der Griff ist WIRKUNGSLOS:
-# /proc/self/fd/2 ist ein Symlink auf eine anonyme Pipe (pipe:[...]), und das
-# pipefs nimmt die Eigentumsaenderung nicht an. `chown` meldet dabei Exit 0 —
-# es gibt also nicht einmal einen Fehler, den das danebenstehende `|| true`
-# verschlucken koennte. Dieselbe Fehlerklasse "still wirkungslos" wie U1, D16
-# und B1.
-#
-# Belegt am 2026-07-25: headgent/phpfpm:8.2, :8.3 und :8.4 starten deshalb ALLE
-# nicht ("failed to open error_log (/proc/self/fd/2): Permission denied"), mit
-# und ohne TTY, mit und ohne gemountetes /app. Auch `php-fpm --force-stderr`
-# hilft nicht, weil FPM das error_log schon beim Config-Post-Processing oeffnet.
-# Das fpm-Target loest das ueber N4-Variante (b): FPM startet als root und
-# wechselt seine Worker selbst per `user =` in der Pool-Config — das von PHP
-# vorgesehene Betriebsmodell, das auch das offizielle php:X-fpm-Image nutzt.
+# A `chown` on /proc/self/fd/{1,2} was deliberately removed here: that path is
+# a symlink to an anonymous pipe, and pipefs silently ignores ownership
+# changes on it (the chown reports exit 0 even though nothing happened). The
+# fpm target instead starts php-fpm as root and lets it drop its own workers
+# via `user =` in the pool config - the model the official php:X-fpm image
+# also uses.
 handover() {
     if [ "$(id -u)" != '0' ]; then
         exec "$@"
@@ -103,7 +89,7 @@ handover() {
 }
 
 # ---------------------------------------------------------------------------
-# Orchestrierung — keine eigene Logik, nur Verkettung
+# Orchestration - no logic of its own, only chaining
 # ---------------------------------------------------------------------------
 main() {
     align_runtime_user

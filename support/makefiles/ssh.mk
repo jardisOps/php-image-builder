@@ -2,70 +2,70 @@
 # SSH Key Management
 # ---------------------------------------------------------------------------
 ##@ SSH Keys
-ssh-generate-rsa: ## RSA SSH-Schlüssel generieren (4096-bit)
-	@echo "🔑 Generiere RSA SSH-Schlüssel (4096-bit)..."
-	@read -p "📝 Dateiname (ohne Endung): " filename; \
+ssh-generate-rsa: ## Generate an RSA SSH key (4096-bit)
+	@echo "🔑 Generating RSA SSH key (4096-bit)..."
+	@read -p "📝 Filename (without extension): " filename; \
 	if [ -z "$$filename" ]; then \
-		echo "❌ Dateiname erforderlich"; exit 1; \
+		echo "❌ Filename required"; exit 1; \
 	fi; \
 	if [ -f "$$filename" ] || [ -f "$$filename.pub" ]; then \
-		echo "⚠️  Datei existiert bereits. Überschreiben? (y/N)"; \
+		echo "⚠️  File already exists. Overwrite? (y/N)"; \
 		read -p "> " confirm; \
 		if [ "$$confirm" != "y" ] && [ "$$confirm" != "Y" ]; then \
-			echo "❌ Abgebrochen"; exit 1; \
+			echo "❌ Aborted"; exit 1; \
 		fi; \
 	fi; \
 	ssh-keygen -t rsa -b 4096 -f "$$filename" -C "$$(whoami)@$$(hostname)-$$(date +%Y%m%d)"; \
-	echo "✅ RSA-Schlüssel generiert: $$filename / $$filename.pub"
+	echo "✅ RSA key generated: $$filename / $$filename.pub"
 .PHONY: ssh-generate-rsa
 
-ssh-generate-ed25519: ## ED25519 SSH-Schlüssel generieren (empfohlen)
-	@echo "🔑 Generiere ED25519 SSH-Schlüssel..."
-	@read -p "📝 Dateiname (ohne Endung): " filename; \
+ssh-generate-ed25519: ## Generate an ED25519 SSH key (recommended)
+	@echo "🔑 Generating ED25519 SSH key..."
+	@read -p "📝 Filename (without extension): " filename; \
 	if [ -z "$$filename" ]; then \
-		echo "❌ Dateiname erforderlich"; exit 1; \
+		echo "❌ Filename required"; exit 1; \
 	fi; \
 	if [ -f "$$filename" ] || [ -f "$$filename.pub" ]; then \
-		echo "⚠️  Datei existiert bereits. Überschreiben? (y/N)"; \
+		echo "⚠️  File already exists. Overwrite? (y/N)"; \
 		read -p "> " confirm; \
 		if [ "$$confirm" != "y" ] && [ "$$confirm" != "Y" ]; then \
-			echo "❌ Abgebrochen"; exit 1; \
+			echo "❌ Aborted"; exit 1; \
 		fi; \
 	fi; \
 	ssh-keygen -t ed25519 -f "$$filename" -C "$$(whoami)@$$(hostname)-$$(date +%Y%m%d)"; \
-	echo "✅ ED25519-Schlüssel generiert: $$filename / $$filename.pub"
+	echo "✅ ED25519 key generated: $$filename / $$filename.pub"
 .PHONY: ssh-generate-ed25519
 
-ssh-show-keys: ## Alle SSH-Schlüssel anzeigen
-	@echo "🔍 SSH-Schlüssel im aktuellen Verzeichnis:"
-	@find . -maxdepth 1 -name "*.pub" -exec basename {} \; 2>/dev/null | sort | sed 's/^/  📄 /' || echo "  Keine .pub-Dateien gefunden"
+ssh-show-keys: ## Show all SSH keys
+	@echo "🔍 SSH keys in the current directory:"
+	@find . -maxdepth 1 -name "*.pub" -exec basename {} \; 2>/dev/null | sort | sed 's/^/  📄 /' || echo "  No .pub files found"
 	@echo ""
-	@echo "🔐 Geladene SSH-Keys im Agent:"
-	@ssh-add -l 2>/dev/null | sed 's/^/  🔑 /' || echo "  Keine Keys im SSH-Agent"
+	@echo "🔐 Keys loaded in the agent:"
+	@ssh-add -l 2>/dev/null | sed 's/^/  🔑 /' || echo "  No keys in the SSH agent"
 .PHONY: ssh-show-keys
 
-ssh-add-key: ## SSH-Schlüssel zum Agent hinzufügen
-	@echo "🔍 Verfügbare private Keys:"
-	@find . -maxdepth 1 -type f ! -name "*.pub" -exec sh -c 'file "{}" 2>/dev/null | grep -q "private key" && basename "{}"' \; | sort | sed 's/^/  📄 /' || echo "  Keine private Keys gefunden"
-	@read -p "📝 Welchen Key hinzufügen? " keyfile; \
+ssh-add-key: ## Add an SSH key to the agent
+	@echo "🔍 Available private keys:"
+	@find . -maxdepth 1 -type f ! -name "*.pub" -exec sh -c 'file "{}" 2>/dev/null | grep -q "private key" && basename "{}"' \; | sort | sed 's/^/  📄 /' || echo "  No private keys found"
+	@read -p "📝 Which key to add? " keyfile; \
 	if [ -z "$$keyfile" ]; then \
-		echo "❌ Kein Key angegeben"; exit 1; \
+		echo "❌ No key specified"; exit 1; \
 	fi; \
 	if [ ! -f "$$keyfile" ]; then \
-		echo "❌ Datei nicht gefunden: $$keyfile"; exit 1; \
+		echo "❌ File not found: $$keyfile"; exit 1; \
 	fi; \
-	ssh-add "$$keyfile" && echo "✅ Key hinzugefügt: $$keyfile"
+	ssh-add "$$keyfile" && echo "✅ Key added: $$keyfile"
 .PHONY: ssh-add-key
 
-ssh-start-agent: ## SSH-Agent starten und Keys laden
+ssh-start-agent: ## Start the SSH agent and load keys
 	@if [ -z "$$SSH_AUTH_SOCK" ]; then \
-		echo "🚀 Starte SSH-Agent..."; \
+		echo "🚀 Starting SSH agent..."; \
 		eval $$(ssh-agent -s); \
 		echo "SSH_AUTH_SOCK=$$SSH_AUTH_SOCK"; \
 		echo "SSH_AGENT_PID=$$SSH_AGENT_PID"; \
 	else \
-		echo "✅ SSH-Agent läuft bereits"; \
+		echo "✅ SSH agent already running"; \
 	fi
-	@echo "🔑 Lade verfügbare Keys..."
-	@ssh-add 2>/dev/null || echo "⚠️  Keine Standard-Keys gefunden"
+	@echo "🔑 Loading available keys..."
+	@ssh-add 2>/dev/null || echo "⚠️  No default keys found"
 .PHONY: ssh-start-agent

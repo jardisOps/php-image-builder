@@ -1,76 +1,71 @@
 # ---------------------------------------------------------------------------
-# docker.helper.mk — Konfiguration & Helfer
+# docker.helper.mk — configuration & helpers
 # ---------------------------------------------------------------------------
-# Traegt alles, was mehrere Build-Module gemeinsam brauchen: Image-Referenzen,
-# die Versions-Matrix, das Cache-Backend und den buildx-Builder. Die Build- und
-# Push-Targets selbst liegen in docker.build.local.mk / docker.build.push.mk und
-# sind duenne Wrapper um docker-bake.hcl.
+# Carries everything several build modules need in common: image references,
+# the version matrix, the cache backend, and the buildx builder. The build and
+# push targets themselves live in docker.build.local.mk / docker.build.push.mk
+# as thin wrappers around docker-bake.hcl.
 #
-# Werte kommen aus ../../.env — hier stehen nur Ableitungen und Build-Schalter.
+# Values come from ../../.env — this file only holds derivations and switches.
 # ---------------------------------------------------------------------------
 ##@ Build
 
 # ---------------------------------------------------------------------------
-# Versions-Matrix
+# Version matrix
 # ---------------------------------------------------------------------------
-# Einzige Definition der Build-Matrix; PHP_LATEST wird abgeleitet, nicht
-# gepflegt (in den Bestands-Repos war das zweimal unterschiedlich gelöst).
-#
-# 8.2 wurde am 2026-07-25 auf Anweisung des Users gestrichen, 8.5 aufgenommen.
-# Die Reihe ist damit 8.3 / 8.4 / 8.5; PHP_LATEST wird zu 8.5 und treibt den
-# :latest-Tag. Die Bestands-Repos bauten 8.2/8.3/8.4.
+# The single definition of the build matrix; PHP_LATEST is derived, not
+# maintained separately. The series is 8.3 / 8.4 / 8.5; PHP_LATEST resolves to
+# 8.5 and drives the :latest tag.
 PHP_VERSIONS ?= 8.3 8.4 8.5
 PHP_LATEST   := $(lastword $(PHP_VERSIONS))
 
 # ---------------------------------------------------------------------------
-# Image-Referenzen
+# Image references
 # ---------------------------------------------------------------------------
-# Die Namen selbst stehen in .env (E2: unveraendert gegenueber den
-# Bestands-Repos); hier entstehen nur die vollen Registry-Referenzen.
+# The names themselves live in .env; this only builds the full registry
+# references.
 CLI_IMAGE = $(DOCKER_HUB)/$(IMAGE_NAME_CLI)
 FPM_IMAGE = $(DOCKER_HUB)/$(IMAGE_NAME_FPM)
 
 # ---------------------------------------------------------------------------
-# Unveraenderliches Datums-Tag (UTC)
+# Immutable date tag (UTC)
 # ---------------------------------------------------------------------------
-# Wird in den Push-Targets neben die wandernden :<ver>/:latest-Tags gesetzt und
-# bindet alle Artefakte EINES Laufs an denselben Versionsstring (A1.3), sodass
-# Konsumenten eine reproduzierbare Kombination pinnen koennen
-# (z.B. headgent/phpcli:8.4-20260725 + headgent/phpfpm:8.4-20260725).
-# Fuer einen reproduzierbaren Re-Tag ueberschreibbar: make ... IMAGE_DATE=20260725
+# Set in the push targets alongside the moving :<ver>/:latest tags, binding all
+# artifacts of one run to the same version string so consumers can pin a
+# reproducible combination (e.g. headgent/phpcli:8.4-20260725 +
+# headgent/phpfpm:8.4-20260725). Overridable for a reproducible re-tag:
+# make ... IMAGE_DATE=20260725
 IMAGE_DATE ?= $(shell date -u +%Y%m%d)
 
 # ---------------------------------------------------------------------------
-# OCI-Labels (A7.4/H4)
+# OCI labels
 # ---------------------------------------------------------------------------
-# Drei abgeleitete Werte — deshalb hier und nicht in der .env, dieselbe
-# Begruendung wie bei IMAGE_DATE: ein von Hand gepflegter Commit-Hash oder
-# Zeitstempel verrottet ab dem naechsten Commit.
+# Three derived values, kept here rather than in .env: a hand-maintained
+# commit hash or timestamp would go stale after the next commit.
 #
-# IMAGE_SOURCE wird aus GITHUB_ORG/GITHUB_REPO der .env zusammengesetzt, statt
-# die URL ein zweites Mal zu pflegen (A2.1) — dieselben zwei Schluessel, die
-# `make init` fuer das Remote nutzt. HINWEIS: das Repo existiert noch nicht
-# (N6), die URL ist die in E8 festgelegte Zieladresse.
+# IMAGE_SOURCE is assembled from GITHUB_ORG/GITHUB_REPO in .env rather than
+# maintaining the URL a second time — the same two keys `make init` uses for
+# the remote.
 #
-# IMAGE_REVISION meldet `unknown`, wenn ausserhalb eines Git-Arbeitsbaums
-# gebaut wird (Tarball, Build-Kontext ohne .git). Ein sichtbarer Platzhalter,
-# kein stiller Leerstring — dieselbe Linie wie ueberall sonst in diesem Repo.
+# IMAGE_REVISION reports `unknown` when built outside a git working tree
+# (tarball, build context without .git) — a visible placeholder, not a silent
+# empty string.
 #
-# IMAGE_VERSION steht NICHT hier: es ist je Matrix-Eintrag verschieden
-# (<php>-<datum>) und entsteht deshalb in docker-bake.hcl.
+# IMAGE_VERSION is not here: it differs per matrix entry (<php>-<date>) and is
+# built in docker-bake.hcl instead.
 IMAGE_SOURCE   ?= https://github.com/$(GITHUB_ORG)/$(GITHUB_REPO)
 IMAGE_REVISION ?= $(shell git rev-parse HEAD 2>/dev/null || echo unknown)
 IMAGE_CREATED  ?= $(shell date -u +%Y-%m-%dT%H:%M:%SZ)
 
 # ---------------------------------------------------------------------------
-# Build-Schalter
+# Build switches
 # ---------------------------------------------------------------------------
 PLATFORMS ?= linux/amd64 linux/arm64
 NO_CACHE  ?= false
 
-# bake will die Plattformen kommasepariert, gepflegt sind sie (wie ueberall im
-# Repo) leerzeichensepariert. Die Umrechnung steht hier einmal, damit PLATFORMS
-# die einzige gepflegte Form bleibt.
+# bake wants the platforms comma-separated; they are maintained
+# space-separated like everywhere else in the repo. The conversion happens
+# here once so PLATFORMS stays the one maintained form.
 comma         := ,
 empty         :=
 space         := $(empty) $(empty)
@@ -80,42 +75,42 @@ BUILD_EXTRA_FLAGS  ?=
 BUILD_ATTEST_FLAGS ?= --provenance=mode=max --attest=type=sbom
 
 # ---------------------------------------------------------------------------
-# Cache-Backend: auto|none|local|registry|gha
+# Cache backend: auto|none|local|registry|gha
 # ---------------------------------------------------------------------------
 CACHE_BACKEND ?= auto
 CACHE_REF     ?=
 CACHE_DIR     ?= .buildx-cache
 
 # ---------------------------------------------------------------------------
-# buildx-Builder
+# buildx builder
 # ---------------------------------------------------------------------------
 BUILDX_BUILDER ?= multiarch-builder
 
-buildx-builder-create: ## Multiarch-Builder anlegen bzw. aktivieren
+buildx-builder-create: ## Create or activate the multiarch builder
 	@if docker buildx ls | grep -q '$(BUILDX_BUILDER)'; then \
-		echo "✅ $(BUILDX_BUILDER) existiert bereits"; \
+		echo "✅ $(BUILDX_BUILDER) already exists"; \
 		docker buildx use $(BUILDX_BUILDER); \
 	else \
-		echo "🔧 $(BUILDX_BUILDER) wird angelegt ..."; \
+		echo "🔧 Creating $(BUILDX_BUILDER) ..."; \
 		docker buildx create --name $(BUILDX_BUILDER) --use --driver docker-container; \
 	fi
 .PHONY: buildx-builder-create
 
-builder-reset: ## Multiarch-Builder loeschen und neu anlegen
-	@echo "🔄 $(BUILDX_BUILDER) wird zurueckgesetzt ..."
+builder-reset: ## Remove and recreate the multiarch builder
+	@echo "🔄 Resetting $(BUILDX_BUILDER) ..."
 	@docker buildx rm $(BUILDX_BUILDER) 2>/dev/null || true
 	@docker buildx create --name $(BUILDX_BUILDER) --use --driver docker-container
-	@echo "✅ $(BUILDX_BUILDER) wurde neu erstellt"
+	@echo "✅ $(BUILDX_BUILDER) recreated"
 .PHONY: builder-reset
 
-build-cache-delete: ## Alle gecachten Image-Layer loeschen
+build-cache-delete: ## Delete all cached image layers
 	@docker buildx prune -a -f
 .PHONY: build-cache-delete
 
 # ---------------------------------------------------------------------------
-# cache_flags — setzt CFROM/CTO fuer den gewaehlten Backend-Typ
+# cache_flags — sets CFROM/CTO for the chosen backend type
 # ---------------------------------------------------------------------------
-# In eine Shell-Zeile eingebunden: $(call cache_flags) ; docker buildx bake ...
+# Embedded in one shell line: $(call cache_flags) ; docker buildx bake ...
 define cache_flags
   set +u; \
   BACKEND="$${CACHE_BACKEND:-auto}"; \
@@ -127,14 +122,14 @@ define cache_flags
   case "$$BACKEND" in \
     gha)      CFROM="--set=*.cache-from=type=gha"; \
               CTO="--set=*.cache-to=type=gha,mode=max";; \
-    registry) if [ -z "$(CACHE_REF)" ]; then echo "FEHLER: CACHE_REF ist fuer das registry-Backend erforderlich" >&2; exit 2; fi; \
+    registry) if [ -z "$(CACHE_REF)" ]; then echo "ERROR: CACHE_REF is required for the registry backend" >&2; exit 2; fi; \
               CFROM="--set=*.cache-from=type=registry,ref=$(CACHE_REF)"; \
               CTO="--set=*.cache-to=type=registry,ref=$(CACHE_REF),mode=max";; \
     local)    mkdir -p "$(CACHE_DIR)"; \
               CFROM="--set=*.cache-from=type=local,src=$(CACHE_DIR)"; \
               CTO="--set=*.cache-to=type=local,dest=$(CACHE_DIR),mode=max";; \
     none|"")  CFROM=""; CTO="";; \
-    *)        echo "FEHLER: unbekanntes CACHE_BACKEND=$$BACKEND" >&2; exit 2;; \
+    *)        echo "ERROR: unknown CACHE_BACKEND=$$BACKEND" >&2; exit 2;; \
   esac; \
-  echo ">> Cache-Backend: $$BACKEND"
+  echo ">> Cache backend: $$BACKEND"
 endef

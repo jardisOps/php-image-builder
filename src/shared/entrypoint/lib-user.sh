@@ -1,39 +1,29 @@
 # shellcheck shell=dash
 # ---------------------------------------------------------------------------
-# lib-user.sh — Angleichung des Laufzeit-Benutzers an den Eigentuemer von /app
+# lib-user.sh - align the runtime user with the owner of /app
 # ---------------------------------------------------------------------------
-# Wird von entrypoint.sh gesourct und nie direkt ausgefuehrt.
+# Sourced by entrypoint.sh, never executed directly.
 #
-# Erwartet:  APP_USER, APP_ROOT, log_info/log_warn/die (aus entrypoint.sh)
-# Optional:  APP_OWNED_PATHS — zusaetzliche, vom Image angelegte Pfade, die
-#            appuser gehoeren (z.B. "/run/php-fpm" im fpm-Target). Erlaubt es
-#            einem Target, A4.3 zu erfuellen, ohne diesen Kern anzufassen.
-# Setzt:     RUNTIME_USER — Argument fuer su-exec; leer = kein Wechsel.
+# Expects: APP_USER, APP_ROOT, log_info/log_warn/die (from entrypoint.sh)
+# Optional: APP_OWNED_PATHS - additional image-created paths owned by
+#           appuser (e.g. "/run/php-fpm" in the fpm target), letting a
+#           target extend ownership without touching this core.
+# Sets:     RUNTIME_USER - argument for su-exec; empty means no switch.
 #
-# Diese Datei ist ein struktureller Neubau (E7), kein Patch der bisherigen
-# Heuristik. Die drei belegten Defekte des Bestands:
-#   U1  groupmod/usermod scheiterten bei belegter Ziel-ID, und `2>/dev/null || true`
-#       verschluckte den Fehler — die Anpassung fand nicht statt und trat spaeter
-#       als unerklaerliches "Permission denied" auf. Alpine belegt u.a. GID 20
-#       (dialout) und GID 100 (users), beides haeufige Host-GIDs.
-#   U2  `[ "$HOST_UID" != "0" ]` uebersprang den Fall "/app gehoert root", also
-#       genau das frische Named Volume, bei dem appuser nicht schreiben kann.
-#   U3  usermod zog keinen chown nach; Dateien der alten UID verwaisten.
-#
-# Leitlinie: jede ID-Aenderung gelingt sichtbar oder scheitert sichtbar. Es gibt
-# keinen Pfad, auf dem ein Fehler unterdrueckt wird.
+# Every ID change either succeeds visibly or fails visibly; no path here
+# silently swallows an error.
 # ---------------------------------------------------------------------------
 
-# --- Abfragen ---------------------------------------------------------------
+# --- Queries -----------------------------------------------------------------
 
-# Primaere GID von APP_USER (numerisch — der Gruppenname ist nach einer
-# Wiederverwendung nicht mehr zwingend "appuser").
+# Primary GID of APP_USER (numeric - the group name is no longer guaranteed
+# to be "appuser" after a reuse).
 appuser_gid() { id -g "$APP_USER"; }
 appuser_uid() { id -u "$APP_USER"; }
 
-# chown-Eigentuemer-Angabe. Nutzt bewusst die numerische GID: nach
-# `usermod -g <fremde GID>` existiert die Gruppe "appuser" noch mit ihrer alten
-# GID, ein `chown appuser:appuser` wuerde also die falsche Gruppe setzen.
+# chown owner spec. Uses the numeric GID deliberately: after
+# `usermod -g <foreign GID>` the "appuser" group still exists under its old
+# GID, so `chown appuser:appuser` would set the wrong group.
 appuser_owner() { printf '%s:%s' "$APP_USER" "$(appuser_gid)"; }
 
 uid_is_taken() { getent passwd "$1" >/dev/null 2>&1; }
@@ -44,54 +34,52 @@ name_of_gid() { getent group  "$1" | cut -d: -f1; }
 
 dir_is_empty() { [ -z "$(ls -A "$1" 2>/dev/null)" ]; }
 
-# --- Angleichung ------------------------------------------------------------
+# --- Alignment -----------------------------------------------------------------
 
-# Primaergruppe von APP_USER auf die Ziel-GID bringen.
-# Belegte Ziel-GID => die existierende Gruppe wird wiederverwendet (A4.1),
-# statt sie umzunummerieren und damit ein Systemkonto zu beschaedigen.
+# Bring APP_USER's primary group to the target GID.
+# A taken target GID means the existing group is reused instead of
+# renumbering it and damaging a system account.
 align_group() {
     _lu_target="$1"
 
     [ "$(appuser_gid)" = "$_lu_target" ] && return 0
 
     if gid_is_taken "$_lu_target"; then
-        log_info "GID $_lu_target ist von Gruppe '$(name_of_gid "$_lu_target")' belegt — sie wird wiederverwendet, statt umnummeriert."
+        log_info "GID $_lu_target is taken by group '$(name_of_gid "$_lu_target")' - reusing it instead of renumbering."
         usermod -g "$_lu_target" "$APP_USER" \
-            || die "Konnte $APP_USER nicht der bestehenden Gruppe mit GID $_lu_target zuordnen."
+            || die "Could not assign $APP_USER to the existing group with GID $_lu_target."
     else
         groupmod -g "$_lu_target" "$APP_USER" \
-            || die "Konnte GID der Gruppe '$APP_USER' nicht auf $_lu_target aendern."
+            || die "Could not change the GID of group '$APP_USER' to $_lu_target."
     fi
 
     LU_IDS_CHANGED=1
 }
 
-# UID von APP_USER auf die Ziel-UID bringen.
-# Belegte Ziel-UID => der Prozess laeuft direkt unter der numerischen Kennung
-# (A4.1, Wiederverwendung). APP_USER umzunummerieren ist hier unmoeglich:
-# usermod verweigert eine belegte UID, und sie freizuraeumen hiesse, ein
-# vorhandenes Konto zu beschaedigen.
+# Bring APP_USER's UID to the target UID.
+# A taken target UID means the process runs directly under that numeric ID
+# instead: usermod refuses a taken UID, and freeing it would damage an
+# existing account.
 align_user() {
     _lu_target="$1"
 
     [ "$(appuser_uid)" = "$_lu_target" ] && return 0
 
     if uid_is_taken "$_lu_target"; then
-        log_warn "UID $_lu_target ist von Benutzer '$(name_of_uid "$_lu_target")' belegt. $APP_USER wird deshalb nicht umnummeriert; der Prozess laeuft direkt unter $_lu_target:$(appuser_gid). Schreibzugriff auf $APP_ROOT ist damit gegeben, HOME bleibt jedoch /home/$APP_USER und ist nicht beschreibbar."
+        log_warn "UID $_lu_target is taken by user '$(name_of_uid "$_lu_target")'. $APP_USER is therefore not renumbered; the process runs directly as $_lu_target:$(appuser_gid). Write access to $APP_ROOT is thereby given, but HOME stays /home/$APP_USER and is not writable."
         RUNTIME_USER="$_lu_target:$(appuser_gid)"
         return 0
     fi
 
     usermod -u "$_lu_target" "$APP_USER" \
-        || die "Konnte UID von '$APP_USER' nicht auf $_lu_target aendern."
+        || die "Could not change the UID of '$APP_USER' to $_lu_target."
 
     LU_IDS_CHANGED=1
 }
 
-# A4.3 — nach einer ID-Aenderung alle vom Image angelegten, APP_USER
-# zugeordneten Pfade nachziehen. Ohne diesen Schritt verwaisen sie bei der
-# alten UID (U3). APP_ROOT ist bewusst NICHT dabei: dessen Eigentuemer ist die
-# Vorgabe, an die wir uns gerade angepasst haben.
+# After an ID change, re-chown every image-created path owned by APP_USER -
+# otherwise they stay orphaned under the old UID. APP_ROOT is deliberately
+# excluded: its ownership is the target we just aligned to.
 reown_image_paths() {
     [ "${LU_IDS_CHANGED:-0}" = '1' ] || return 0
 
@@ -99,57 +87,55 @@ reown_image_paths() {
     for _lu_path in "/home/$APP_USER" ${APP_OWNED_PATHS:-}; do
         [ -e "$_lu_path" ] || continue
         chown -R "$_lu_owner" "$_lu_path" \
-            || die "Konnte $_lu_path nicht auf $_lu_owner uebertragen."
+            || die "Could not transfer $_lu_path to $_lu_owner."
     done
-    log_info "Eigentum nachgezogen auf $_lu_owner: /home/$APP_USER ${APP_OWNED_PATHS:-}"
+    log_info "Ownership transferred to $_lu_owner: /home/$APP_USER ${APP_OWNED_PATHS:-}"
 }
 
-# A4.2 — /app gehoert root. Der Bestand uebersprang diesen Fall und lief in ein
-# nicht schreibbares Volume. Behandelt wird er, indem das Verzeichnis selbst an
-# APP_USER uebergeht; ein rekursives chown findet bewusst nicht statt, weil es
-# auf einem bind-gemounteten, absichtlich root-eigenen Baum fremde Daten
-# umschreiben wuerde.
+# /app is owned by root. Handled by transferring the directory itself to
+# APP_USER; a recursive chown is deliberately skipped, since it would rewrite
+# foreign data on a bind-mounted, intentionally root-owned tree.
 claim_root_owned_app_root() {
     _lu_owner="$(appuser_owner)"
 
     chown "$_lu_owner" "$APP_ROOT" \
-        || die "$APP_ROOT gehoert root und liess sich nicht an $_lu_owner uebertragen."
+        || die "$APP_ROOT is owned by root and could not be transferred to $_lu_owner."
 
     if dir_is_empty "$APP_ROOT"; then
-        log_info "$APP_ROOT gehoerte root und ist leer (frisches Named Volume) — Eigentum an $_lu_owner uebertragen."
+        log_info "$APP_ROOT was owned by root and is empty (fresh named volume) - ownership transferred to $_lu_owner."
     else
-        log_warn "$APP_ROOT gehoerte root und ist nicht leer. Uebertragen wurde nur das Verzeichnis selbst, die Inhalte gehoeren weiter root. Bei Schreibfehlern: Eigentuemer auf dem Host korrigieren oder den Container mit --user <uid>:<gid> starten."
+        log_warn "$APP_ROOT was owned by root and is not empty. Only the directory itself was transferred; its contents remain owned by root. On write errors: fix ownership on the host or start the container with --user <uid>:<gid>."
     fi
 }
 
-# --- Einstiegspunkt ---------------------------------------------------------
+# --- Entry point ---------------------------------------------------------
 
-# Bestimmt, unter welcher Kennung die Nutzlast laufen soll, und stellt die dafuer
-# noetigen Eigentumsverhaeltnisse her.
+# Determines which identity the payload should run as and establishes the
+# ownership needed for it.
 align_runtime_user() {
     RUNTIME_USER=''
     LU_IDS_CHANGED=0
 
-    # A4.4 — von aussen bereits per --user gestartet. Dann ist die Kennung eine
-    # Vorgabe des Aufrufers und wird nicht angetastet; ohne root-Rechte waere
-    # jede Anpassung ohnehin unmoeglich.
+    # Already started with --user from outside: that identity is the
+    # caller's choice and is left untouched; without root, no adjustment
+    # would be possible anyway.
     if [ "$(id -u)" != '0' ]; then
-        log_info "Laeuft als UID $(id -u):$(id -g) (von aussen vorgegeben) — keine Anpassung."
+        log_info "Running as UID $(id -u):$(id -g) (given from outside) - no adjustment."
         return 0
     fi
 
-    # shellcheck disable=SC2034  # von entrypoint.sh (handover) gelesen, nicht hier
+    # shellcheck disable=SC2034  # read by entrypoint.sh (handover), not here
     RUNTIME_USER="$APP_USER"
 
     if [ ! -d "$APP_ROOT" ]; then
-        log_info "$APP_ROOT existiert nicht — keine Anpassung noetig."
+        log_info "$APP_ROOT does not exist - no adjustment needed."
         return 0
     fi
 
     _lu_app_uid="$(stat -c '%u' "$APP_ROOT")" \
-        || die "Konnte den Eigentuemer von $APP_ROOT nicht ermitteln."
+        || die "Could not determine the owner of $APP_ROOT."
     _lu_app_gid="$(stat -c '%g' "$APP_ROOT")" \
-        || die "Konnte die Gruppe von $APP_ROOT nicht ermitteln."
+        || die "Could not determine the group of $APP_ROOT."
 
     if [ "$_lu_app_uid" = '0' ]; then
         claim_root_owned_app_root

@@ -1,46 +1,44 @@
 # ---------------------------------------------------------------------------
-# docker.build.push.mk — Multi-Arch-Builds mit Push in die Registry
+# docker.build.push.mk — multi-arch builds with push to the registry
 # ---------------------------------------------------------------------------
-# Gleicher Wrapper wie docker.build.local.mk, drei Unterschiede:
-#   --push statt --load      (multi-arch laesst sich nicht lokal laden)
-#   --set '*.platform=...'   aus PLATFORMS (docker.helper.mk)
-#   BUILD_ATTEST_FLAGS       Provenance + SBOM (A7.2/H2)
+# Same wrapper as docker.build.local.mk, three differences:
+#   --push instead of --load   (multi-arch cannot be loaded locally)
+#   --set '*.platform=...'     from PLATFORMS (docker.helper.mk)
+#   BUILD_ATTEST_FLAGS         provenance + SBOM
 #
-# ACHTUNG — NICHT AUSGEFUEHRT. Diese Targets sind geschrieben, aber bewusst nie
-# gelaufen. Der erste Push auf headgent/phpcli bzw. headgent/phpfpm ist der
-# einzige Punkt dieses Vorhabens mit Aussenwirkung (docs/TAG-STRATEGIE.md):
-# er ueberschreibt die wandernden Tags :<ver> und :latest, die laufende Projekte
-# ziehen. Vor dem ersten Lauf wird eine Tag-Strategie vorgelegt und freigegeben.
+# WARNING — NEVER RUN. These targets are written but deliberately never
+# executed. The first push to headgent/phpcli or headgent/phpfpm overwrites
+# the moving :<ver> and :latest tags that running projects pull, so it needs
+# an approved tag strategy before it ever runs.
 # ---------------------------------------------------------------------------
 ##@ Image Builder (Push to Registry)
 
-push: buildx-builder-create .check-docker-login ## Baut und pusht cli und fpm fuer PHP_VERSION (multi-arch)
-	@echo "🚀 Baue und pushe $(if $(strip $(BAKE_TARGETS)),$(BAKE_TARGETS),cli + fpm) fuer PHP $(PHP_VERSION) ..."
+push: buildx-builder-create .check-docker-login ## Build and push cli and fpm for PHP_VERSION (multi-arch)
+	@echo "🚀 Building and pushing $(if $(strip $(BAKE_TARGETS)),$(BAKE_TARGETS),cli + fpm) for PHP $(PHP_VERSION) ..."
 	@$(call cache_flags); \
 	 PHP_VERSIONS="$(PHP_VERSION)" docker buildx bake -f $(BAKE_FILE) --push \
 	   --set '*.platform=$(PLATFORMS_CSV)' \
 	   $$CFROM $$CTO $(BUILD_ATTEST_FLAGS) $(BUILD_EXTRA_FLAGS) $(BAKE_TARGETS)
-	@echo "✅ Gepusht — PHP $(PHP_VERSION) (+ :$(PHP_VERSION)-$(IMAGE_DATE))"
+	@echo "✅ Pushed — PHP $(PHP_VERSION) (+ :$(PHP_VERSION)-$(IMAGE_DATE))"
 .PHONY: push
 
-push-all: buildx-builder-create .check-docker-login ## Baut und pusht cli und fpm fuer ALLE PHP_VERSIONS (multi-arch)
-	@echo "🚀 Baue und pushe $(if $(strip $(BAKE_TARGETS)),$(BAKE_TARGETS),cli + fpm) fuer PHP $(PHP_VERSIONS) ..."
+push-all: buildx-builder-create .check-docker-login ## Build and push cli and fpm for ALL PHP_VERSIONS (multi-arch)
+	@echo "🚀 Building and pushing $(if $(strip $(BAKE_TARGETS)),$(BAKE_TARGETS),cli + fpm) for PHP $(PHP_VERSIONS) ..."
 	@$(call cache_flags); \
 	 docker buildx bake -f $(BAKE_FILE) --push \
 	   --set '*.platform=$(PLATFORMS_CSV)' \
 	   $$CFROM $$CTO $(BUILD_ATTEST_FLAGS) $(BUILD_EXTRA_FLAGS) $(BAKE_TARGETS)
-	@echo "✅ Gepusht — PHP $(PHP_VERSIONS) (+ :<ver>-$(IMAGE_DATE)), :latest zeigt auf $(PHP_LATEST)"
+	@echo "✅ Pushed — PHP $(PHP_VERSIONS) (+ :<ver>-$(IMAGE_DATE)), :latest points to $(PHP_LATEST)"
 .PHONY: push-all
 
 # ---------------------------------------------------------------------------
-# Login-Pruefung
+# Login check
 # ---------------------------------------------------------------------------
-# Uebernommen aus phpfpm/support/makefiles/docker.build.push.mk:146-153.
 .check-docker-login:
 	@if [ -z "$(DOCKER_HUB)" ]; then \
-		echo "❌ DOCKER_HUB muss gesetzt sein."; exit 1; \
+		echo "❌ DOCKER_HUB must be set."; exit 1; \
 	fi
 	@if ! docker info 2>/dev/null | grep -q "Username"; then \
-		echo "⚠️  Nicht bei Docker Hub eingeloggt. Bitte 'docker login' ausfuehren."; \
+		echo "⚠️  Not logged in to Docker Hub. Please run 'docker login'."; \
 	fi
 .PHONY: .check-docker-login

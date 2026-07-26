@@ -1,26 +1,23 @@
 #!/bin/bash
 # ---------------------------------------------------------------------------
-# check-nginx-template.sh <fpm-image> [nginx-image] — die nginx-Vorlage (A6/AK7)
+# check-nginx-template.sh <fpm-image> [nginx-image] - the nginx template
 # ---------------------------------------------------------------------------
-# Prueft tests/nginx/templates/default.conf.template gegen das UNVERAENDERTE
-# offizielle nginx-Image: kein eigener Entrypoint, kein eigener Build (A6.3).
-# Der Aufbau ist derselbe, den ein Projekt fahren soll — fpm-Container plus
-# offizielles nginx, gemeinsames /app.
+# Tests tests/nginx/templates/default.conf.template against the UNMODIFIED
+# official nginx image: no custom entrypoint, no custom build. Same setup a
+# project would run - an fpm container plus official nginx, sharing /app.
 #
-# Zwei Instanzen, weil eine allein nichts beweist:
+# Two instances, because one alone proves nothing: instance A runs with only
+# the defaults file, showing the stack works without any custom config;
+# instance B overrides every value, showing the variables actually take
+# effect rather than merely matching the default by coincidence.
 #
-#   A  nur die Defaults-Datei, sonst nichts (A6.4). Belegt, dass der Stack ohne
-#      jede eigene Konfiguration laeuft.
-#   B  jeder Wert ueberschrieben. Belegt, dass die Variablen wirklich wirken und
-#      nicht bloss zufaellig zum Default passen — sonst waere das ein Test der
-#      Klasse B11/B16/B19/B20: misst nichts, meldet gruen.
-#
-# Gemessen wird an $_SERVER im PHP-Prozess und an Statuscodes, nicht an der
-# erzeugten Konfigurationsdatei allein. Die Textpruefung der gerenderten Datei
-# kommt dazu, wo eine Wirkung nicht bezahlbar messbar ist (send/connect-Timeout).
+# Measured against $_SERVER inside the PHP process and against status codes,
+# not just the rendered config file. A text check on the rendered file is
+# added only where an effect isn't affordably measurable (send/connect
+# timeout).
 set -eu
 
-FPM_IMAGE=${1:?Aufruf: check-nginx-template.sh <fpm-image> [nginx-image]}
+FPM_IMAGE=${1:?Usage: check-nginx-template.sh <fpm-image> [nginx-image]}
 NGINX_IMAGE=${2:-nginx:1.28-alpine}
 
 REPO_ROOT=$(CDPATH='' cd -- "$(dirname -- "$0")/.." && pwd)
@@ -30,7 +27,7 @@ DEFAULTS="$REPO_ROOT/tests/nginx/nginx-defaults.env"
 SFX=$$
 NET=check-nginx-net-$SFX
 VOL=check-nginx-app-$SFX
-APP=app                      # Service-Name = FASTCGI_UPSTREAM-Default
+APP=app                      # service name = FASTCGI_UPSTREAM default
 WEB_A=check-nginx-a-$SFX
 WEB_B=check-nginx-b-$SFX
 
@@ -45,14 +42,14 @@ trap cleanup EXIT
 
 ok()    { echo "  ✅ $1"; PASS=$((PASS + 1)); }
 bad()   { echo "  ❌ $1"; FAIL=$((FAIL + 1)); }
-check() { if [ "$2" = "$3" ]; then ok "$1 ($3)"; else bad "$1 — erwartet '$3', ist '$2'"; fi; }
+check() { if [ "$2" = "$3" ]; then ok "$1 ($3)"; else bad "$1 — expected '$3', got '$2'"; fi; }
 
 # ---------------------------------------------------------------------------
-# Aufbau: ein fpm-Container plus ein gemeinsames /app-Volume
+# Setup: one fpm container plus a shared /app volume
 # ---------------------------------------------------------------------------
-# Die Sonden werden per `docker exec` in das Volume geschrieben, nicht per
-# Bind-Mount: so haengt der Test nicht an den Eigentums-Eigenheiten der
-# Docker-Desktop-Dateibruecke (vgl. B20).
+# Probes are written into the volume via `docker exec`, not a bind mount, so
+# the test doesn't depend on the ownership quirks of the Docker Desktop file
+# bridge.
 docker network create "$NET" >/dev/null
 docker volume create "$VOL" >/dev/null
 
@@ -64,14 +61,14 @@ for _ in $(seq 1 30); do
   sleep 1
 done
 if [ "$(docker inspect -f '{{.State.Health.Status}}' "$APP-$SFX" 2>/dev/null)" != healthy ]; then
-  echo "  ❌ fpm-Container wurde nicht healthy — Abbruch"
+  echo "  ❌ fpm container did not become healthy — aborting"
   docker logs "$APP-$SFX" 2>&1 | tail -20
   exit 1
 fi
 
-# Sonde: gibt die $_SERVER-Werte aus, an denen die Vorlage gemessen wird.
-# ?sleep=N haelt den Request auf, damit FASTCGI_READ_TIMEOUT messbar wird.
-write_probe() { # <verzeichnis> <dateiname> <marke>
+# Probe: outputs the $_SERVER values the template is measured against.
+# ?sleep=N delays the request so FASTCGI_READ_TIMEOUT becomes measurable.
+write_probe() { # <directory> <filename> <marker>
   docker exec "$APP-$SFX" sh -c "mkdir -p '$1' && cat > '$1/$2' <<'PHP'
 <?php
 if (isset(\$_GET['sleep'])) { sleep((int) \$_GET['sleep']); }
@@ -84,19 +81,18 @@ echo \$out;
 PHP"
 }
 
-write_probe /app/public index.php index    # Default-Dokumentwurzel
-write_probe /app/public info.php  info     # Fallback-Location (echte .php-Datei)
-write_probe /app/web    app.php   alt      # abweichende DOCUMENT_ROOT/INDEX_FILE
+write_probe /app/public index.php index    # default document root
+write_probe /app/public info.php  info     # fallback location (real .php file)
+write_probe /app/web    app.php   alt      # differing DOCUMENT_ROOT/INDEX_FILE
 
-# Haertungs-Sonden (O6, Abschnitt ganz unten).
+# Hardening probes (checked further below).
 #
-#   upload.jpg    eine ECHTE hochgeladene Datei mit PHP-Code darin. Nur damit
-#                 ist messbar, ob /upload.jpg/x.php sie ausfuehrt (B24).
-#   exec-check.php dieselbe Zeile als echte .php-Datei — die Positivprobe. Sie
-#                 belegt, dass der Inhalt ueberhaupt ausfuehrbar ist; ohne sie
-#                 koennte ein 404 auf die .jpg-Kette auch bedeuten, dass die
-#                 Messung ins Leere greift (Klasse B11/B19/B21).
-#   a.css         eine statische Datei fuer die Header-Pruefung (B25).
+#   upload.jpg     a REAL uploaded file containing PHP code - the only way to
+#                  measure whether /upload.jpg/x.php executes it.
+#   exec-check.php the same line as a real .php file, the positive control:
+#                  it proves the content is executable at all, so a 404 on
+#                  the .jpg chain can't just mean the measurement missed.
+#   a.css          a static file for the header check.
 MARKE=AUSGEFUEHRT-$SFX
 PHP_ZEILE="<?php echo \"$MARKE\";"
 docker exec "$APP-$SFX" sh -c "printf '%s' '$PHP_ZEILE' > /app/public/upload.jpg"
@@ -115,15 +111,15 @@ start_web() { # <container> <env...>
     [ "$(docker inspect -f '{{.State.Running}}' "$name" 2>/dev/null)" = true ] || break
     sleep 1
   done
-  echo "  ❌ $name antwortet nicht — erzeugte Konfiguration und Log:"
+  echo "  ❌ $name is not responding — rendered configuration and log:"
   docker logs "$name" 2>&1 | tail -20
   return 1
 }
 
-# Antwort holen: erste Zeile = Statuscode, zweite = Rumpf.
-# Die Rumpfdatei wird vorher geleert: bei 4xx/5xx legt wget sie nicht an, und ein
-# Rest aus dem vorigen Aufruf wuerde als Antwort dieses Aufrufs gelesen.
-resp() { # <container> <pfad> [wget-zusatz...]
+# Fetch the response: first line is the status code, second is the body.
+# The body file is cleared first — wget doesn't create it on 4xx/5xx, and a
+# leftover from the previous call would be read as this call's response.
+resp() { # <container> <path> [extra wget args...]
   local c=$1 p=$2; shift 2
   docker exec "$c" sh -c "
     : > /tmp/body
@@ -134,85 +130,86 @@ resp() { # <container> <pfad> [wget-zusatz...]
 status() { echo "$1" | head -1; }
 body()   { echo "$1" | tail -1; }
 
-# Antwort-Header holen. busybox-wget schreibt sie mit -S nach stderr, jede Zeile
-# eingerueckt und mit CR am Ende.
-hdrs() { # <container> <pfad>
+# Fetch response headers. busybox wget writes them to stderr with -S, each
+# line indented and CR-terminated.
+hdrs() { # <container> <path>
   docker exec "$1" sh -c "wget -S -O /dev/null 'http://127.0.0.1$2' 2>&1 | tr -d '\r'" || true
 }
-# <header-block> <name> <erwarteter Teilstring im Wert>
-# $2 und $3 landen als Teil eines grep-Musters, nicht als Festtext: alle
-# Aufrufer unten uebergeben Literale ohne Regex-Sonderzeichen. Wer hier einen
-# Wert mit '.', '[' oder '*' einsetzt, muss ihn maskieren — sonst matcht das
-# Muster weiter, aber nicht mehr das Gemeinte.
+# <header block> <name> <expected substring in value>
+# $2 and $3 become part of a grep pattern, not literal text: every caller
+# below passes literals without regex special characters. A value containing
+# '.', '[' or '*' would need escaping, or the pattern stops matching what's
+# meant.
 has_header() { echo "$1" | grep -qi "^[[:space:]]*$2:.*$3"; }
-field()  { # <rumpf> <schluessel>
+field()  { # <body> <key>
   echo "$1" | tr ' ' '\n' | sed -n "s/^$2=//p"
 }
 
 # ---------------------------------------------------------------------------
-# Instanz A — nur die Defaults-Datei (A6.4)
+# Instance A — only the defaults file
 # ---------------------------------------------------------------------------
-echo ">>> Instanz A — $NGINX_IMAGE, nur $(basename "$DEFAULTS")"
-start_web "$WEB_A" || { FAIL=$((FAIL + 1)); echo "  bestanden: $PASS   fehlgeschlagen: $FAIL"; exit 1; }
-ok "startet ohne eigene Konfiguration und ohne eigenen Entrypoint (A6.3/A6.4)"
+echo ">>> Instance A — $NGINX_IMAGE, only $(basename "$DEFAULTS")"
+start_web "$WEB_A" || { FAIL=$((FAIL + 1)); echo "  passed: $PASS   failed: $FAIL"; exit 1; }
+ok "starts without custom configuration and without a custom entrypoint"
 
-# Nichts darf unsubstituiert stehengeblieben sein. envsubst laesst eine fehlende
-# Variable als ${NAME} stehen; nginx bricht dann ab — aber nicht immer sichtbar
-# an der Ursache, deshalb hier ausdruecklich.
+# Nothing may be left unsubstituted. envsubst leaves a missing variable as
+# ${NAME}; nginx then fails to start, but not always visibly at the cause, so
+# this is checked explicitly.
 rendered=$(docker exec "$WEB_A" cat /etc/nginx/conf.d/default.conf)
-# SC2016 ist hier der Zweck, kein Versehen: gesucht wird die Zeichenfolge
-# Dollar-Klammer selbst. Wuerde sie expandiert, suchte der Test nach dem Wert
-# einer Variablen statt nach dem unersetzten Platzhalter — und faende nie etwas.
+# SC2016 is intentional here, not an oversight: the literal dollar-brace
+# sequence is what's being searched for. If it were expanded, the test would
+# look for a variable's value instead of the unreplaced placeholder — and
+# would never find anything.
 # shellcheck disable=SC2016
 if echo "$rendered" | grep -q '\${'; then
-  bad "unsubstituierte Variablen in der erzeugten Konfiguration: $(echo "$rendered" | grep -o '\${[A-Z_]*}' | sort -u | tr '\n' ' ')"
+  bad "unsubstituted variables in the rendered configuration: $(echo "$rendered" | grep -o '\${[A-Z_]*}' | sort -u | tr '\n' ' ')"
 else
-  ok "keine unsubstituierte Variable in der erzeugten Konfiguration"
+  ok "no unsubstituted variable in the rendered configuration"
 fi
 
-# Die drei Werte, deren Wirkung nicht bezahlbar messbar ist, werden am Rendering
-# geprueft. fastcgi_pass steht zweimal (Location 2 und 3) und muss beide Male
-# aus FASTCGI_UPSTREAM/PHP_PORT kommen.
+# The three values whose effect isn't affordably measurable are checked
+# against the rendering. fastcgi_pass appears twice (location 2 and 3) and
+# must both times come from FASTCGI_UPSTREAM/PHP_PORT.
 check "fastcgi_pass app:9000 (2x)"        "$(echo "$rendered" | grep -c 'fastcgi_pass   app:9000;')"      "2"
 check "client_max_body_size 100m"         "$(echo "$rendered" | grep -c 'client_max_body_size 100m;')"     "1"
 check "fastcgi_read_timeout 600 (2x)"     "$(echo "$rendered" | grep -c 'fastcgi_read_timeout    600;')"   "2"
 check "fastcgi_send_timeout 600 (2x)"     "$(echo "$rendered" | grep -c 'fastcgi_send_timeout    600;')"   "2"
 check "fastcgi_connect_timeout 300 (2x)"  "$(echo "$rendered" | grep -c 'fastcgi_connect_timeout 300;')"   "2"
 
-# Front-Controller: try_files faellt auf ${INDEX_FILE} zurueck.
-r=$(resp "$WEB_A" /nicht/vorhanden)
-check "GET /nicht/vorhanden — Status"     "$(status "$r")" "200"
-check "  landet im Front-Controller"      "$(field "$(body "$r")" PROBE)" "index"
-check "  REQUEST_URI erhalten"            "$(field "$(body "$r")" REQUEST_URI)" "/nicht/vorhanden"
+# Front controller: try_files falls back to ${INDEX_FILE}.
+r=$(resp "$WEB_A" /does/not/exist)
+check "GET /does/not/exist — status"     "$(status "$r")" "200"
+check "  lands in the front controller"   "$(field "$(body "$r")" PROBE)" "index"
+check "  REQUEST_URI preserved"           "$(field "$(body "$r")" REQUEST_URI)" "/does/not/exist"
 
-# Location 2: PATH_INFO. Das ist der Grund, warum es diese Location gibt.
+# Location 2: PATH_INFO. This is the reason this location exists at all.
 r=$(resp "$WEB_A" /index.php/foo/bar)
-check "GET /index.php/foo/bar — Status"   "$(status "$r")" "200"
+check "GET /index.php/foo/bar — status"   "$(status "$r")" "200"
 check "  PATH_INFO"                       "$(field "$(body "$r")" PATH_INFO)" "/foo/bar"
 check "  SCRIPT_FILENAME"                 "$(field "$(body "$r")" SCRIPT_FILENAME)" "/app/public/index.php"
 check "  DOCUMENT_ROOT"                   "$(field "$(body "$r")" DOCUMENT_ROOT)" "/app/public"
-check "  SERVER_NAME aus HOST"            "$(field "$(body "$r")" SERVER_NAME)" "localhost"
+check "  SERVER_NAME from HOST"           "$(field "$(body "$r")" SERVER_NAME)" "localhost"
 
-# Location 3: echte .php-Datei neben dem Front-Controller.
+# Location 3: a real .php file next to the front controller.
 r=$(resp "$WEB_A" /info.php)
-check "GET /info.php — Status"            "$(status "$r")" "200"
-check "  trifft die Fallback-Location"    "$(field "$(body "$r")" PROBE)" "info"
+check "GET /info.php — status"            "$(status "$r")" "200"
+check "  hits the fallback location"      "$(field "$(body "$r")" PROBE)" "info"
 check "  SCRIPT_FILENAME"                 "$(field "$(body "$r")" SCRIPT_FILENAME)" "/app/public/info.php"
 
-# A6.2, Default-Seite: ohne TLS-Proxy darf HTTPS NICHT gesetzt sein. Genau das
-# war im Bestand fest verdrahtet und damit falsch.
+# Default page: without a TLS proxy, HTTPS must NOT be set. That was exactly
+# what the legacy setup hardcoded, and it was wrong.
 b=$(body "$(resp "$WEB_A" /index.php)")
-check "REQUEST_SCHEME (A6.2, Default)"    "$(field "$b" REQUEST_SCHEME)" "http"
-check "HTTPS nicht uebergeben"            "$(field "$b" HTTPS)" "-"
+check "REQUEST_SCHEME (default)"          "$(field "$b" REQUEST_SCHEME)" "http"
+check "HTTPS not passed"                  "$(field "$b" HTTPS)" "-"
 check "HTTP_X_FORWARDED_PROTO"            "$(field "$b" HTTP_X_FORWARDED_PROTO)" "http"
 
-# Verborgenes bleibt verboten.
-check "GET /.env — Status"                "$(status "$(resp "$WEB_A" /.env)")" "404"
+# Hidden stays forbidden.
+check "GET /.env — status"                "$(status "$(resp "$WEB_A" /.env)")" "404"
 
 # ---------------------------------------------------------------------------
-# Instanz B — jeder Wert ueberschrieben (die Gegenprobe)
+# Instance B — every value overridden (the control run)
 # ---------------------------------------------------------------------------
-echo ">>> Instanz B — jeder Wert ueberschrieben"
+echo ">>> Instance B — every value overridden"
 start_web "$WEB_B" \
   -e HOST=probe.example \
   -e DOCUMENT_ROOT=/web \
@@ -220,93 +217,91 @@ start_web "$WEB_B" \
   -e REQUEST_SCHEME=https \
   -e CLIENT_MAX_BODY_SIZE=1k \
   -e FASTCGI_READ_TIMEOUT=1 \
-  || { FAIL=$((FAIL + 1)); echo "  bestanden: $PASS   fehlgeschlagen: $FAIL"; exit 1; }
-ok "startet mit ueberschriebenen Werten (environment schlaegt env_file)"
+  || { FAIL=$((FAIL + 1)); echo "  passed: $PASS   failed: $FAIL"; exit 1; }
+ok "starts with overridden values (environment beats env_file)"
 
 r=$(resp "$WEB_B" /app.php/foo/bar)
 b=$(body "$r")
-check "GET /app.php/foo/bar — Status"     "$(status "$r")" "200"
-check "  DOCUMENT_ROOT wirkt"             "$(field "$b" PROBE)" "alt"
-check "  INDEX_FILE wirkt (PATH_INFO)"    "$(field "$b" PATH_INFO)" "/foo/bar"
+check "GET /app.php/foo/bar — status"     "$(status "$r")" "200"
+check "  DOCUMENT_ROOT takes effect"      "$(field "$b" PROBE)" "alt"
+check "  INDEX_FILE takes effect (PATH_INFO)" "$(field "$b" PATH_INFO)" "/foo/bar"
 check "  SCRIPT_FILENAME"                 "$(field "$b" SCRIPT_FILENAME)" "/app/web/app.php"
-check "  HOST wirkt"                      "$(field "$b" SERVER_NAME)" "probe.example"
+check "  HOST takes effect"               "$(field "$b" SERVER_NAME)" "probe.example"
 
-# A6.2, andere Seite: EIN Schalter setzt beide fastcgi-Werte.
-check "HTTPS=on hinter TLS-Proxy (A6.2)"  "$(field "$b" HTTPS)" "on"
+# The other side: ONE switch sets both fastcgi values.
+check "HTTPS=on behind a TLS proxy"       "$(field "$b" HTTPS)" "on"
 check "REQUEST_SCHEME=https"              "$(field "$b" REQUEST_SCHEME)" "https"
 check "HTTP_X_FORWARDED_PROTO=https"      "$(field "$b" HTTP_X_FORWARDED_PROTO)" "https"
 
-# CLIENT_MAX_BODY_SIZE: Wirkung, nicht nur Rendering. 2000 B gegen 1k.
+# CLIENT_MAX_BODY_SIZE: effect, not just rendering. 2000 B against 1k.
 #
-# --post-data und NICHT --post-file: busybox-wget 1.37.0 setzt mit --post-file
-# zwar die Methode POST, sendet aber keinen Rumpf (CONTENT_LENGTH=0, belegt am
-# 2026-07-25). Ein 2-MB-POST gegen 1m lief damit auf 200 und der Test haette
-# nichts gemessen — dieselbe Klasse wie B11/B19. Deshalb prueft der positive Fall
-# die tatsaechlich angekommene Rumpflaenge mit.
+# --post-data and NOT --post-file: busybox-wget 1.37.0 sets the method to POST
+# with --post-file but sends no body (CONTENT_LENGTH=0). A 2 MB POST against
+# 1m would then land on 200 and the test would measure nothing — so the
+# positive case also checks the body length that actually arrived.
 POST_BODY=$(head -c 2000 /dev/zero | tr '\0' x)
-check "POST 2000 B gegen 1k — Status"     "$(status "$(resp "$WEB_B" /app.php --post-data "'$POST_BODY'")")" "413"
+check "POST 2000 B against 1k — status"   "$(status "$(resp "$WEB_B" /app.php --post-data "'$POST_BODY'")")" "413"
 r=$(resp "$WEB_A" /index.php --post-data "'$POST_BODY'")
-check "POST 2000 B gegen 100m — Status"   "$(status "$r")" "200"
-check "  Rumpf kam an (Gegenprobe)"       "$(field "$(body "$r")" CONTENT_LENGTH)" "2000"
-check "  als POST"                        "$(field "$(body "$r")" REQUEST_METHOD)" "POST"
+check "POST 2000 B against 100m — status" "$(status "$r")" "200"
+check "  body arrived (control)"          "$(field "$(body "$r")" CONTENT_LENGTH)" "2000"
+check "  as POST"                         "$(field "$(body "$r")" REQUEST_METHOD)" "POST"
 
-# FASTCGI_READ_TIMEOUT: Wirkung. 3 s Schlaf gegen 1 s Limit.
-check "3 s Antwort gegen 1 s Limit"       "$(status "$(resp "$WEB_B" '/app.php?sleep=3' -T 30)")" "504"
-check "3 s Antwort gegen 600 s Limit"     "$(status "$(resp "$WEB_A" '/index.php?sleep=3' -T 30)")" "200"
+# FASTCGI_READ_TIMEOUT: effect. 3 s sleep against a 1 s limit.
+check "3 s response against a 1 s limit"  "$(status "$(resp "$WEB_B" '/app.php?sleep=3' -T 30)")" "504"
+check "3 s response against a 600 s limit" "$(status "$(resp "$WEB_A" '/index.php?sleep=3' -T 30)")" "200"
 
 # ---------------------------------------------------------------------------
-# FASTCGI_UPSTREAM — die Variable landet wirklich im fastcgi_pass
+# FASTCGI_UPSTREAM — the variable really lands in fastcgi_pass
 # ---------------------------------------------------------------------------
-# nginx loest den Upstream-Namen bereits beim Konfigurationstest auf. Der
-# Unterschied zwischen den beiden Laeufen ist allein die Variable.
+# nginx resolves the upstream name already at config-test time. The only
+# difference between the two runs is the variable.
 echo ">>> FASTCGI_UPSTREAM"
-conftest() { # <upstream-name>
+conftest() { # <upstream name>
   docker run --rm --network "$NET" --env-file "$DEFAULTS" -e FASTCGI_UPSTREAM="$1" \
     -v "$TEMPLATES:/etc/nginx/templates:ro" -v "$VOL:/app:ro" \
     "$NGINX_IMAGE" nginx -t 2>&1 | tail -2
 }
 if conftest "$APP" | grep -q 'test is successful'; then
-  ok "FASTCGI_UPSTREAM=$APP — Konfiguration gueltig"
+  ok "FASTCGI_UPSTREAM=$APP — configuration valid"
 else
-  bad "FASTCGI_UPSTREAM=$APP — Konfigurationstest fehlgeschlagen"
+  bad "FASTCGI_UPSTREAM=$APP — configuration test failed"
 fi
-if conftest gibt-es-nicht | grep -q 'host not found in upstream "gibt-es-nicht"'; then
-  ok "FASTCGI_UPSTREAM=gibt-es-nicht — nginx meldet den Upstream sichtbar"
+if conftest no-such-host | grep -q 'host not found in upstream "no-such-host"'; then
+  ok "FASTCGI_UPSTREAM=no-such-host — nginx reports the upstream visibly"
 else
-  bad "FASTCGI_UPSTREAM wirkt nicht im fastcgi_pass"
+  bad "FASTCGI_UPSTREAM has no effect on fastcgi_pass"
 fi
 
 # ---------------------------------------------------------------------------
-# Haertung O6 — B24: nur vorhandene .php-Dateien erreichen den Upstream
+# Hardening — only existing .php files reach the upstream
 # ---------------------------------------------------------------------------
-# Gemessen wird gegen eine echte /app/public/upload.jpg, die PHP-Code enthaelt.
-# Vor der Haertung antwortete /upload.jpg/x.php mit 403 — abgefangen allein von
-# security.limit_extensions des php-fpm, nicht von der Vorlage (B24, gemessen am
-# 2026-07-25). Mit `try_files $uri =404;` antwortet nginx selbst 404. Genau
-# dieser Unterschied im Statuscode ist der Beleg; die Gegenprobe am Ende dieses
-# Abschnitts zeigt zusaetzlich, dass die Antwort den Upstream gar nicht mehr
-# erreicht.
-echo ">>> Haertung O6 — B24 (.php-Fallback-Location)"
+# Measured against a real /app/public/upload.jpg containing PHP code. Before
+# this hardening, /upload.jpg/x.php answered with 403 — caught only by the
+# php-fpm's security.limit_extensions, not by the template. With
+# `try_files $uri =404;`, nginx itself answers 404. That status-code
+# difference is the evidence; the control at the end of this section also
+# shows the response never reaches the upstream at all.
+echo ">>> Hardening — .php fallback location"
 
 r=$(resp "$WEB_A" /exec-check.php)
-check "Positivprobe /exec-check.php — Status"  "$(status "$r")" "200"
-check "  Inhalt wird wirklich ausgefuehrt"     "$(body "$r")"   "$MARKE"
+check "Positive control /exec-check.php — status" "$(status "$r")" "200"
+check "  content is really executed"          "$(body "$r")"   "$MARKE"
 
 r=$(resp "$WEB_A" /upload.jpg)
-check "GET /upload.jpg — Status"               "$(status "$r")" "200"
-check "  Quelltext statt Ausfuehrung"          "$(body "$r")"   "$PHP_ZEILE"
+check "GET /upload.jpg — status"              "$(status "$r")" "200"
+check "  source instead of execution"         "$(body "$r")"   "$PHP_ZEILE"
 
-check "GET /upload.jpg/x.php — Status (B24)"   "$(status "$(resp "$WEB_A" /upload.jpg/x.php)")" "404"
-check "GET /gibtesnicht.php — Status"          "$(status "$(resp "$WEB_A" /gibtesnicht.php)")"  "404"
+check "GET /upload.jpg/x.php — status"        "$(status "$(resp "$WEB_A" /upload.jpg/x.php)")" "404"
+check "GET /gibtesnicht.php — status"         "$(status "$(resp "$WEB_A" /gibtesnicht.php)")"  "404"
 
 # ---------------------------------------------------------------------------
-# Haertung O6 — B25: statische Antworten tragen die Security-Header
+# Hardening — static responses carry the security headers
 # ---------------------------------------------------------------------------
-# nginx vererbt add_header nur an Ebenen, die selbst keines tragen. Die
-# Static-Location trug eines (Cache-Control "public") und verlor damit alle
-# sechs Server-Header — ausgerechnet nosniff wirkt bei statischen Dateien am
-# meisten. Die Zeile ist geloescht (Variante (b)).
-echo ">>> Haertung O6 — B25 (Security-Header auf statischen Antworten)"
+# nginx only inherits add_header into levels that don't already carry one.
+# The static location carried one (Cache-Control "public") and thereby lost
+# all six server headers — with nosniff mattering most for static files. That
+# line has been removed.
+echo ">>> Hardening — security headers on static responses"
 
 h_css=$(hdrs "$WEB_A" /a.css)
 h_php=$(hdrs "$WEB_A" /index.php)
@@ -314,48 +309,48 @@ for paar in "X-Content-Type-Options:nosniff" \
             "X-Frame-Options:SAMEORIGIN" \
             "Strict-Transport-Security:max-age=31536000"; do
   name=${paar%%:*}; wert=${paar#*:}
-  # Positivprobe an der PHP-Antwort: die trug die Header schon immer. Faellt sie
-  # aus, misst nicht die Vorlage falsch, sondern dieser Test.
+  # Positive control on the PHP response: it always carried these headers.
+  # If it fails, it's not the template that's broken but this measurement.
   if has_header "$h_php" "$name" "$wert"; then
-    ok "$name auf /index.php (Positivprobe)"
+    ok "$name on /index.php (positive control)"
   else
-    bad "$name fehlt auf /index.php — die Header-Messung selbst ist defekt"
+    bad "$name missing on /index.php — the header measurement itself is broken"
   fi
   if has_header "$h_css" "$name" "$wert"; then
-    ok "$name auf /a.css (B25)"
+    ok "$name on /a.css"
   else
-    bad "$name fehlt auf der statischen Antwort (B25)"
+    bad "$name missing on the static response"
   fi
 done
 
-# Gegenprobe: Cache-Control ist weiterhin da (aus `expires 1y`), aber ohne
-# "public". Ohne die erste Haelfte wuerde die zweite auch dann gruen melden,
-# wenn Cache-Control ganz verschwunden waere.
+# Control: Cache-Control is still present (from `expires 1y`), but without
+# "public". Without the first half, the second would also report green if
+# Cache-Control had disappeared entirely.
 if has_header "$h_css" Cache-Control "max-age=31536000"; then
-  ok "Cache-Control aus 'expires 1y' bleibt erhalten"
+  ok "Cache-Control from 'expires 1y' is preserved"
 else
-  bad "Cache-Control fehlt auf der statischen Antwort — 'expires 1y' wirkt nicht mehr"
+  bad "Cache-Control missing on the static response — 'expires 1y' has no effect"
 fi
 if has_header "$h_css" Cache-Control "public"; then
-  bad "Cache-Control traegt weiterhin 'public' — die add_header-Zeile ist nicht geloescht"
+  bad "Cache-Control still carries 'public' — the add_header line wasn't removed"
 else
-  ok "Cache-Control hat 'public' verloren (Gegenprobe zu B25)"
+  ok "Cache-Control has lost 'public' (control check)"
 fi
 
 # ---------------------------------------------------------------------------
-# Die entscheidende Gegenprobe zu B24 — zuletzt, weil sie den fpm anhaelt
+# The decisive control check — last, because it stops the fpm
 # ---------------------------------------------------------------------------
-# Steht der Upstream, laesst sich ein 404 von nginx nicht zweifelsfrei von einem
-# 404 des fpm unterscheiden. Mit angehaltenem fpm ist es eindeutig: was jetzt
-# noch 404 liefert, hat den Upstream nie erreicht — und was ihn erreicht haette,
-# liefert 502.
-echo ">>> Haertung O6 — Gegenprobe mit angehaltenem fpm"
+# With the upstream up, a 404 from nginx can't be reliably distinguished from
+# a 404 from fpm. With fpm stopped it's unambiguous: whatever still returns
+# 404 never reached the upstream, and whatever would have reached it now
+# returns 502.
+echo ">>> Hardening — control check with fpm stopped"
 docker stop -t 5 "$APP-$SFX" >/dev/null
-check "GET /upload.jpg/x.php — Status (B24, fpm aus)" \
+check "GET /upload.jpg/x.php — status (fpm stopped)" \
       "$(status "$(resp "$WEB_A" /upload.jpg/x.php)")" "404"
-check "GET /index.php — Status (belegt: Upstream ist wirklich aus)" \
+check "GET /index.php — status (confirms: upstream is really down)" \
       "$(status "$(resp "$WEB_A" /index.php)")" "502"
 
 echo
-echo "  bestanden: $PASS   fehlgeschlagen: $FAIL"
+echo "  passed: $PASS   failed: $FAIL"
 [ "$FAIL" -eq 0 ] || exit 1

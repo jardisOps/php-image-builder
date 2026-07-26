@@ -1,32 +1,31 @@
 #!/bin/sh
-# Laeuft IN alpine:3.23 und prueft lib-user.sh gegen U1-U3 und A4.1-A4.4.
-# /lib-user.sh ist eingehaengt.
+# Runs INSIDE alpine:3.23 and checks lib-user.sh. /lib-user.sh is mounted in.
 set -u
 PASS=0; FAIL=0
 
-apk add --no-cache shadow su-exec >/dev/null 2>&1 || { echo "apk fehlgeschlagen"; exit 2; }
+apk add --no-cache shadow su-exec >/dev/null 2>&1 || { echo "apk failed"; exit 2; }
 
 APP_USER=appuser
 APP_ROOT=/app
 export APP_USER APP_ROOT
 
-# Ausgangszustand wie im Image: appuser 1000:1000
+# Starting state as in the image: appuser 1000:1000
 addgroup -g 1000 appuser
 adduser -G appuser -u 1000 -D appuser
 mkdir -p /home/appuser/php-config /run/php-fpm
 chown -R appuser:appuser /home/appuser /run/php-fpm
 
-check() { # name, ist, soll
+check() { # name, actual, expected
   if [ "$2" = "$3" ]; then echo "  OK   $1"; PASS=$((PASS+1))
-  else echo "  FAIL $1 — ist='$2' soll='$3'"; FAIL=$((FAIL+1)); fi
+  else echo "  FAIL $1 — actual='$2' expected='$3'"; FAIL=$((FAIL+1)); fi
 }
 contains() { # name, haystack, needle
   case "$2" in *"$3"*) echo "  OK   $1"; PASS=$((PASS+1)) ;;
-               *) echo "  FAIL $1 — '$3' nicht in Ausgabe:"; echo "$2" | sed 's/^/         /'; FAIL=$((FAIL+1)) ;;
+               *) echo "  FAIL $1 — '$3' not in output:"; echo "$2" | sed 's/^/         /'; FAIL=$((FAIL+1)) ;;
   esac
 }
 
-# Ruft align_runtime_user in einer Subshell auf und gibt Ergebnis + Meldungen aus.
+# Calls align_runtime_user in a subshell and prints result + messages.
 align() {
   ( log_info() { printf 'INFO %s\n' "$1"; }
     log_warn() { printf 'WARN %s\n' "$1"; }
@@ -46,57 +45,57 @@ reset_ids() {
   rm -rf /app; mkdir -p /app
 }
 
-echo "=== Fall 1: /app gehoert 1234:1234 (beide IDs frei) — Normalfall ==="
+echo "=== Case 1: /app owned by 1234:1234 (both IDs free) — normal case ==="
 reset_ids; chown 1234:1234 /app
 O=$(align)
-contains "IDs angeglichen" "$O" "RESULT uid=1234 gid=1234 runtime_user=appuser"
-contains "A4.3: Eigentum nachgezogen" "$O" "Eigentum nachgezogen"
-check    "U3: /home/appuser gehoert neuer UID" "$(stat -c '%u:%g' /home/appuser)" "1234:1234"
-check    "U3: APP_OWNED_PATHS unberuehrt ohne Angabe" "$(stat -c '%u:%g' /run/php-fpm)" "1000:1000"
+contains "IDs aligned" "$O" "RESULT uid=1234 gid=1234 runtime_user=appuser"
+contains "ownership carried forward" "$O" "Ownership transferred to"
+check    "/home/appuser owned by the new UID" "$(stat -c '%u:%g' /home/appuser)" "1234:1234"
+check    "APP_OWNED_PATHS untouched without a value" "$(stat -c '%u:%g' /run/php-fpm)" "1000:1000"
 
-echo "=== Fall 1b: mit APP_OWNED_PATHS=/run/php-fpm (fpm-Target, A3.2/A4.3) ==="
+echo "=== Case 1b: with APP_OWNED_PATHS=/run/php-fpm (fpm target) ==="
 reset_ids; chown 1234:1234 /app
 O=$(APP_OWNED_PATHS=/run/php-fpm align)
-check "U3: /run/php-fpm nachgezogen" "$(stat -c '%u:%g' /run/php-fpm)" "1234:1234"
+check "/run/php-fpm carried forward" "$(stat -c '%u:%g' /run/php-fpm)" "1234:1234"
 
-echo "=== Fall 2: /app gehoert 1234:20 — GID 20 ist von 'dialout' belegt (U1) ==="
+echo "=== Case 2: /app owned by 1234:20 — GID 20 is taken by 'dialout' ==="
 reset_ids; chown 1234:20 /app
 O=$(align)
-contains "U1: kein stilles Verschlucken, Gruppe wird wiederverwendet" "$O" "GID 20 ist von Gruppe 'dialout' belegt"
-contains "IDs angeglichen"  "$O" "RESULT uid=1234 gid=20"
-check    "appuser ist in GID 20" "$(id -g appuser)" "20"
-check    "U3: /home/appuser auf 1234:20" "$(stat -c '%u:%g' /home/appuser)" "1234:20"
+contains "no silent swallowing, group is reused" "$O" "GID 20 is taken by group 'dialout'"
+contains "IDs aligned"  "$O" "RESULT uid=1234 gid=20"
+check    "appuser is in GID 20" "$(id -g appuser)" "20"
+check    "/home/appuser at 1234:20" "$(stat -c '%u:%g' /home/appuser)" "1234:20"
 
-echo "=== Fall 2b: /app gehoert 1234:100 — GID 100 ist von 'users' belegt (U1) ==="
+echo "=== Case 2b: /app owned by 1234:100 — GID 100 is taken by 'users' ==="
 reset_ids; chown 1234:100 /app
 O=$(align)
-contains "U1: Gruppe 'users' wiederverwendet" "$O" "GID 100 ist von Gruppe 'users' belegt"
-check    "appuser ist in GID 100" "$(id -g appuser)" "100"
+contains "group 'users' reused" "$O" "GID 100 is taken by group 'users'"
+check    "appuser is in GID 100" "$(id -g appuser)" "100"
 
-echo "=== Fall 3: /app gehoert 0:0 — frisches Named Volume (U2) ==="
+echo "=== Case 3: /app owned by 0:0 — fresh named volume ==="
 reset_ids; chown 0:0 /app
 O=$(align)
-contains "U2: Fall wird behandelt, nicht uebersprungen" "$O" "gehoerte root und ist leer"
-check    "/app gehoert jetzt appuser" "$(stat -c '%u:%g' /app)" "1000:1000"
-contains "laeuft als appuser" "$O" "runtime_user=appuser"
+contains "case is handled, not skipped" "$O" "was owned by root and is empty"
+check    "/app is now owned by appuser" "$(stat -c '%u:%g' /app)" "1000:1000"
+contains "runs as appuser" "$O" "runtime_user=appuser"
 
-echo "=== Fall 3b: /app gehoert 0:0 und ist NICHT leer ==="
-reset_ids; chown 0:0 /app; touch /app/root-datei; chown 0:0 /app/root-datei
+echo "=== Case 3b: /app owned by 0:0 and NOT empty ==="
+reset_ids; chown 0:0 /app; touch /app/root-file; chown 0:0 /app/root-file
 O=$(align)
-contains "sichtbare Warnung statt stiller Uebernahme" "$O" "WARN /app gehoerte root und ist nicht leer"
-check    "Verzeichnis uebertragen" "$(stat -c '%u:%g' /app)" "1000:1000"
-check    "Inhalt bewusst NICHT rekursiv geaendert" "$(stat -c '%u:%g' /app/root-datei)" "0:0"
+contains "visible warning instead of silent takeover" "$O" "WARN /app was owned by root and is not empty"
+check    "directory handed over" "$(stat -c '%u:%g' /app)" "1000:1000"
+check    "content deliberately NOT changed recursively" "$(stat -c '%u:%g' /app/root-file)" "0:0"
 
-echo "=== Fall 4: Ziel-UID belegt — 'bin' hat UID 1 (A4.1 Wiederverwendung) ==="
+echo "=== Case 4: target UID taken — 'bin' has UID 1 ==="
 reset_ids; chown 1:1 /app
 O=$(align)
-contains "sichtbarer Hinweis"  "$O" "UID 1 ist von Benutzer 'bin' belegt"
-contains "laeuft numerisch unter der Ziel-Kennung" "$O" "runtime_user=1:1"
-check    "appuser NICHT umnummeriert" "$(id -u appuser)" "1000"
+contains "visible hint"  "$O" "UID 1 is taken by user 'bin'"
+contains "runs numerically under the target identity" "$O" "runtime_user=1:1"
+check    "appuser NOT renumbered" "$(id -u appuser)" "1000"
 
-echo "=== Fall 5: Container von aussen mit --user gestartet (A4.4) ==="
+echo "=== Case 5: container started from outside with --user ==="
 reset_ids; chown 1234:1234 /app
-# SC2016 wie oben: Quelltext fuer die Subshell, bewusst unexpandiert.
+# SC2016 as above: source text for the subshell, deliberately unexpanded.
 # shellcheck disable=SC2016
 O=$(su-exec 4711:4711 sh -c '
   log_info() { printf "INFO %s\n" "$1"; }
@@ -105,23 +104,23 @@ O=$(su-exec 4711:4711 sh -c '
   . /lib-user.sh
   align_runtime_user
   printf "RESULT runtime_user=[%s]\n" "$RUNTIME_USER"' 2>&1)
-contains "keine Anpassung"        "$O" "von aussen vorgegeben"
-contains "kein Privilegienwechsel" "$O" "RESULT runtime_user=[]"
-check    "appuser unveraendert"   "$(id -u appuser)" "1000"
+contains "no adjustment"        "$O" "given from outside"
+contains "no privilege change" "$O" "RESULT runtime_user=[]"
+check    "appuser unchanged"   "$(id -u appuser)" "1000"
 
-echo "=== Fall 6: /app existiert nicht ==="
+echo "=== Case 6: /app does not exist ==="
 reset_ids; rm -rf /app
 O=$(align)
-contains "kein Fehler" "$O" "existiert nicht"
-contains "laeuft als appuser" "$O" "runtime_user=appuser"
+contains "no error" "$O" "does not exist"
+contains "runs as appuser" "$O" "runtime_user=appuser"
 
-echo "=== Fall 7: /app gehoert schon appuser — keine Aktion ==="
+echo "=== Case 7: /app is already owned by appuser — no action ==="
 reset_ids; mkdir -p /app; chown 1000:1000 /app
 O=$(align)
-contains "kein chown noetig" "$O" "runtime_user=appuser"
-check "keine Nachziehmeldung" "$(echo "$O" | grep -c 'Eigentum nachgezogen')" "0"
+contains "no chown needed" "$O" "runtime_user=appuser"
+check "no carry-forward message" "$(echo "$O" | grep -c 'Ownership transferred')" "0"
 
 echo
 echo "===================================="
-echo "  bestanden: $PASS   fehlgeschlagen: $FAIL"
+echo "  passed: $PASS   failed: $FAIL"
 [ "$FAIL" -eq 0 ] || exit 1

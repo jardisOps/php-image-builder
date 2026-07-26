@@ -1,43 +1,39 @@
 #!/bin/bash
 # ---------------------------------------------------------------------------
-# check-extensions.sh <image> — alle erwarteten Extensions sind geladen
+# check-extensions.sh <image> — all expected extensions are loaded
 # ---------------------------------------------------------------------------
-# Die gebaute Sollmenge wird NICHT hier gepflegt, sondern aus
-# src/shared/php-extensions.env abgeleitet (A2.1). In den Bestands-Repos stand
-# sie ein zweites Mal in test.mk — und driftete prompt: phpcli listete dort
-# pcntl, phpfpm nicht (D1). Wer eine Extension hinzufuegt, aendert seit P8 genau
-# eine Datei, und dieser Test zieht mit.
+# The expected set is NOT maintained here but derived from
+# src/shared/php-extensions.env. Adding an extension changes exactly one
+# file, and this test follows along.
 #
-# Dazu kommt eine ZWEITE, eigenstaendige Zusicherung: curl, dom und mbstring
-# werden seit B12 bewusst NICHT mehr nachgebaut, weil das offizielle Image sie
-# statisch einkompiliert mitbringt. Sie muessen trotzdem geladen sein — faellt
-# eine davon im Basis-Image weg, merkte es sonst niemand, bis eine Anwendung
-# bricht.
+# A second, independent assurance: curl, dom and mbstring are deliberately
+# NOT rebuilt anymore because the official image compiles them in
+# statically. They still must be loaded — if one dropped from the base
+# image, nobody would notice until an application broke.
 #
-# Genau EIN Containerstart fuer alle Extensions. Der Bestand startete einen
-# Container je Extension (19 Starts je Architektur) — Minuten ohne Mehrwert.
+# Exactly ONE container start for all extensions, not one per extension.
 #
-# Umgebung: die Datei php-extensions.env verlangt die sechs PECL-Versionen
-# (A2.4, kein Default). Sie kommen aus der .env; deshalb laeuft dieser Test
-# ueber `make test-extensions` und nicht von Hand.
+# Environment: php-extensions.env requires the six PECL versions (no
+# default). They come from the .env, so this test runs via
+# `make test-extensions`, not by hand.
 set -eu
 
-IMAGE=${1:?Aufruf: check-extensions.sh <image>}
+IMAGE=${1:?Usage: check-extensions.sh <image>}
 REPO_ROOT=$(CDPATH='' cd -- "$(dirname -- "$0")/.." && pwd)
 EXT_FILE="$REPO_ROOT/src/shared/php-extensions.env"
-[ -r "$EXT_FILE" ] || { echo "❌ $EXT_FILE nicht lesbar" >&2; exit 2; }
+[ -r "$EXT_FILE" ] || { echo "❌ $EXT_FILE not readable" >&2; exit 2; }
 
 if [ -z "${APCU_VERSION:-}" ]; then
-  echo "❌ Die PECL-Versionen fehlen in der Umgebung — dieser Test laeuft ueber 'make test-extensions'." >&2
+  echo "❌ The PECL versions are missing from the environment — this test runs via 'make test-extensions'." >&2
   exit 2
 fi
 
-# PHP_EXT_CORE traegt Namen, PHP_EXT_PECL die Schreibweise name-version.
+# PHP_EXT_CORE carries names, PHP_EXT_PECL the name-version spelling.
 # shellcheck source-path=SCRIPTDIR
 # shellcheck source=../src/shared/php-extensions.env
 . "$EXT_FILE"
 
-# Vom Basis-Image erwartet, nicht von uns gebaut (B12).
+# Expected from the base image, not built by us.
 FROM_BASE_IMAGE='curl dom mbstring'
 
 EXPECTED="$PHP_EXT_CORE $FROM_BASE_IMAGE"
@@ -52,19 +48,19 @@ for ext in $EXPECTED; do
   if printf '%s\n' "$LOADED" | grep -qix -- "$ext"; then
     PASS=$((PASS + 1))
   else
-    echo "  ❌ fehlt: $ext"; FAIL=$((FAIL + 1))
+    echo "  ❌ missing: $ext"; FAIL=$((FAIL + 1))
   fi
 done
 
-# OPcache meldet sich als "Zend OPcache" und faellt damit durch das -x-Raster
-# oben. Ab PHP 8.5 ist es statisch einkompiliert (B13) — geprueft wird deshalb,
-# dass es geladen ist, nicht woher es kommt.
+# OPcache reports itself as "Zend OPcache" and so falls through the -x
+# matching above. Since PHP 8.5 it's compiled in statically — checked here is
+# that it's loaded, not where it comes from.
 if printf '%s\n' "$LOADED" | grep -q 'Zend OPcache'; then
   PASS=$((PASS + 1))
 else
-  echo "  ❌ fehlt: Zend OPcache"; FAIL=$((FAIL + 1))
+  echo "  ❌ missing: Zend OPcache"; FAIL=$((FAIL + 1))
 fi
 
-echo "  bestanden: $PASS   fehlgeschlagen: $FAIL"
+echo "  passed: $PASS   failed: $FAIL"
 [ "$FAIL" -eq 0 ] || exit 1
-echo "  ✅ alle erwarteten Extensions geladen"
+echo "  ✅ all expected extensions loaded"

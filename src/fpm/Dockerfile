@@ -1,25 +1,24 @@
 # ---------------------------------------------------------------------------
-# fpm — publiziert als headgent/phpfpm (E2, Name unveraendert)
+# fpm — published as headgent/phpfpm
 # ---------------------------------------------------------------------------
-# Zweck: php-fpm-only im Sidecar-Muster, vor einem nginx oder Traefik.
+# Purpose: php-fpm-only in a sidecar pattern, behind an nginx or Traefik.
 #
-# Alles Inhaltliche steht in base. Hier steht, was aus dem Request-Betrieb folgt:
-# ein Zeitlimit, die Pool-Parameter, das fcgi-Werkzeug fuer den Healthcheck und
-# die Pool-Erzeugung als Target-Ergaenzung (A3.2).
+# Everything substantive lives in base. Here is what follows from request
+# operation: a time limit, the pool parameters, the fcgi tool for the
+# healthcheck, and the pool generation as a target addition.
 #
-# Anders als cli korrigiert dieses Target das geerbte STOPSIGNAL NICHT: SIGQUIT
-# ist FPMs Signal fuer den graceful shutdown und hier genau richtig.
+# Unlike cli, this target does not correct the inherited STOPSIGNAL: SIGQUIT
+# is FPM's signal for a graceful shutdown and is correct here.
 #
-# DL3006: `base` ist ein benannter Build-Context, kein Registry-Image — es gibt
-# nichts zu taggen. Gleiche Begruendung wie in src/cli/Dockerfile.
+# DL3006: `base` is a named build context, not a registry image — there is
+# nothing to tag. Same reasoning as in src/cli/Dockerfile.
 # ---------------------------------------------------------------------------
 # hadolint ignore=DL3006
 FROM base
 
-# Der einzige der 13 Pflichtwerte, den base nicht setzt (A2.5, begruendetes
-# Delta zu D10): im Request-Kontext begrenzt ein Zeitlimit haengende Requests.
-# Der Grund ist der Prozesstyp, nicht das Target; der Schluessel heisst deshalb
-# _WEB und nicht _FPM.
+# The one required value base does not set: in a request context, a time
+# limit bounds hanging requests. The reason is the process type, not the
+# target; the key is therefore named _WEB, not _FPM.
 ARG PHP_MAX_EXECUTION_TIME_WEB
 ENV PHP_MAX_EXECUTION_TIME=${PHP_MAX_EXECUTION_TIME_WEB}
 
@@ -37,30 +36,31 @@ ENV FPM_PM=${FPM_PM} \
     FPM_PM_MAX_SPARE_SERVERS=${FPM_PM_MAX_SPARE_SERVERS} \
     FPM_PM_MAX_REQUESTS=${FPM_PM_MAX_REQUESTS}
 
-# cgi-fcgi treibt den Healthcheck weiter unten. Bewusst nur hier und nicht in
-# base — cli braucht es nicht.
+# cgi-fcgi drives the healthcheck below. Deliberately only here, not in base —
+# cli does not need it.
 RUN apk add --no-cache fcgi && rm -rf /var/cache/apk/*
 
-# Die Pool-Erzeugung ist eine Ergaenzung, keine Kopie des Entrypoints (A3.1/A3.2).
-# Der Kern sammelt alles aus entrypoint.d ein, ohne dieses Target zu kennen.
+# Pool generation is an addition, not a copy of the entrypoint. The core
+# collects everything from entrypoint.d without knowing this target.
 COPY src/fpm/fpm-pool.sh /usr/local/lib/entrypoint.d/10-fpm-pool.sh
 
-# Gegenstueck zum Symlink fuer 99-runtime-config.ini in base: die Pool-Config
-# wird zur Laufzeit in /home/appuser/php-config erzeugt und haengt von dort in
-# php-fpm.d/. Das zz-Praefix sorgt dafuer, dass sie als letzte gelesen wird und
-# damit www.conf und zz-docker.conf des offiziellen Images ueberschreibt.
+# Counterpart to the symlink for 99-runtime-config.ini in base: the pool
+# config is generated at runtime under /home/appuser/php-config and linked
+# from there into php-fpm.d/. The zz prefix ensures it is read last, so it
+# overrides www.conf and zz-docker.conf from the official image.
 RUN set -eux; \
     : > "/home/${APP_USER}/php-config/zz-fpm-runtime.conf"; \
     chown "${APP_USER}:${APP_USER}" "/home/${APP_USER}/php-config/zz-fpm-runtime.conf"; \
     ln -sf "/home/${APP_USER}/php-config/zz-fpm-runtime.conf" \
            /usr/local/etc/php-fpm.d/zz-fpm-runtime.conf
 
-# Prueft den FastCGI-Dienst selbst, nicht nur den Interpreter: ohne antwortenden
-# Pool ist das Image nutzlos. ping.path/ping.response setzt fpm-pool.sh.
+# Checks the FastCGI service itself, not just the interpreter: without a
+# responding pool the image is useless. ping.path/ping.response are set by
+# fpm-pool.sh.
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
   CMD sh -c "SCRIPT_NAME=/ping SCRIPT_FILENAME=/ping REQUEST_METHOD=GET cgi-fcgi -bind -connect 127.0.0.1:9000 | grep -q pong"
 
-# EXPOSE 9000 und STOPSIGNAL SIGQUIT kommen aus dem offiziellen fpm-Image und
-# sind hier beide richtig — sie werden deshalb nicht wiederholt und nicht
-# geaendert (im Gegensatz zu cli, das STOPSIGNAL auf SIGTERM korrigiert).
+# EXPOSE 9000 and STOPSIGNAL SIGQUIT come from the official fpm image and are
+# both correct here — they are neither repeated nor changed (unlike cli,
+# which corrects STOPSIGNAL to SIGTERM).
 CMD ["php-fpm"]

@@ -1,25 +1,21 @@
 #!/bin/bash
 # ---------------------------------------------------------------------------
-# check-bake-graph.sh — die aufgeloeste Bake-Definition (A1.2/A1.3/A9.2, AK10)
+# check-bake-graph.sh — the resolved bake definition
 # ---------------------------------------------------------------------------
-# Prueft `docker buildx bake --print`, nicht den Dateitext: erst die aufgeloeste
-# Definition zeigt, was wirklich gebaut wuerde. Baut nichts und braucht kein
-# Image — laeuft deshalb in Sekunden und faellt frueh durch.
+# Checks `docker buildx bake --print`, not the file text: only the resolved
+# definition shows what would actually be built. Builds nothing and needs no
+# image, so it runs in seconds and fails fast.
 #
-# Belegt drei Zusagen, die sonst nur in P6 einmal von Hand gezeigt wurden:
+# Proves three guarantees that were otherwise only shown once by hand: every
+# published target pulls `base` for its own PHP version via contexts, so a
+# change to base rebuilds ALL dependent targets; base itself is never
+# published (not in the default group, carries no tag); one version string
+# drives every tag (:<ver> and :<ver>-<date> per target, :latest exactly once
+# per image).
 #
-#   A9.2/AK10  jedes publizierte Ziel zieht `base` seiner eigenen PHP-Version
-#              ueber contexts. Damit baut eine Aenderung an base ALLE
-#              abhaengigen Targets neu — es gibt keinen zweiten Weg an base
-#              vorbei.
-#   A1.2       base wird nicht publiziert: es steht nicht in der Default-Gruppe
-#              und traegt keinen Tag.
-#   A1.3       EIN Versionsstring treibt alle Tags: je Ziel :<ver> und
-#              :<ver>-<datum>, und :latest genau einmal je Image.
-#
-# Aufruf ohne Argumente; die Definition kommt aus `make bake-print`, damit die
-# Werte denselben Weg nehmen wie beim echten Build (Makefile -> Umgebung ->
-# bake, Befund B1).
+# Called without arguments; the definition comes from `make bake-print` so
+# the values take the same path as a real build (Makefile -> environment ->
+# bake).
 set -eu
 
 REPO_ROOT=$(CDPATH='' cd -- "$(dirname -- "$0")/.." && pwd)
@@ -27,16 +23,16 @@ REPO_ROOT=$(CDPATH='' cd -- "$(dirname -- "$0")/.." && pwd)
 PASS=0; FAIL=0
 ok()    { echo "  ✅ $1"; PASS=$((PASS + 1)); }
 bad()   { echo "  ❌ $1"; FAIL=$((FAIL + 1)); }
-check() { if [ "$2" = "$3" ]; then ok "$1 ($3)"; else bad "$1 — erwartet '$3', ist '$2'"; fi; }
+check() { if [ "$2" = "$3" ]; then ok "$1 ($3)"; else bad "$1 — expected '$3', got '$2'"; fi; }
 
-echo ">>> Bake-Definition (aufgeloest, ohne Build)"
+echo ">>> Bake definition (resolved, no build)"
 
 DEF=$(cd "$REPO_ROOT" && make bake-print 2>/dev/null)
 
-# jq waere die naheliegende Wahl, ist aber nicht ueberall installiert und waere
-# eine neue Voraussetzung fuer den Prueflauf. python3 liegt auf jedem Runner und
-# auf jedem Entwicklungsrechner dieses Projekts.
-frage() { # <python-ausdruck ueber d>
+# jq would be the obvious choice but isn't installed everywhere and would add
+# a new prerequisite for the test run. python3 is on every runner and every
+# development machine for this project.
+ask() { # <python expression over d>
   echo "$DEF" | python3 -c "
 import json,sys
 d = json.load(sys.stdin)
@@ -44,67 +40,67 @@ print($1)
 "
 }
 
-# --- A1.2: base ist Vorstufe, kein Artefakt --------------------------------
-check "Default-Gruppe baut genau cli und fpm" \
-      "$(frage "','.join(sorted(d['group']['default']['targets']))")" "cli,fpm"
+# --- base is a precursor, not an artifact -----------------------------------
+check "default group builds exactly cli and fpm" \
+      "$(ask "','.join(sorted(d['group']['default']['targets']))")" "cli,fpm"
 
-check "kein base-Ziel traegt einen Tag" \
-      "$(frage "sum(len(t.get('tags',[])) for n,t in d['target'].items() if n.startswith('base-'))")" "0"
+check "no base target carries a tag" \
+      "$(ask "sum(len(t.get('tags',[])) for n,t in d['target'].items() if n.startswith('base-'))")" "0"
 
-# --- A9.2/AK10: jedes publizierte Ziel haengt an SEINEM base ----------------
-# Der Kern der Zusage. Faellt ein Ziel aus dieser Kette, wuerde eine
-# base-Aenderung es nicht mehr neu bauen — und niemand saehe es.
-fehler=$(frage "';'.join(
+# --- every published target hangs off ITS OWN base --------------------------
+# The core guarantee. If a target fell out of this chain, a base change
+# would no longer rebuild it — and nobody would notice.
+errors=$(ask "';'.join(
     n for n,t in d['target'].items()
     if (n.startswith('cli-') or n.startswith('fpm-'))
     and t.get('contexts',{}).get('base') != 'target:base-' + n.split('-',1)[1]
 )")
-zahl=$(frage "sum(1 for n in d['target'] if n.startswith('cli-') or n.startswith('fpm-'))")
-if [ -z "$fehler" ]; then
-  ok "alle $zahl publizierten Ziele ziehen target:base-<eigene-version> (A9.2)"
+count=$(ask "sum(1 for n in d['target'] if n.startswith('cli-') or n.startswith('fpm-'))")
+if [ -z "$errors" ]; then
+  ok "all $count published targets pull target:base-<own-version>"
 else
-  bad "diese Ziele haengen nicht an ihrem base: $fehler"
+  bad "these targets don't hang off their own base: $errors"
 fi
 
-# Gegenprobe zur Zeile darueber: sie ist nur etwas wert, wenn ueberhaupt Ziele
-# geprueft wurden. Bei einer leeren Matrix waere die Liste leer und die
-# Zusicherung trotzdem gruen — die Fallstrick-Klasse B11/B19/B21.
-if [ "$zahl" -ge 2 ]; then
-  ok "es wurden wirklich Ziele geprueft ($zahl)"
+# Control check for the line above: it's only worth anything if targets were
+# actually checked. With an empty matrix the list would be empty and the
+# guarantee would still report green — measuring nothing.
+if [ "$count" -ge 2 ]; then
+  ok "targets were really checked ($count)"
 else
-  bad "die Matrix ist leer oder unvollstaendig ($zahl Ziele) — die Zusicherung darueber misst nichts"
+  bad "the matrix is empty or incomplete ($count targets) — the guarantee above measures nothing"
 fi
 
-# --- A1.3: ein Versionsstring treibt alle Tags ------------------------------
-# Je Ziel genau :<ver> und :<ver>-<datum>; :latest kommt zusaetzlich und genau
-# einmal je Image-Namen.
-fehler=$(frage "';'.join(
+# --- one version string drives every tag ------------------------------------
+# Per target exactly :<ver> and :<ver>-<date>; :latest comes in addition and
+# exactly once per image name.
+errors=$(ask "';'.join(
     n for n,t in d['target'].items()
     if (n.startswith('cli-') or n.startswith('fpm-'))
     and len([x for x in t.get('tags',[]) if not x.endswith(':latest')]) != 2
 )")
-if [ -z "$fehler" ]; then
-  ok "jedes publizierte Ziel traegt :<ver> UND :<ver>-<datum> (A1.3)"
+if [ -z "$errors" ]; then
+  ok "every published target carries :<ver> AND :<ver>-<date>"
 else
-  bad "diese Ziele tragen nicht genau zwei Versions-Tags: $fehler"
+  bad "these targets don't carry exactly two version tags: $errors"
 fi
 
-check "genau ein :latest je publiziertem Image" \
-      "$(frage "len([x for t in d['target'].values() for x in t.get('tags',[]) if x.endswith(':latest')])")" "2"
+check "exactly one :latest per published image" \
+      "$(ask "len([x for t in d['target'].values() for x in t.get('tags',[]) if x.endswith(':latest')])")" "2"
 
-# Alle Datums-Tags eines Laufs muessen dasselbe Datum tragen — sonst koennte ein
-# Projekt phpcli und phpfpm nicht als Kombination pinnen (A1.3).
+# All date tags of one run must carry the same date — otherwise a project
+# couldn't pin phpcli and phpfpm as a combination.
 #
-# set(...) und NICHT die Mengen-Schreibweise mit geschweiften Klammern: der
-# Ausdruck geht durch die Shell, und die haette {a,b} als Klammer-Expansion
-# auseinandergenommen, bevor python ihn je sieht (gemessen 2026-07-26 — der
-# erste Lauf zerfiel in drei Syntaxfehler).
-datums_tags="[x.rsplit(':',1)[1] for t in d['target'].values() for x in t.get('tags',[])]"
-check "es gibt ueberhaupt Datums-Tags zu pruefen" \
-      "$(frage "sum(1 for tag in $datums_tags if '-' in tag)")" "6"
-check "alle Datums-Tags eines Laufs tragen dasselbe Datum" \
-      "$(frage "len(set(tag.rsplit('-',1)[1] for tag in $datums_tags if '-' in tag))")" "1"
+# set(...) and NOT the brace set notation: the expression goes through the
+# shell, which would tear {a,b} apart as brace expansion before python ever
+# sees it (measured once — the first run fell apart into three syntax
+# errors).
+date_tags="[x.rsplit(':',1)[1] for t in d['target'].values() for x in t.get('tags',[])]"
+check "there are date tags to check at all" \
+      "$(ask "sum(1 for tag in $date_tags if '-' in tag)")" "6"
+check "all date tags of one run carry the same date" \
+      "$(ask "len(set(tag.rsplit('-',1)[1] for tag in $date_tags if '-' in tag))")" "1"
 
 echo
-echo "  bestanden: $PASS   fehlgeschlagen: $FAIL"
+echo "  passed: $PASS   failed: $FAIL"
 [ "$FAIL" -eq 0 ] || exit 1

@@ -1,23 +1,23 @@
-# Build-Kontext aller Targets ist das Repo-Root (A7.5), weil base, cli und fpm
-# gemeinsam auf src/shared/ zugreifen. Alles, was kein Target braucht,
-# wird hier ausgeschlossen — das haelt den Kontext klein und verhindert, dass ein
-# unbedachtes COPY Repo-Beiwerk ins Image traegt.
+# Build context for all targets is the repo root, because base, cli, and fpm
+# share access to src/shared/. Anything a target doesn't need is excluded
+# here to keep the context small and prevent a careless COPY from pulling
+# repo clutter into the image.
 
-# Versionskontrolle & Werkzeuge
+# Version control & tooling
 .git/
 .github/
 .gitignore
 .dockerignore
 
-# Build-Steuerung (wird als Build-Arg uebergeben, nicht ins Image kopiert)
-# support/ deckt docker-bake.hcl und hadolint.yaml mit ab — beide liegen dort.
+# Build control (passed as a build arg, not copied into the image)
+# support/ also covers docker-bake.hcl and hadolint.yaml, both located there.
 .env
 Makefile
 support/
 tests/
 .buildx-cache/
 
-# Dokumentation (nicht Teil einer Laufzeit)
+# Documentation (not part of any runtime)
 docs/
 LICENSE
 **/*.md
@@ -28,7 +28,7 @@ LICENSE
 .claude/
 **/.DS_Store
 
-# Temporaeres
+# Temporary files
 **/*.tmp
 **/*.log
 **/*.cache

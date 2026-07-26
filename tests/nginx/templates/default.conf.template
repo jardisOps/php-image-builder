@@ -1,47 +1,44 @@
 ###############################################################################
-# nginx-vhost fuer PHP-FPM — Vorlage fuer das UNVERAENDERTE offizielle Image
+# nginx vhost for PHP-FPM — template for the UNCHANGED official image
 #
-# nginx ist kein Build-Target dieses Repos (E9). Diese Datei ist ein
-# versioniertes Asset: sie wird vom offiziellen Image ueber dessen eingebaute
-# Substitution verarbeitet (/docker-entrypoint.d/20-envsubst-on-templates.sh
-# ersetzt jeden Platzhalter aus der Umgebung und schreibt das Ergebnis nach
-# /etc/nginx/conf.d/). Kein eigener Entrypoint, kein eigener Build (A6.3).
+# nginx is not a build target of this repo. This file is a versioned asset:
+# the official image processes it via its built-in substitution
+# (/docker-entrypoint.d/20-envsubst-on-templates.sh replaces every placeholder
+# from the environment and writes the result to /etc/nginx/conf.d/). No custom
+# entrypoint, no custom build.
 #
-# Einbindung — so steht es in tests/demo/demo-stack.yml (P10). Die Pfade sind vom
-# Repo-Root aus geschrieben, weil Compose den Stack mit --project-directory .
-# faehrt:
+# Wiring — as used in tests/demo/demo-stack.yml. Paths are written from the
+# repo root because Compose runs the stack with --project-directory .:
 #
 #   services:
 #     web:
-#       image: nginx:1.28-alpine                   # NGINX_VERSION der .env
+#       image: nginx:1.28-alpine                   # NGINX_VERSION from .env
 #       env_file:
-#         - ./tests/nginx/nginx-defaults.env       # Defaults (A6.4)
+#         - ./tests/nginx/nginx-defaults.env       # defaults
 #       environment:
-#         HOST: example.com                          # schlaegt die Defaults
+#         HOST: example.com                          # overrides the defaults
 #       volumes:
 #         - ./tests/nginx/templates:/etc/nginx/templates:ro
-#         - ./tests/demo/app:/app:ro               # nginx liest nur (E9)
+#         - ./tests/demo/app:/app:ro               # nginx only reads
 #
-# Alle Variablen, ihre Defaults und ihre Wirkung stehen in nginx-defaults.env.
-# envsubst kennt keine Defaults und keine Validierung — eine Variable, die in
-# der Umgebung fehlt, bleibt unersetzt stehen und laesst nginx beim Start
-# sichtbar scheitern. Deshalb ist die Defaults-Datei Teil der Auslieferung.
-# (In dieser Datei steht deshalb auch in Kommentaren kein Platzhalter, den die
-# Substitution nicht aufloesen kann — check-nginx-template.sh prueft das.)
+# All variables, their defaults and their effect are documented in
+# nginx-defaults.env. envsubst has no defaults and no validation — a variable
+# missing from the environment stays unresolved and nginx visibly fails to
+# start. That is why the defaults file ships as part of this delivery. (For
+# that reason, no comment in this file contains a placeholder that
+# substitution can't resolve — check-nginx-template.sh verifies this.)
 ###############################################################################
 
 ###############################################################################
-# HTTPS-Annahme — ein Schalter (A6.2)
+# HTTPS assumption — one switch
 #
-# Der Bestand setzte HTTPS und REQUEST_SCHEME fest auf https, gemuenzt auf
-# TLS-Terminierung durch Traefik. Ohne vorgelagerten Proxy ist das falsch: die
-# Anwendung baut https-URLs, die niemand bedienen kann. Beide fastcgi-Werte
-# folgen jetzt aus REQUEST_SCHEME (http|https) und koennen deshalb nicht
-# auseinanderlaufen.
+# Without an upstream proxy, hardcoding HTTPS=on would be wrong: the
+# application would build https URLs nobody can serve. Both fastcgi values
+# below follow from REQUEST_SCHEME (http|https) and so can't drift apart.
 #
-#   http   HTTPS wird gar nicht uebergeben (if_not_empty) — genau das tut das
-#          offizielle fastcgi_params ohne TLS auch.
-#   https  HTTPS=on, wie hinter einem TLS-Proxy erforderlich.
+#   http   HTTPS is not passed through at all (if_not_empty) — exactly what
+#          the official fastcgi_params does without TLS too.
+#   https  HTTPS=on, as required behind a TLS proxy.
 ###############################################################################
 map "${REQUEST_SCHEME}" $fastcgi_https {
     "https"  on;
@@ -54,9 +51,9 @@ server {
 
     server_name ${HOST};
 
-    ###############
-    # Basis-Setup #
-    ###############
+    ##############
+    # Basic setup #
+    ##############
     root   ${APP_ROOT}${DOCUMENT_ROOT};
     index  ${INDEX_FILE} index.html;
     charset UTF-8;
@@ -86,9 +83,9 @@ server {
         text/plain
         image/svg+xml;
 
-    #################
-    # Security-Header
-    #################
+    ##################
+    # Security headers
+    ##################
     add_header Referrer-Policy           "no-referrer-when-downgrade";
     add_header X-XSS-Protection          "1; mode=block";
     add_header X-Content-Type-Options    "nosniff";
@@ -100,21 +97,18 @@ server {
     # Real-IP (Docker / Traefik) #
     ##############################
     real_ip_header X-Forwarded-For;
-    set_real_ip_from 172.16.0.0/12;  # Docker-Netzwerk
-    set_real_ip_from 10.0.0.0/8;     # Weitere private Netze
+    set_real_ip_from 172.16.0.0/12;  # Docker network
+    set_real_ip_from 10.0.0.0/8;     # Other private networks
     real_ip_recursive on;
 
-    ##############################
-    # Static Assets & verborgene #
-    ##############################
-    # Kein add_header in dieser Location (B25/O6): nginx vererbt die
-    # Server-Header oben NUR an Ebenen, die selbst keines tragen. Das frueher
-    # hier stehende `add_header Cache-Control "public";` verdraengte damit alle
-    # sechs Header — statische Dateien kamen ohne nosniff, ohne SAMEORIGIN und
-    # ohne HSTS heraus, und trugen Cache-Control doppelt (max-age aus
-    # `expires 1y` plus public). Die Zeile ist geloescht statt die sechs Header
-    # hier zu wiederholen; verloren geht allein das Attribut "public", das fuer
-    # Assets ohne Authentifizierung nichts aendert.
+    ###############################
+    # Static assets & hidden files #
+    ###############################
+    # No add_header in this location: nginx only inherits the server headers
+    # above at levels that carry none of their own. Adding a Cache-Control
+    # header here would displace all six of them, so it stays out; the only
+    # thing lost is "public", which changes nothing for unauthenticated
+    # assets.
     location ~* \.(?:css|js|gif|jpe?g|png|webp|svg|ico|woff2?|woff|ttf)$ {
         expires 1y;
         try_files $uri =404;
@@ -125,18 +119,18 @@ server {
         return 404;
     }
 
-    ###############################################################
-    # 1. Genereller Request-Eingang → Front-Controller /index.php #
-    ###############################################################
+    ##########################################################
+    # 1. General request entry → front controller /index.php #
+    ##########################################################
     location / {
-        # 1. existiert Datei/Ordner? → direkt ausliefern
-        # 2. sonst interner Redirect auf  /index.php/<original-Pfad>
+        # 1. file/directory exists? → serve directly
+        # 2. otherwise internal redirect to /index.php/<original-path>
         try_files $uri $uri/ /${INDEX_FILE}?$args;
     }
 
     ################################################################
-    # 2. Spezielle Location: /index.php + alles dahinterliegende   #
-    #    – sorgt für korrektes $_SERVER['PATH_INFO']               #
+    # 2. Special location: /index.php + everything after it        #
+    #    – ensures correct $_SERVER['PATH_INFO']                   #
     ################################################################
     location ~ ^/${INDEX_FILE}(/.*)?$ {
         include fastcgi_params;
@@ -145,7 +139,7 @@ server {
         fastcgi_param  SCRIPT_FILENAME $realpath_root/${INDEX_FILE};
         fastcgi_param  DOCUMENT_ROOT   $realpath_root;
 
-        # entscheidend
+        # crucial
         fastcgi_param  PATH_INFO       $1;
         fastcgi_param  PATH_TRANSLATED $document_root$1;
 
@@ -165,23 +159,14 @@ server {
     }
 
     ###############################################################
-    # 3. Fallback: wirkliche *.php-Dateien (z. B. /info.php)       #
+    # 3. Fallback: real *.php files (e.g. /info.php)                #
     ###############################################################
     location ~ \.php$ {
-        # Nur wirklich vorhandene .php-Dateien erreichen den Upstream (B24/O6).
-        # Ohne diese Zeile gibt die Location jeden Pfad weiter, der auf .php
-        # endet — auch /upload.jpg/x.php. Bei cgi.fix_pathinfo=1 loest PHP dann
-        # auf den laengsten existierenden Prefix auf und fuehrt die hochgeladene
-        # Datei aus. Abgefangen hat das bisher allein security.limit_extensions
-        # des php-fpm (403); mit try_files antwortet nginx selbst 404, und die
-        # Vorlage traegt den Schutz unabhaengig von der fpm-Konfiguration.
-        #
-        # Was sich dabei aendert: PATH_INFO hinter einer beliebigen .php-Datei
-        # gibt es hier nicht mehr — /legacy.php/sub.php faellt jetzt auf 404
-        # statt auf /legacy.php mit PATH_INFO=/sub.php aufzuloesen. Das ist
-        # genau die Angriffsform; der Front-Controller behaelt sein PATH_INFO
-        # ueber Location 2. Ein Pfad, dessen letztes Segment NICHT auf .php
-        # endet, trifft diese Location ohnehin nie.
+        # Only .php files that actually exist reach the upstream — without
+        # this, any path ending in .php (e.g. /upload.jpg/x.php) forwards to
+        # PHP, which under cgi.fix_pathinfo=1 could execute an uploaded file.
+        # Trade-off: PATH_INFO behind an arbitrary .php file no longer
+        # resolves here; the front controller keeps its own via location 2.
         try_files $uri =404;
 
         include fastcgi_params;
@@ -206,9 +191,9 @@ server {
         fastcgi_busy_buffers_size 256k;
     }
 
-    ##############################
-    # Versteckte Dateien sperren #
-    ##############################
+    ########################
+    # Block hidden files    #
+    ########################
     location ~ /\.(?!well-known).* {
         deny all;
     }

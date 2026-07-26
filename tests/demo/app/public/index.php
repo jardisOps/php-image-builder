@@ -1,41 +1,40 @@
 <?php
 
 /**
- * Demo-Anwendung des Stacks aus tests/demo/demo-stack.yml (P10).
+ * Demo application for the stack in tests/demo/demo-stack.yml.
  *
- * Zweck: zeigen, dass die drei Teile wirklich zusammenspielen — das offizielle
- * nginx mit unserer Vorlage aus P9, headgent/phpfpm und das offizielle
- * mariadb. Sie zeigt deshalb nur, was der Stack beweisen soll, und ist kein
- * Anwendungsgeruest: keine Abhaengigkeiten, kein Autoloader, kein Framework.
+ * Purpose: show that the three parts actually work together — the official
+ * nginx with our template, headgent/phpfpm and the official mariadb. It shows
+ * only what the stack needs to prove and is not an application skeleton: no
+ * dependencies, no autoloader, no framework.
  *
- * KEINE VORLAGE FUER PRODUKTIVCODE. Diese Seite gibt absichtlich aus, was eine
- * Anwendung fuer sich behalten muesste — die Fehlermeldung der Datenbank samt
- * Benutzer und Herkunfts-IP, die Laufzeitkonfiguration und die
- * Prozesskennung. Das ist ihr Zweck: ein Demo-Stack, der eine gescheiterte
- * Verbindung als leeres Feld zeigt, meldet Erfolg, wo keiner ist. Wer von hier
- * abschreibt, laesst genau diese Ausgaben weg.
+ * NOT A TEMPLATE FOR PRODUCTION CODE. This page deliberately outputs what a
+ * real application must keep to itself — the database error message with user
+ * and origin IP, the runtime configuration, and the process ID. That is the
+ * point: a demo stack that shows a failed connection as an empty field reports
+ * success where there is none. Anyone copying from here should drop these
+ * outputs.
  *
- * Die Ausgabe ist zugleich der Messpunkt von tests/check-demo-stack.sh.
- * Wer hier Marken (PROBE=..., DB=...) umbenennt, zieht dort nach.
+ * The output is also the measuring point of tests/check-demo-stack.sh. Renaming
+ * markers here (PROBE=..., DB=...) requires updating that script too.
  */
 
 declare(strict_types=1);
 
-/** Praefix, an dem die Ausgabe eine gescheiterte Verbindung erkennt. */
-const DB_ERROR_PREFIX = 'FEHLER: ';
+/** Prefix that marks the output as a failed connection. */
+const DB_ERROR_PREFIX = 'ERROR: ';
 
 /**
- * Verbindet zur Demo-Datenbank und gibt ihre Serverkennung zurueck.
+ * Connects to the demo database and returns its server identifier.
  *
- * Bei einem Fehler ist der Rueckgabewert die Meldung mit DB_ERROR_PREFIX davor
- * — der Aufrufer unterscheidet daran, nicht an einem leeren Feld.
+ * On failure, the return value is the error message prefixed with
+ * DB_ERROR_PREFIX — callers distinguish on that, not on an empty field.
  */
 function databaseVersion(): string
 {
-    // Kein Default fuer die Zugangsdaten: ein hartkodierter Wert im Code kann
-    // die Konfiguration still ueberstimmen — genau der Defekt, den dieses Repo
-    // an anderer Stelle als D16 aufgehoben hat. Fehlt ein Wert, wird das
-    // gemeldet und nicht geraten.
+    // No default for the credentials: a hardcoded value in code could
+    // silently override the configuration. A missing value is reported, not
+    // guessed.
     $required = ['DEMO_DB_HOST', 'DEMO_DB_NAME', 'DEMO_DB_USER', 'DEMO_DB_PASSWORD'];
 
     $config = [];
@@ -50,7 +49,7 @@ function databaseVersion(): string
     }
 
     if ($missing !== []) {
-        return DB_ERROR_PREFIX . 'nicht gesetzt: ' . implode(', ', $missing);
+        return DB_ERROR_PREFIX . 'not set: ' . implode(', ', $missing);
     }
 
     $dsn = sprintf(
@@ -74,7 +73,7 @@ function databaseVersion(): string
     }
 }
 
-/** Die Laufzeitwerte, die das APP_ENV-Profil des Images gesetzt hat (A10). */
+/** The runtime values set by the image's APP_ENV profile. */
 function runtimeFacts(): array
 {
     $jit = ini_get('opcache.jit');
@@ -82,29 +81,28 @@ function runtimeFacts(): array
     return [
         'PHP'                        => PHP_VERSION,
         'SAPI'                       => PHP_SAPI,
-        'APP_ENV'                    => getenv('APP_ENV') ?: '<nicht gesetzt>',
+        'APP_ENV'                    => getenv('APP_ENV') ?: '<not set>',
         'opcache.enable'             => ini_get('opcache.enable'),
         'opcache.validate_timestamps' => ini_get('opcache.validate_timestamps'),
-        'opcache.jit'                => ($jit === '' || $jit === false) ? '<leer>' : $jit,
-        'xdebug.mode'                => extension_loaded('xdebug') ? ini_get('xdebug.mode') : '<nicht geladen>',
-        'pcov.enabled'               => extension_loaded('pcov') ? ini_get('pcov.enabled') : '<nicht geladen>',
+        'opcache.jit'                => ($jit === '' || $jit === false) ? '<empty>' : $jit,
+        'xdebug.mode'                => extension_loaded('xdebug') ? ini_get('xdebug.mode') : '<not loaded>',
+        'pcov.enabled'               => extension_loaded('pcov') ? ini_get('pcov.enabled') : '<not loaded>',
         'max_execution_time'         => ini_get('max_execution_time'),
         'memory_limit'               => ini_get('memory_limit'),
-        // posix ist in unseren Images vorhanden, aber nicht in jedem PHP-Build
-        // — ohne die Pruefung waere die ganze Seite ein Fatal Error statt einer
-        // fehlenden Zeile.
-        'Prozesskennung'             => function_exists('posix_geteuid')
+        // posix is present in our images, but not in every PHP build — without
+        // this check the whole page would be a fatal error instead of one
+        // missing line.
+        'Process ID'                 => function_exists('posix_geteuid')
             ? sprintf('%s:%s', posix_geteuid(), posix_getegid())
-            : '<posix nicht geladen>',
+            : '<posix not loaded>',
     ];
 }
 
 /**
- * Die $_SERVER-Werte, die aus der nginx-Vorlage stammen (A6/A8.3).
+ * The $_SERVER values that come from the nginx template.
  *
- * HTTPS steht bewusst mit dabei: bei REQUEST_SCHEME=http darf der Schluessel
- * gar nicht ankommen — das war im Bestand fest auf "on" verdrahtet und damit
- * ohne TLS-Proxy falsch (A6.2).
+ * HTTPS is deliberately included: with REQUEST_SCHEME=http, the key must not
+ * arrive at all — a fixed "on" here would be wrong without a TLS proxy.
  */
 function templateFacts(): array
 {
@@ -115,7 +113,7 @@ function templateFacts(): array
 
     $facts = [];
     foreach ($keys as $key) {
-        $facts[$key] = $_SERVER[$key] ?? '<nicht uebergeben>';
+        $facts[$key] = $_SERVER[$key] ?? '<not passed>';
     }
 
     return $facts;
@@ -123,30 +121,30 @@ function templateFacts(): array
 
 $dbVersion = databaseVersion();
 
-// Maschinenlesbare Zeile fuer den Prueflauf. Sie steht vor dem HTML, damit sie
-// unabhaengig von jeder Darstellung greifbar bleibt.
+// Machine-readable line for the test run. It precedes the HTML so it stays
+// reachable independent of any rendering.
 header('Content-Type: text/html; charset=utf-8');
 
 ?>
 <!-- PROBE=demo-app DB=<?= htmlspecialchars($dbVersion, ENT_QUOTES) ?> -->
 <!doctype html>
-<html lang="de">
+<html lang="en">
 <head>
     <meta charset="utf-8">
-    <title>php-image-builder — Demo-Stack</title>
+    <title>php-image-builder — demo stack</title>
     <link rel="stylesheet" href="/demo.css">
 </head>
 <body>
-<h1>Demo-Stack laeuft</h1>
+<h1>Demo stack running</h1>
 
 <p class="lead">
-    Drei Container: das offizielle <code>nginx</code> mit der Vorlage aus
-    <code>tests/nginx/templates/</code>, <code>phpfpm</code> aus diesem Repo
-    und das offizielle <code>mariadb</code>. Kein eigener nginx-Build, kein
-    eigener Datenbank-Build.
+    Three containers: the official <code>nginx</code> with the template from
+    <code>tests/nginx/templates/</code>, <code>phpfpm</code> from this repo,
+    and the official <code>mariadb</code>. No custom nginx build, no custom
+    database build.
 </p>
 
-<h2>Datenbank</h2>
+<h2>Database</h2>
 <table>
     <tr>
         <th>SELECT VERSION()</th>
@@ -156,7 +154,7 @@ header('Content-Type: text/html; charset=utf-8');
     </tr>
 </table>
 
-<h2>PHP-Laufzeit — gesetzt vom APP_ENV-Profil des Images</h2>
+<h2>PHP runtime — set by the image's APP_ENV profile</h2>
 <table>
     <?php foreach (runtimeFacts() as $key => $value): ?>
         <tr>
@@ -166,7 +164,7 @@ header('Content-Type: text/html; charset=utf-8');
     <?php endforeach; ?>
 </table>
 
-<h2>Aus der nginx-Vorlage — $_SERVER</h2>
+<h2>From the nginx template — $_SERVER</h2>
 <table>
     <?php foreach (templateFacts() as $key => $value): ?>
         <tr>
@@ -177,9 +175,9 @@ header('Content-Type: text/html; charset=utf-8');
 </table>
 
 <p class="hint">
-    Weitere Einstiege: <a href="/index.php/beliebig/pfad">/index.php/beliebig/pfad</a>
-    zeigt <code>PATH_INFO</code>, <a href="/health.txt">/health.txt</a> wird von
-    nginx direkt ausgeliefert (ohne PHP) und traegt dessen Healthcheck.
+    More entry points: <a href="/index.php/any/path">/index.php/any/path</a>
+    shows <code>PATH_INFO</code>, <a href="/health.txt">/health.txt</a> is
+    served by nginx directly (without PHP) and carries its healthcheck.
 </p>
 </body>
 </html>

@@ -1,37 +1,37 @@
 # shellcheck shell=dash
 # ---------------------------------------------------------------------------
-# fpm-pool.sh — Target-Ergaenzung des fpm-Images (A3.2)
+# fpm-pool.sh — target addition for the fpm image
 # ---------------------------------------------------------------------------
-# Liegt im Image unter /usr/local/lib/entrypoint.d/ und wird von entrypoint.sh
-# gesourct, nachdem der Laufzeit-Benutzer bestimmt und die PHP-INI erzeugt ist.
-# Der Kern kennt dieses Target nicht — er sammelt nur ein, was in entrypoint.d
-# liegt. Das ist der ganze Unterschied zwischen fpm und cli auf Skriptebene.
+# Lives in the image under /usr/local/lib/entrypoint.d/ and is sourced by
+# entrypoint.sh after the runtime user has been determined and the PHP INI
+# generated. The core does not know this target — it only collects whatever
+# lives in entrypoint.d. That is the entire difference between fpm and cli at
+# the script level.
 #
-# Erwartet aus dem Kern: APP_USER, INI_DIR, RUNTIME_USER, appuser_gid(),
-#                        log_info/log_warn/die
-# Setzt:                 RUNTIME_USER='' — siehe "Rechtewechsel" unten
+# Expected from the core: APP_USER, INI_DIR, RUNTIME_USER, appuser_gid(),
+#                          log_info/log_warn/die
+# Sets:                    RUNTIME_USER='' — see "privilege handover" below
 #
 # ---------------------------------------------------------------------------
-# RECHTEWECHSEL (N4, entschieden 2026-07-25: Variante b)
+# PRIVILEGE HANDOVER
 # ---------------------------------------------------------------------------
-# FPM startet als root und wechselt seine Worker SELBST ueber `user =` in dieser
-# Pool-Config. Der Master bleibt root, die Worker laufen unprivilegiert — das von
-# PHP vorgesehene Betriebsmodell, das auch das offizielle php:X-fpm-Image nutzt
-# (`user = www-data` in www.conf).
+# FPM starts as root and switches its workers itself via `user =` in this
+# pool config. The master stays root, the workers run unprivileged — the
+# operating model PHP itself intends and the one the official php:X-fpm image
+# uses (`user = www-data` in www.conf).
 #
-# Der Weg des Bestands (Entrypoint wechselt per su-exec, Master unprivilegiert)
-# ist NICHT umsetzbar: FPM oeffnet das globale error_log (/proc/self/fd/2) nach
-# dem Wechsel neu und scheitert daran. Der Griff, der das verhindern sollte —
-# `chown` auf die stdio-Deskriptoren — ist wirkungslos, weil dort eine anonyme
-# Pipe haengt. Belegt: headgent/phpfpm:8.2/:8.3/:8.4 starten deshalb alle nicht.
-# Ausfuehrlich in entrypoint.sh bei handover().
+# The alternative (entrypoint switches via su-exec, master unprivileged) is
+# not viable: FPM reopens the global error_log (/proc/self/fd/2) after the
+# switch and fails, because it is an anonymous pipe there and `chown` on the
+# stdio descriptors has no effect on it. Details in entrypoint.sh at
+# handover().
 #
-# Sicherheitseinordnung: der Master parst die Konfiguration, oeffnet Socket und
-# Logs und verwaltet Worker — er verarbeitet KEINE Requests. Der gesamte
-# Angriffskontakt liegt in den Workern, und die sind unprivilegiert.
+# Security note: the master parses the configuration, opens the socket and
+# logs, and manages workers — it processes NO requests. The entire attack
+# surface lies in the workers, and those are unprivileged.
 # ---------------------------------------------------------------------------
 
-FPM_VALUE_HINT='ist nicht gesetzt — dieser Wert muss als ENV aus dem Image kommen (src/fpm/Dockerfile, gespeist aus der .env).'
+FPM_VALUE_HINT='is not set — this value must come as an ENV from the image (src/fpm/Dockerfile, fed from .env).'
 
 _fpm_require_values() {
     : "${FPM_PM:?$FPM_VALUE_HINT}" \
@@ -43,31 +43,31 @@ _fpm_require_values() {
 
     case "$FPM_PM" in
         static|dynamic|ondemand) ;;
-        *) die "FPM_PM='$FPM_PM' ist ungueltig. Erlaubt: static, dynamic, ondemand." ;;
+        *) die "FPM_PM='$FPM_PM' is invalid. Allowed: static, dynamic, ondemand." ;;
     esac
 }
 
 # ---------------------------------------------------------------------------
-# Zielkennung der Worker
+# Worker identity
 # ---------------------------------------------------------------------------
-# Uebernimmt, was lib-user.sh ermittelt hat, statt "appuser" fest anzunehmen:
+# Takes over what lib-user.sh has determined instead of assuming "appuser":
 #
-#   RUNTIME_USER='appuser'   Regelfall — die Gruppe wird NUMERISCH gesetzt, weil
-#                            nach einer Angleichung an eine belegte Ziel-GID die
-#                            Gruppe "appuser" noch mit ihrer alten GID existiert
-#                            (derselbe Grund wie bei appuser_owner()).
-#   RUNTIME_USER='1:1000'    Ziel-UID war belegt, appuser wurde nicht
-#                            umnummeriert — die Worker laufen direkt unter der
-#                            numerischen Kennung.
-#   RUNTIME_USER=''          Container wurde von aussen per --user gestartet
-#                            (A4.4). FPM laeuft dann nicht als root und wuerde
-#                            user/group mit einer NOTICE verwerfen — deshalb
-#                            werden die beiden Zeilen weggelassen.
+#   RUNTIME_USER='appuser'   Normal case — the group is set NUMERICALLY,
+#                            because after alignment to an already-taken
+#                            target GID the "appuser" group still exists
+#                            under its old GID (same reason as appuser_owner()).
+#   RUNTIME_USER='1:1000'    Target UID was taken, appuser was not
+#                            renumbered — the workers run directly under the
+#                            numeric identity.
+#   RUNTIME_USER=''          Container was started from outside via --user.
+#                            FPM then does not run as root and would discard
+#                            user/group with a NOTICE — so both lines are
+#                            omitted.
 _fpm_resolve_worker_identity() {
     FPM_USER_LINES=''
 
     [ -n "${RUNTIME_USER:-}" ] || {
-        log_info "Container laeuft unter einer von aussen vorgegebenen Kennung — die Pool-Direktiven user/group entfallen, FPM uebernimmt die laufende Kennung."
+        log_info "Container is running under an externally supplied identity — the user/group pool directives are omitted, FPM keeps the running identity."
         return 0
     }
 
@@ -83,16 +83,16 @@ listen.group = $_fpm_group"
 }
 
 # ---------------------------------------------------------------------------
-# Pool-Konfiguration
+# Pool configuration
 # ---------------------------------------------------------------------------
-# Die Datei heisst zz-fpm-runtime.conf und wird damit als letzte aus
-# php-fpm.d/*.conf gelesen — sie ueberschreibt die Vorgaben des offiziellen
-# Images (www.conf, zz-docker.conf). Sie liegt in INI_DIR und haengt per Symlink
-# in php-fpm.d/, genau wie 99-runtime-config.ini in conf.d haengt.
+# The file is named zz-fpm-runtime.conf and is thereby read last from
+# php-fpm.d/*.conf — it overrides the official image's defaults (www.conf,
+# zz-docker.conf). It lives in INI_DIR and is linked into php-fpm.d/, the same
+# way 99-runtime-config.ini is linked in conf.d.
 _fpm_write_pool_config() {
     cat > "$INI_DIR/zz-fpm-runtime.conf" <<FPMCONF
 ; ---------------------------------------------------------------------------
-; Erzeugt beim Containerstart von entrypoint.d/10-fpm-pool.sh — fluechtig.
+; Generated at container start by entrypoint.d/10-fpm-pool.sh — transient.
 ; APP_ENV=$APP_ENV
 ; ---------------------------------------------------------------------------
 [www]
@@ -106,7 +106,7 @@ pm.min_spare_servers = $FPM_PM_MIN_SPARE_SERVERS
 pm.max_spare_servers = $FPM_PM_MAX_SPARE_SERVERS
 pm.max_requests = $FPM_PM_MAX_REQUESTS
 
-; /ping traegt den Healthcheck des Images, /status die Betriebsbeobachtung.
+; /ping carries the image's healthcheck, /status is for operational monitoring.
 pm.status_path = /status
 ping.path = /ping
 ping.response = pong
@@ -115,9 +115,9 @@ access.log = /dev/stdout
 slowlog = /dev/stderr
 request_slowlog_timeout = 5s
 
-; clear_env=no ist Voraussetzung dafuer, dass die Worker die vom Entrypoint
-; aufgeloesten Werte sehen — insbesondere XDEBUG_MODE, dem Xdebug 3 Vorrang vor
-; der INI gibt (A10.5).
+; clear_env=no is required so the workers see the values resolved by the
+; entrypoint — in particular XDEBUG_MODE, which Xdebug 3 gives precedence
+; over the INI.
 clear_env = no
 catch_workers_output = yes
 decorate_workers_output = no
@@ -125,26 +125,26 @@ FPMCONF
 }
 
 # ---------------------------------------------------------------------------
-# Ausfuehrung (die Datei wird gesourct, es gibt keinen eigenen Einstiegspunkt)
+# Execution (this file is sourced, it has no entry point of its own)
 # ---------------------------------------------------------------------------
 _fpm_require_values
 _fpm_resolve_worker_identity
 _fpm_write_pool_config
 
-# Der Symlink in php-fpm.d/ zeigt fest auf /home/$APP_USER/php-config/. Ist
-# INI_DIR ausgewichen (A4.4-Ausweichpfad in lib-phpini.sh), findet FPM die Datei
-# dort nicht und faellt auf die Vorgaben des offiziellen Images zurueck. Das wird
-# gemeldet statt verschwiegen.
+# The symlink in php-fpm.d/ points at a fixed /home/$APP_USER/php-config/. If
+# INI_DIR fell back to a different path, FPM won't find the file there and
+# falls back to the official image's defaults. This is reported, not
+# silenced.
 [ "$INI_DIR" = "/home/$APP_USER/php-config" ] || \
-    log_warn "Die Pool-Konfiguration liegt in $INI_DIR, der Symlink in php-fpm.d/ zeigt aber auf /home/$APP_USER/php-config. FPM startet mit den Vorgaben des Basis-Images; die FPM_PM_*-Werte wirken nicht."
+    log_warn "The pool configuration lives in $INI_DIR, but the symlink in php-fpm.d/ points at /home/$APP_USER/php-config. FPM starts with the base image's defaults; the FPM_PM_* values have no effect."
 
-# Kein su-exec: FPM braucht root, um sein error_log zu oeffnen und danach selbst
-# auf die Worker-Kennung zu wechseln (N4-Variante b, s.o.). handover() im Kern
-# uebergibt bei leerem RUNTIME_USER direkt per exec.
+# No su-exec: FPM needs root to open its error_log and then switch to the
+# worker identity itself (see privilege handover above). handover() in the
+# core hands off directly via exec when RUNTIME_USER is empty.
 RUNTIME_USER=''
 
 if [ -n "$FPM_USER_LINES" ]; then
-    log_info "FPM-Pool erzeugt: pm=$FPM_PM, max_children=$FPM_PM_MAX_CHILDREN, Worker laufen als $_fpm_user:$_fpm_group (Master bleibt root)."
+    log_info "FPM pool created: pm=$FPM_PM, max_children=$FPM_PM_MAX_CHILDREN, workers run as $_fpm_user:$_fpm_group (master stays root)."
 else
-    log_info "FPM-Pool erzeugt: pm=$FPM_PM, max_children=$FPM_PM_MAX_CHILDREN, Worker laufen unter der von aussen vorgegebenen Kennung."
+    log_info "FPM pool created: pm=$FPM_PM, max_children=$FPM_PM_MAX_CHILDREN, workers run under the externally supplied identity."
 fi

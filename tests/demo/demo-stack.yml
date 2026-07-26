@@ -1,37 +1,34 @@
 # =============================================================================
-# Demo-Stack — mariadb + phpfpm + offizielles nginx (A8, P10)
+# Demo stack — mariadb + phpfpm + official nginx
 # =============================================================================
-# Zeigt den Weg, den Projekte gehen sollen: dieses Repo liefert die PHP-Laufzeit
-# und die nginx-Vorlage; Webserver und Datenbank kommen als UNVERAENDERTE
-# offizielle Images (A8.1). Es wird hier nichts gebaut — kein build:-Abschnitt,
-# kein eigener Entrypoint, kein eigenes nginx-Image (E9/AK12).
+# Shows the intended path for consuming projects: this repo provides the PHP
+# runtime and the nginx template; the web server and database are UNCHANGED
+# official images. Nothing is built here — no build: section, no custom
+# entrypoint, no custom nginx image.
 #
 # -----------------------------------------------------------------------------
-# AUFRUF
+# USAGE
 # -----------------------------------------------------------------------------
-#   make demo-up       starten
-#   make demo-down     abbauen
+#   make demo-up       start
+#   make demo-down     tear down
 #
-# Ohne make:
+# Without make:
 #
 #   docker compose -f tests/demo/demo-stack.yml --project-directory . up -d --wait
 #
-# --project-directory ist NICHT verzichtbar und keine Nacharbeit im Sinne von
-# AK9: Compose nimmt sonst tests/demo/ als Projektverzeichnis, liest dort eine
-# .env, die es nicht gibt, und setzt jede Variable auf leer (gemessen
-# 2026-07-25). Alle Pfade in dieser Datei sind deshalb vom Repo-Root aus
-# geschrieben. Die Werte kommen aus der .env im Root — kein Wert ist hier ein
-# zweites Mal gepflegt (A2.1), es steht deshalb auch kein ${VAR:-default} darin.
+# --project-directory is required: without it, Compose treats tests/demo/ as
+# the project directory, looks for a .env there that doesn't exist, and every
+# variable ends up empty. All paths in this file are therefore written from
+# the repo root. Values come from the .env at the repo root — nothing here is
+# a second copy, so there is no ${VAR:-default} in this file.
 #
 # -----------------------------------------------------------------------------
-# WELCHES phpfpm-IMAGE
+# WHICH phpfpm IMAGE
 # -----------------------------------------------------------------------------
-# Der Verweis unten ist der, den ein Projekt schreibt: headgent/phpfpm:<ver>.
-# Solange die neue Reihe nicht publiziert ist (N6), gibt es unter diesem Namen
-# nur den Bestand — und der ist in allen drei Versionen startunfaehig (B9). Bis
-# zum ersten Push faehrt `make demo-up` den Stack deshalb gegen die lokal
-# gebauten Test-Images, indem es DOCKER_HUB umsetzt. Nach dem Push faellt der
-# Griff weg und der Aufruf oben stimmt woertlich.
+# The reference below is the one a consuming project would write:
+# headgent/phpfpm:<ver>. Until the new image series is published, `make
+# demo-up` instead points DOCKER_HUB at the locally built test images. Once
+# published, the reference above applies literally.
 # =============================================================================
 
 name: php-image-builder-demo
@@ -39,7 +36,7 @@ name: php-image-builder-demo
 services:
 
   # ---------------------------------------------------------------------------
-  # Datenbank — offizielles Image, unveraendert
+  # Database — official image, unchanged
   # ---------------------------------------------------------------------------
   db:
     image: mariadb:${MARIADB_VERSION}
@@ -48,15 +45,15 @@ services:
       MARIADB_DATABASE: ${DEMO_DB_NAME}
       MARIADB_USER: ${DEMO_DB_USER}
       MARIADB_PASSWORD: ${DEMO_DB_PASSWORD}
-    # Die Demo-Datenbank ist mit dem Stack weg. Ein Named Volume wuerde
-    # `docker compose down` ueberleben und dem naechsten Lauf still einen alten
-    # Zustand unterschieben. Wer Persistenz braucht, ersetzt tmpfs durch ein
-    # Volume auf /var/lib/mysql.
+    # The demo database goes away with the stack. A named volume would survive
+    # `docker compose down` and silently hand the next run a stale state.
+    # Anyone needing persistence replaces tmpfs with a volume on
+    # /var/lib/mysql.
     tmpfs:
       - /var/lib/mysql
-    # A8.2. Das offizielle Image bringt healthcheck.sh mit; --innodb_initialized
-    # meldet erst gruen, wenn die Datenbank Abfragen beantwortet — ein blosses
-    # "Port offen" waere zu frueh, weil der erste Start noch initialisiert.
+    # The official image ships healthcheck.sh; --innodb_initialized only goes
+    # green once the database actually answers queries — a bare "port open"
+    # would be too early during the first-start initialization.
     healthcheck:
       test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
       interval: 5s
@@ -65,75 +62,72 @@ services:
       start_period: 30s
 
   # ---------------------------------------------------------------------------
-  # PHP-FPM — das Image dieses Repos
+  # PHP-FPM — this repo's image
   # ---------------------------------------------------------------------------
-  # Der Dienst heisst `app`, weil FASTCGI_UPSTREAM in nginx-defaults.env genau
-  # so voreingestellt ist. Wer ihn umbenennt, setzt die Variable beim Webserver
-  # mit um — sonst findet nginx den Upstream beim Start nicht (B23).
+  # The service is named `app` because FASTCGI_UPSTREAM in nginx-defaults.env
+  # defaults to exactly that. Renaming it means updating the variable on the
+  # web server too, or nginx won't find the upstream at startup.
   app:
     image: ${DOCKER_HUB}/${IMAGE_NAME_FPM}:${PHP_VERSION}
     depends_on:
       db:
         condition: service_healthy
     environment:
-      # Der eine Umgebungsschalter (A10). Das Profil setzt Xdebug, PCOV,
-      # OPcache, JIT und die Fehleranzeige gemeinsam; die Demo-Seite zeigt das
-      # Ergebnis an.
+      # The one environment switch. The profile sets Xdebug, PCOV, OPcache,
+      # JIT and error display together; the demo page displays the result.
       APP_ENV: ${APP_ENV}
-      # Zugang zur Datenbank. Der Host ist der Dienstname.
+      # Database access. The host is the service name.
       DEMO_DB_HOST: db
       DEMO_DB_NAME: ${DEMO_DB_NAME}
       DEMO_DB_USER: ${DEMO_DB_USER}
       DEMO_DB_PASSWORD: ${DEMO_DB_PASSWORD}
     volumes:
-      # Der Anwendungscode. Schreibbar gemountet, weil eine echte Anwendung hier
-      # Cache und Logs ablegt; der Entrypoint gleicht appuser an den Eigentuemer
-      # dieses Verzeichnisses an (A4).
+      # The application code. Mounted writable because a real application
+      # stores cache and logs here; the entrypoint aligns appuser with this
+      # directory's owner.
       - ./tests/demo/app:${APP_ROOT}
-    # Kein healthcheck:-Block — das Image bringt einen mit (FastCGI-Ping gegen
-    # den eigenen Pool, src/fpm/Dockerfile). A8.2 ist damit erfuellt, ohne ihn
-    # hier ein zweites Mal zu pflegen.
+    # No healthcheck: block — the image ships its own (FastCGI ping against
+    # its own pool, src/fpm/Dockerfile). Satisfied without repeating it here.
 
   # ---------------------------------------------------------------------------
-  # Webserver — offizielles Image, unveraendert (E9/A6.3/AK12)
+  # Web server — official image, unchanged
   # ---------------------------------------------------------------------------
   web:
     image: nginx:${NGINX_VERSION}-alpine
     depends_on:
       app:
-        # Nicht bloss service_started: nginx loest den Upstream-Namen schon beim
-        # Start auf und beendet sich, wenn er ihn nicht findet (B23).
+        # Not just service_started: nginx resolves the upstream name at
+        # startup and exits if it can't find it.
         condition: service_healthy
     env_file:
-      # Die elf Vorlagen-Variablen mit ihren Defaults. envsubst kennt keine
-      # Default-Schreibweise — ohne diese Datei bleiben Platzhalter stehen und
-      # nginx startet nicht (A6.4, in P9 gegengeprueft).
+      # The eleven template variables with their defaults. envsubst has no
+      # default syntax — without this file, unresolved placeholders stay in
+      # place and nginx refuses to start.
       - ./tests/nginx/nginx-defaults.env
     environment:
-      # A8.3 — exemplarisch befuellt. environment schlaegt env_file, dieselbe
-      # Richtung wie die Vorrangregel A10.2 bei den PHP-Werten.
+      # Set exemplarily. environment overrides env_file, same precedence
+      # direction as for the PHP values.
       #
-      # Gesetzt wird nur, was ein Projekt an dieser Stelle wirklich entscheidet.
-      # Alles Uebrige (APP_ROOT, DOCUMENT_ROOT, INDEX_FILE, FASTCGI_UPSTREAM,
-      # PHP_PORT, CLIENT_MAX_BODY_SIZE, die drei Timeouts) kommt aus der
-      # Defaults-Datei und passt hier unveraendert.
+      # Only what a consuming project actually decides here is set. Everything
+      # else (APP_ROOT, DOCUMENT_ROOT, INDEX_FILE, FASTCGI_UPSTREAM, PHP_PORT,
+      # CLIENT_MAX_BODY_SIZE, the three timeouts) comes from the defaults file
+      # and applies unchanged here.
       HOST: localhost
-      # http = kein vorgelagerter TLS-Proxy: HTTPS wird gar nicht uebergeben,
-      # die Anwendung baut http-URLs (A6.2). Hinter Traefik & Co. steht hier
-      # https — ein Schalter, der HTTPS, REQUEST_SCHEME und
-      # HTTP_X_FORWARDED_PROTO gemeinsam umlegt.
+      # http = no upstream TLS proxy: HTTPS isn't passed through at all, and
+      # the application builds http URLs. Behind Traefik & co. this would be
+      # https — one switch that flips HTTPS, REQUEST_SCHEME and
+      # HTTP_X_FORWARDED_PROTO together.
       REQUEST_SCHEME: http
     volumes:
       - ./tests/nginx/templates:/etc/nginx/templates:ro
-      # nginx liest nur — das war der Grund, aus dem es kein eigenes Image mehr
-      # braucht (E9): Lesen verlangt keine angeglichene UID.
+      # nginx only reads — which is why it needs no image of its own: reading
+      # requires no UID alignment.
       - ./tests/demo/app:${APP_ROOT}:ro
     ports:
       - "${DEMO_HTTP_PORT}:80"
-    # A8.2. Das offizielle nginx bringt keinen Healthcheck mit. Geprueft wird
-    # eine statische Datei und nicht der Front-Controller: dieser Dienst soll
-    # seine eigene Verfuegbarkeit melden, nicht die von php-fpm — die meldet der
-    # Dienst app selbst.
+    # The official nginx image ships no healthcheck. A static file is checked
+    # here rather than the front controller: this service should report its
+    # own availability, not php-fpm's — the app service reports that itself.
     healthcheck:
       test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1/health.txt"]
       interval: 5s

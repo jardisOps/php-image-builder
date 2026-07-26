@@ -1,9 +1,9 @@
 /*
- * Statisches Beiwerk der Demo-Anwendung.
+ * Styling for the demo application.
  *
- * Es hat einen zweiten Zweck: die Datei faellt in die Static-Asset-Location der
- * nginx-Vorlage (css|js|png|...) und wird damit von nginx direkt ausgeliefert,
- * ohne php-fpm. Der Stack zeigt dadurch beide Wege, die die Vorlage kennt.
+ * It serves a second purpose: the file falls into the static-asset location of
+ * the nginx template (css|js|png|...) and is therefore served by nginx directly,
+ * without php-fpm. The stack thus exercises both paths the template knows.
  */
 
 body {

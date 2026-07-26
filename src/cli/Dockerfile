@@ -1,50 +1,47 @@
 # ---------------------------------------------------------------------------
-# cli — publiziert als headgent/phpcli (E2, Name unveraendert)
+# cli — published as headgent/phpcli
 # ---------------------------------------------------------------------------
-# Zweck: Worker, Queue-Consumer, Cron, CI- und Build-Kontext.
+# Purpose: worker, queue consumer, cron, CI, and build context.
 #
-# Alles Inhaltliche steht in base: PHP-Version, Extensions, Composer,
-# Laufzeit-Bibliotheken, appuser, Entrypoint-Kern, INI-Ladereihenfolge, WORKDIR.
-# Hier steht nur noch, was aus dem Einsatzzweck folgt — und das sind genau die
-# drei Werte, die ein Image nur EINMAL tragen kann und die zwischen Worker- und
-# Request-Betrieb entgegengesetzt sein muessen (max_execution_time, STOPSIGNAL,
-# HEALTHCHECK). Genau daran haengt, dass cli und fpm zwei Artefakte bleiben.
+# Everything substantive lives in base: PHP version, extensions, Composer,
+# runtime libraries, appuser, entrypoint core, INI load order, WORKDIR. Here
+# there is only what follows from the purpose — the three values an image can
+# only carry once, and which must be opposite between worker and request
+# operation (max_execution_time, STOPSIGNAL, HEALTHCHECK). This is exactly
+# why cli and fpm remain two separate artifacts.
 #
-# `FROM base` wird von support/docker-bake.hcl ueber
-# contexts = { base = "target:base" } aufgeloest (A1.2) — base wird dabei nicht
-# publiziert.
+# `FROM base` is resolved by support/docker-bake.hcl via
+# contexts = { base = "target:base" } — base itself is not published.
 #
-# DL3006 ("always tag the version explicitly") ist hier ein Fehlalarm: `base` ist
-# ein benannter Build-Context, kein Registry-Image — es gibt nichts zu taggen.
-# hadolint kennt das bake-Konzept nicht. Der Ignore steht bewusst inline und
-# nicht in support/hadolint.yaml, damit ein echtes ungetaggtes FROM in einem
-# kuenftigen Dockerfile weiterhin auffaellt.
+# DL3006 ("always tag the version explicitly") is a false positive here:
+# `base` is a named build context, not a registry image — there is nothing to
+# tag. hadolint doesn't know the bake concept. The ignore stays inline rather
+# than in support/hadolint.yaml, so a real untagged FROM in a future
+# Dockerfile still gets flagged.
 # ---------------------------------------------------------------------------
 # hadolint ignore=DL3006
 FROM base
 
-# Der einzige der 13 Pflichtwerte, den base nicht setzt: er folgt dem Prozesstyp,
-# nicht der Umgebung (A2.5, begruendetes Delta zu D10). Ein langlaufender Worker
-# oder Queue-Consumer darf kein Zeitlimit haben — 0 heisst unbegrenzt. Der
-# Schluesselname traegt das _CLI, damit die .env beide Werte nebeneinander
-# pflegen kann; im Image heisst er wieder wie die PHP-Einstellung.
+# The one required value base does not set: it follows the process type, not
+# the environment. A long-running worker or queue consumer must not have a
+# time limit — 0 means unlimited. The key carries the _CLI suffix so .env can
+# maintain both values side by side; in the image it is set back to the plain
+# PHP setting name.
 ARG PHP_MAX_EXECUTION_TIME_CLI
 ENV PHP_MAX_EXECUTION_TIME=${PHP_MAX_EXECUTION_TIME_CLI}
 
-# Korrigiert das aus dem fpm-Basisimage geerbte SIGQUIT (Befund B6/N5). SIGQUIT
-# ist FPMs Signal fuer einen graceful shutdown; ein PHP-Worker kennt es nicht als
-# solches und wuerde stattdessen hart abgebrochen. SIGTERM ist das Signal, auf
-# das pcntl-basierte Worker-Schleifen hoeren.
+# Corrects the SIGQUIT inherited from the fpm base image. SIGQUIT is FPM's
+# signal for a graceful shutdown; a PHP worker does not recognize it as such
+# and would be hard-killed instead. SIGTERM is the signal pcntl-based worker
+# loops listen for.
 STOPSIGNAL SIGTERM
 
-# Geprueft wird, was dieses Image ausmacht: ein lauffaehiger PHP-Interpreter und
-# ein benutzbarer Composer. Uebernommen aus phpcli/src/Dockerfile:130-131.
-# Bewusst NICHT der FastCGI-Ping des fpm-Targets — hier lauscht kein FPM, der
-# Container waere dauerhaft unhealthy.
+# Checks what defines this image: a working PHP interpreter and a usable
+# Composer. Deliberately not the fpm target's FastCGI ping — no FPM listens
+# here, and the container would be permanently unhealthy.
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
   CMD sh -c "php --version >/dev/null && composer --version >/dev/null"
 
-# Geerbt und bewusst stehengelassen: EXPOSE 9000 aus dem fpm-Basisimage. Docker
-# kennt kein "unexpose"; die Zeile ist reine Metadatenangabe und oeffnet nichts
-# (Befund B6).
+# Inherited and deliberately left as is: EXPOSE 9000 from the fpm base image.
+# Docker has no "unexpose"; the line is pure metadata and opens nothing.
 CMD ["php","--version"]

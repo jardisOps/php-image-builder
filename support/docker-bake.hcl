@@ -1,31 +1,25 @@
 # ---------------------------------------------------------------------------
-# support/docker-bake.hcl — die eine Build-Beschreibung fuer alle Targets
+# support/docker-bake.hcl — the single build description for all targets
 # ---------------------------------------------------------------------------
-# Loest die duplizierte buildx-Schleifenlogik der beiden Bestands-Repos ab
-# (Plan-Optimierung 1). Dort standen dieselben ~35 --build-arg-Zeilen viermal
-# nebeneinander: je einmal in phpfpm-build, phpfpm-build-all, phpfpm-push und
-# phpfpm-push-all. Hier steht jedes Build-Arg genau einmal; local- und
-# push-Targets sind duenne Wrapper (support/makefiles/docker.build.*.mk).
+# Each build-arg is defined exactly once here; the local and push targets are
+# thin wrappers around it (support/makefiles/docker.build.*.mk).
 #
-# HERKUNFT DER WERTE (A2.1): ausschliesslich die Umgebung. Das Makefile laedt
-# ./.env, gibt der aufrufenden Umgebung Vorrang (Befund B1) und exportiert alles;
-# bake liest die Variablen von dort. Belegt am 2026-07-25: bake liest die .env
-# NICHT selbst ein — ohne das Makefile bleiben alle Werte leer.
+# VALUES COME FROM THE ENVIRONMENT ONLY. The Makefile loads ./.env, gives the
+# calling environment priority, and exports everything; bake reads the
+# variables from there — it does not read .env itself.
 #
-# KEIN DEFAULT (A2.4): kein `variable` traegt einen Wert. Das ist dieselbe Regel
-# wie in den Dockerfiles und aus demselben Grund — ein Default hier waere D16 an
-# neuer Stelle. Faellt ein Wert aus, bricht es sichtbar ab:
-#   PHP_VERSION leer  -> Build-Abbruch ("failed to parse stage name php:-fpm-alpine")
-#   ein ENV-Wert leer -> Start-Abbruch  (lib-phpini.sh, require_image_values,
-#                        ${VAR:?} greift bei leer UND bei ungesetzt)
+# NO DEFAULTS: no `variable` carries a value. A missing value must abort
+# visibly rather than build something else silently:
+#   PHP_VERSION empty  -> build aborts ("failed to parse stage name php:-fpm-alpine")
+#   an ENV value empty -> startup aborts (lib-phpini.sh, require_image_values,
+#                         ${VAR:?} triggers on empty AND on unset)
 #
-# MATRIX: die Versionsreihe kommt aus PHP_VERSIONS (support/makefiles/
-# docker.helper.mk, die einzige Definition der Matrix). `make build` setzt sie
-# auf die eine PHP_VERSION aus der .env, `make build-all` auf die volle Reihe —
-# derselbe Weg, nur eine andere Liste.
+# MATRIX: the version list comes from PHP_VERSIONS (support/makefiles/
+# docker.helper.mk, the single definition of the matrix). `make build` sets it
+# to the one PHP_VERSION from .env, `make build-all` to the full list.
 # ---------------------------------------------------------------------------
 
-# --- Matrix, Namen und Tags -------------------------------------------------
+# --- Matrix, names, and tags -------------------------------------------------
 variable "PHP_VERSIONS" {}
 variable "PHP_LATEST" {}
 variable "IMAGE_DATE" {}
@@ -33,12 +27,9 @@ variable "DOCKER_HUB" {}
 variable "IMAGE_NAME_CLI" {}
 variable "IMAGE_NAME_FPM" {}
 
-# --- Build-Args des base-Targets --------------------------------------------
-# 31 Stueck (27 + die vier OCI-Label-Args aus P11). Nicht alle stehen als
-# `variable`: PHP_VERSION und IMAGE_VERSION kommen aus der Matrix bzw. werden
-# daraus gebildet, nicht aus der .env. Die Zahl ist per `bake --print`
-# gegengeprueft und keine Anforderung — sie stand hier schon einmal falsch
-# (Befund B14).
+# --- Build-args for the base target -----------------------------------------
+# Not all of them are `variable` blocks: PHP_VERSION and IMAGE_VERSION come
+# from the matrix rather than from .env.
 variable "ALPINE_VERSION" {}
 variable "COMPOSER_VERSION" {}
 variable "APCU_VERSION" {}
@@ -66,19 +57,19 @@ variable "XDEBUG_CLIENT_PORT" {}
 variable "XDEBUG_LOG_LEVEL" {}
 variable "XDEBUG_IDEKEY" {}
 
-# --- OCI-Labels (A7.4/H4) ---------------------------------------------------
-# Abgeleitet in support/makefiles/docker.helper.mk. IMAGE_VERSION steht nicht
-# dabei: es ist je Matrix-Eintrag verschieden und entsteht unten aus php und
-# IMAGE_DATE — demselben Paar, das nach A1.3 auch den unveraenderlichen Tag
-# bildet. Damit sagt das Label genau, welchen Tag das Artefakt trägt.
+# --- OCI labels --------------------------------------------------------------
+# Derived in support/makefiles/docker.helper.mk. IMAGE_VERSION is not among
+# them: it differs per matrix entry and is built below from php and
+# IMAGE_DATE — the same pair that also forms the immutable tag, so the label
+# names exactly the tag the artifact carries.
 variable "IMAGE_SOURCE" {}
 variable "IMAGE_REVISION" {}
 variable "IMAGE_CREATED" {}
 
-# --- Build-Args des cli-Targets ---------------------------------------------
+# --- Build-args for the cli target -------------------------------------------
 variable "PHP_MAX_EXECUTION_TIME_CLI" {}
 
-# --- Build-Args des fpm-Targets ---------------------------------------------
+# --- Build-args for the fpm target -------------------------------------------
 variable "PHP_MAX_EXECUTION_TIME_WEB" {}
 variable "FPM_PM" {}
 variable "FPM_PM_MAX_CHILDREN" {}
@@ -88,20 +79,20 @@ variable "FPM_PM_MAX_SPARE_SERVERS" {}
 variable "FPM_PM_MAX_REQUESTS" {}
 
 # ---------------------------------------------------------------------------
-# Ableitungen
+# Derivations
 # ---------------------------------------------------------------------------
 php_list = split(" ", PHP_VERSIONS)
 
-# Bake-Zielnamen duerfen keinen Punkt enthalten: aus 8.3 wird 8-3.
+# Bake target names cannot contain a dot: 8.3 becomes 8-3.
 function "slug" {
   params = [version]
   result = replace(version, ".", "-")
 }
 
-# A1.3 — EIN Versionsstring treibt alle Tags. IMAGE_DATE gilt fuer den ganzen
-# Lauf, sodass phpcli:8.4-20260725 und phpfpm:8.4-20260725 garantiert aus
-# demselben Stand stammen und ein Projekt die Kombination pinnen kann.
-# :latest bekommt nur die hoechste Version der Matrix (PHP_LATEST).
+# One version string drives all tags. IMAGE_DATE is fixed for the whole run,
+# so phpcli:8.4-20260725 and phpfpm:8.4-20260725 are guaranteed to come from
+# the same build, and a project can pin the combination. :latest only goes to
+# the highest matrix version (PHP_LATEST).
 function "image_tags" {
   params = [name, version]
   result = concat(
@@ -114,20 +105,20 @@ function "image_tags" {
 }
 
 # ---------------------------------------------------------------------------
-# Gruppen
+# Groups
 # ---------------------------------------------------------------------------
-# base steht bewusst NICHT in der Default-Gruppe — es wird nicht publiziert und
-# ist nur Vorstufe. bake baut es trotzdem, weil cli und fpm es ueber
-# contexts = { base = ... } anziehen; ohne eigenen Tag und ohne --load.
+# base is deliberately not in the default group — it is not published, only a
+# prerequisite. bake still builds it because cli and fpm pull it in via
+# contexts = { base = ... }, without its own tag and without --load.
 group "default" {
   targets = ["cli", "fpm"]
 }
 
 # ---------------------------------------------------------------------------
-# base — nicht publiziert
+# base — not published
 # ---------------------------------------------------------------------------
-# Build-Kontext ist das Repo-Root: alle Targets greifen auf src/shared/ zu
-# (siehe .dockerignore).
+# The build context is the repo root: all targets access src/shared/ (see
+# .dockerignore).
 target "base" {
   name       = "base-${slug(php)}"
   matrix     = { php = php_list }
@@ -170,10 +161,10 @@ target "base" {
 }
 
 # ---------------------------------------------------------------------------
-# cli — publiziert als headgent/phpcli
+# cli — published as headgent/phpcli
 # ---------------------------------------------------------------------------
-# A1.2: `FROM base` im Dockerfile wird hier auf das gleichnamige Matrix-Ziel
-# gezogen — je PHP-Version das passende. base wird dabei nicht publiziert.
+# `FROM base` in the Dockerfile is pointed here at the matching matrix target,
+# one per PHP version. base itself is not published.
 target "cli" {
   name       = "cli-${slug(php)}"
   matrix     = { php = php_list }
@@ -187,7 +178,7 @@ target "cli" {
 }
 
 # ---------------------------------------------------------------------------
-# fpm — publiziert als headgent/phpfpm
+# fpm — published as headgent/phpfpm
 # ---------------------------------------------------------------------------
 target "fpm" {
   name       = "fpm-${slug(php)}"

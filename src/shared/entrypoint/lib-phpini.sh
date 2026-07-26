@@ -1,62 +1,51 @@
 # shellcheck shell=dash
 # ---------------------------------------------------------------------------
-# lib-phpini.sh — APP_ENV-Profile und Erzeugung der Laufzeit-INI
+# lib-phpini.sh - APP_ENV profiles and generation of the runtime ini
 # ---------------------------------------------------------------------------
-# Wird von entrypoint.sh gesourct und nie direkt ausgefuehrt.
+# Sourced by entrypoint.sh, never executed directly.
 #
-# Erwartet: APP_USER, log_info/log_warn/die (aus entrypoint.sh)
-# Setzt:    die aufgeloesten PHP-Einstellungen (exportiert) sowie INI_DIR
+# Expects: APP_USER, log_info/log_warn/die (from entrypoint.sh)
+# Sets:    the resolved PHP settings (exported) plus INI_DIR
 #
-# VORRANGREGEL (A10.2), von stark nach schwach:
-#   1. explizit gesetzte Einzelvariable   (docker run -e XDEBUG_MODE=trace)
-#   2. APP_ENV-Profil                     (dev | test | prod)
+# PRIORITY RULE, from strong to weak:
+#   1. an explicitly set individual variable  (docker run -e XDEBUG_MODE=trace)
+#   2. the APP_ENV profile                    (dev | test | prod)
 #
-# "Nicht gesetzt" und "leer" sind bewusst gleichbedeutend: die .env fuehrt die
-# profilgesteuerten Variablen als leere Slots, damit das Profil greifen kann.
+# "Unset" and "empty" are deliberately synonymous: the .env carries the
+# profile-driven variables as empty slots so the profile can take effect.
 #
-# Eine dritte Stufe mit Notwerten gibt es bewusst NICHT (Freigabe Rolf,
-# 2026-07-25). A10.2 nennt einen Fallback, er wuerde aber nie greifen: die
-# Profiltabelle deckt jede Profilvariable in jeder Umgebung ab, und die
-# profilunabhaengigen Werte bringt das Image mit. Fehlt einer, ist das ein
-# Build-Fehler — der bricht hier sichtbar ab, statt hinter einem Notwert
-# unentdeckt zu bleiben.
+# There is deliberately no third tier with fallback values: the profile
+# table covers every profile variable in every environment, and the
+# profile-independent values come from the image. A missing one is a build
+# error and aborts visibly here instead of hiding behind a fallback.
 # ---------------------------------------------------------------------------
 
 APP_ENV_VALUES='dev test prod'
 
 # ---------------------------------------------------------------------------
-# Profiltabelle — die EINZIGE Stelle, an der Profilwerte stehen
+# Profile table - the ONE place profile values live
 # ---------------------------------------------------------------------------
 #
 #                              dev        test       prod
 #   XDEBUG_MODE                debug      off        off
 #   PCOV_ENABLED               0          1          0
-#   OPCACHE_ENABLE             1          1          1
+#   OPCACHE_ENABLE              1          1          1
 #   OPCACHE_VALIDATE_TIMESTAMPS 1         1          0
 #   OPCACHE_REVALIDATE_FREQ    0          0          0
 #   OPCACHE_JIT                1254*      1254       1254
 #   PHP_DISPLAY_ERRORS         On         On         Off
 #   PHP_ERROR_REPORTING        E_ALL      E_ALL      E_ALL & ~E_DEPRECATED
 #
-#   * in dev schaltet die JIT-Automatik (A10.3) den Wert auf 'off', weil Xdebug
-#     dort aktiv ist. Der Profilwert bleibt 1254, damit ein bewusstes
-#     XDEBUG_MODE=off in dev sofort einen nutzbaren JIT ergibt.
+#   * in dev, the JIT auto-policy switches this to 'off' because Xdebug is
+#     active there. The profile value stays 1254 so an explicit
+#     XDEBUG_MODE=off in dev immediately yields a usable JIT.
 #
-# Begruendungen der Abweichungen vom Bestand:
-#   OPCACHE_VALIDATE_TIMESTAMPS  behebt L-C und D3 — heute bemerkt FPM im
-#                                Entwicklungsbetrieb keine Code-Aenderung, und
-#                                phpcli setzte den Wert ueberhaupt nicht (A10.6).
-#   PHP_DISPLAY_ERRORS=On in dev behebt L-D (beide .env hatten Off).
-#   PHP_ERROR_REPORTING ohne E_STRICT behebt L-G (seit PHP 8.0 bedeutungslos).
-#   XDEBUG_MODE=off in test    behebt L-B — der Default musste bisher in jedem
-#                                einzelnen Testaufruf abgeschaltet werden.
-#
-# Umsetzung: `${VAR:=wert}` setzt nur, wenn VAR nicht gesetzt oder leer ist —
-# dieses eine Sprachmittel IST die Vorrangregel A10.2. Werte, die in allen
-# Umgebungen gleich sind, stehen vor dem `case`; im `case` steht damit
-# ausschliesslich, was sich zwischen den Umgebungen tatsaechlich unterscheidet.
+# `${VAR:=value}` only sets a variable when it is unset or empty - this one
+# shell construct IS the priority rule above. Values identical across all
+# environments are set before the `case`; the `case` therefore holds only
+# what actually differs between environments.
 apply_env_profile() {
-    # In allen Umgebungen gleich, ueber ihren Slot dennoch uebersteuerbar.
+    # Same in all environments, still overridable via their slot.
     : "${OPCACHE_ENABLE:=1}" \
       "${OPCACHE_REVALIDATE_FREQ:=0}" \
       "${OPCACHE_JIT:=1254}"
@@ -84,29 +73,26 @@ apply_env_profile() {
               "${PHP_ERROR_REPORTING:=E_ALL & ~E_DEPRECATED}"
             ;;
         *)
-            die "APP_ENV='$APP_ENV' ist ungueltig. Erlaubt: $APP_ENV_VALUES."
+            die "APP_ENV='$APP_ENV' is invalid. Allowed: $APP_ENV_VALUES."
             ;;
     esac
 
-    # A10.5 — der Export ist fuer XDEBUG_MODE zwingend: Xdebug 3 liest die
-    # Umgebungsvariable und gibt ihr Vorrang vor der INI-Einstellung. Im Bestand
-    # funktionierte das nur zufaellig, weil die Variable aus der Image-ENV stammte
-    # und ihr Export-Attribut behielt, obwohl der Entrypoint sie ohne `export`
-    # ueberschrieb. Hier ist es ausdruecklich — und gilt fuer alle Werte, damit
-    # Kindprozesse dieselbe Konfiguration sehen wie die erzeugte INI.
+    # The export is mandatory for XDEBUG_MODE: Xdebug 3 reads the
+    # environment variable and gives it precedence over the ini setting. It
+    # is exported explicitly here for all values, so child processes see the
+    # same configuration as the generated ini.
     export XDEBUG_MODE PCOV_ENABLED OPCACHE_ENABLE OPCACHE_VALIDATE_TIMESTAMPS \
            OPCACHE_REVALIDATE_FREQ OPCACHE_JIT PHP_DISPLAY_ERRORS PHP_ERROR_REPORTING
 }
 
 # ---------------------------------------------------------------------------
-# Werte, die das Image mitbringen muss
+# Values the image must supply
 # ---------------------------------------------------------------------------
-# Profilunabhaengig: sie folgen nicht der Umgebung, sondern dem Einsatzzweck des
-# Targets (z.B. max_execution_time: 0 im CLI, 30 im Request-Kontext). Sie kommen
-# als ENV aus dem Dockerfile, gespeist aus der .env. Fehlt einer, bricht der
-# Start ab — siehe Kopfkommentar. `${VAR:?hinweis}` erledigt Pruefung und
-# Abbruch in einem Schritt.
-IMAGE_VALUE_HINT='ist nicht gesetzt — dieser Wert muss als ENV aus dem Image kommen (Dockerfile, gespeist aus der .env). Es gibt bewusst keinen Notwert, weil ein fehlender Wert ein Build-Fehler ist.'
+# Profile-independent: they follow the target's purpose, not the
+# environment (e.g. max_execution_time: 0 in CLI, 30 in a request context).
+# They arrive as ENV from the Dockerfile, fed from the .env.
+# `${VAR:?hint}` checks and aborts in one step if one is missing.
+IMAGE_VALUE_HINT='is not set - this value must come as ENV from the image (Dockerfile, fed from the .env). There is deliberately no fallback, because a missing value is a build error.'
 
 require_image_values() {
     : "${PHP_MEMORY_LIMIT:?$IMAGE_VALUE_HINT}" \
@@ -125,14 +111,14 @@ require_image_values() {
 }
 
 # ---------------------------------------------------------------------------
-# Validierung (A10.7, behebt L-E)
+# Validation
 # ---------------------------------------------------------------------------
 
 is_integer()   { case "$1" in ''|*[!0-9]*) return 1 ;; *) return 0 ;; esac; }
 is_byte_size() { printf '%s' "$1" | grep -Eq '^[0-9]+[KMGkmg]?$'; }
 is_onoff()     { case "$1" in On|Off|on|off|1|0|stderr) return 0 ;; *) return 1 ;; esac; }
 
-# Xdebug 3 akzeptiert eine kommaseparierte Liste dieser Modi.
+# Xdebug 3 accepts a comma-separated list of these modes.
 XDEBUG_MODES='off develop coverage debug gcstats profile trace'
 
 validate_xdebug_mode() {
@@ -141,102 +127,94 @@ validate_xdebug_mode() {
         case " $XDEBUG_MODES " in
             *" $_lp_mode "*) ;;
             *) IFS="$_lp_old_ifs"
-               die "XDEBUG_MODE enthaelt den unbekannten Modus '$_lp_mode'. Erlaubt (kommasepariert): $XDEBUG_MODES." ;;
+               die "XDEBUG_MODE contains the unknown mode '$_lp_mode'. Allowed (comma-separated): $XDEBUG_MODES." ;;
         esac
     done
     IFS="$_lp_old_ifs"
 }
 
-# APP_ENV selbst wird nicht hier geprueft, sondern vom `case` in
-# apply_env_profile: ein unbekannter Wert trifft dort den *)-Zweig und bricht ab.
+# APP_ENV itself is not checked here but by the `case` in apply_env_profile:
+# an unknown value hits the *) branch there and aborts.
 validate_values() {
     validate_xdebug_mode "$XDEBUG_MODE"
 
     case "$PCOV_ENABLED" in 0|1) ;; *)
-        die "PCOV_ENABLED='$PCOV_ENABLED' ist ungueltig. Erlaubt: 0 oder 1." ;;
+        die "PCOV_ENABLED='$PCOV_ENABLED' is invalid. Allowed: 0 or 1." ;;
     esac
 
     case "$OPCACHE_ENABLE" in 0|1) ;; *)
-        die "OPCACHE_ENABLE='$OPCACHE_ENABLE' ist ungueltig. Erlaubt: 0 oder 1." ;;
+        die "OPCACHE_ENABLE='$OPCACHE_ENABLE' is invalid. Allowed: 0 or 1." ;;
     esac
 
     case "$OPCACHE_VALIDATE_TIMESTAMPS" in 0|1) ;; *)
-        die "OPCACHE_VALIDATE_TIMESTAMPS='$OPCACHE_VALIDATE_TIMESTAMPS' ist ungueltig. Erlaubt: 0 oder 1." ;;
+        die "OPCACHE_VALIDATE_TIMESTAMPS='$OPCACHE_VALIDATE_TIMESTAMPS' is invalid. Allowed: 0 or 1." ;;
     esac
 
-    # opcache.jit nimmt 'off'/'disable'/'tracing'/'function' oder vier Ziffern (CRTO).
+    # opcache.jit accepts 'off'/'disable'/'tracing'/'function' or four digits (CRTO).
     case "$OPCACHE_JIT" in
         off|disable|on|tracing|function) ;;
         *) is_integer "$OPCACHE_JIT" \
-            || die "OPCACHE_JIT='$OPCACHE_JIT' ist ungueltig. Erlaubt: off, disable, on, tracing, function oder eine vierstellige CRTO-Zahl wie 1254." ;;
+            || die "OPCACHE_JIT='$OPCACHE_JIT' is invalid. Allowed: off, disable, on, tracing, function, or a four-digit CRTO number like 1254." ;;
     esac
 
     is_onoff "$PHP_DISPLAY_ERRORS" \
-        || die "PHP_DISPLAY_ERRORS='$PHP_DISPLAY_ERRORS' ist ungueltig. Erlaubt: On, Off oder stderr."
+        || die "PHP_DISPLAY_ERRORS='$PHP_DISPLAY_ERRORS' is invalid. Allowed: On, Off, or stderr."
     is_onoff "$PHP_LOG_ERRORS" \
-        || die "PHP_LOG_ERRORS='$PHP_LOG_ERRORS' ist ungueltig. Erlaubt: On oder Off."
+        || die "PHP_LOG_ERRORS='$PHP_LOG_ERRORS' is invalid. Allowed: On or Off."
 
     is_byte_size "$PHP_MEMORY_LIMIT" \
-        || die "PHP_MEMORY_LIMIT='$PHP_MEMORY_LIMIT' ist ungueltig. Erwartet z.B. 512M."
+        || die "PHP_MEMORY_LIMIT='$PHP_MEMORY_LIMIT' is invalid. Expected e.g. 512M."
     is_byte_size "$APCU_SHM_SIZE" \
-        || die "APCU_SHM_SIZE='$APCU_SHM_SIZE' ist ungueltig. Erwartet z.B. 64M."
+        || die "APCU_SHM_SIZE='$APCU_SHM_SIZE' is invalid. Expected e.g. 64M."
     is_byte_size "$OPCACHE_JIT_BUFFER_SIZE" \
-        || die "OPCACHE_JIT_BUFFER_SIZE='$OPCACHE_JIT_BUFFER_SIZE' ist ungueltig. Erwartet z.B. 128M oder 0."
+        || die "OPCACHE_JIT_BUFFER_SIZE='$OPCACHE_JIT_BUFFER_SIZE' is invalid. Expected e.g. 128M or 0."
 
     is_integer "$PHP_MAX_EXECUTION_TIME" \
-        || die "PHP_MAX_EXECUTION_TIME='$PHP_MAX_EXECUTION_TIME' ist ungueltig. Erwartet Sekunden als Zahl (0 = unbegrenzt)."
+        || die "PHP_MAX_EXECUTION_TIME='$PHP_MAX_EXECUTION_TIME' is invalid. Expected seconds as a number (0 = unlimited)."
     is_integer "$OPCACHE_MEMORY_CONSUMPTION" \
-        || die "OPCACHE_MEMORY_CONSUMPTION='$OPCACHE_MEMORY_CONSUMPTION' ist ungueltig. Erwartet Megabyte als Zahl."
+        || die "OPCACHE_MEMORY_CONSUMPTION='$OPCACHE_MEMORY_CONSUMPTION' is invalid. Expected megabytes as a number."
     is_integer "$OPCACHE_MAX_ACCELERATED_FILES" \
-        || die "OPCACHE_MAX_ACCELERATED_FILES='$OPCACHE_MAX_ACCELERATED_FILES' ist ungueltig. Erwartet eine Zahl."
+        || die "OPCACHE_MAX_ACCELERATED_FILES='$OPCACHE_MAX_ACCELERATED_FILES' is invalid. Expected a number."
     is_integer "$OPCACHE_REVALIDATE_FREQ" \
-        || die "OPCACHE_REVALIDATE_FREQ='$OPCACHE_REVALIDATE_FREQ' ist ungueltig. Erwartet Sekunden als Zahl."
+        || die "OPCACHE_REVALIDATE_FREQ='$OPCACHE_REVALIDATE_FREQ' is invalid. Expected seconds as a number."
     is_integer "$XDEBUG_CLIENT_PORT" \
-        || die "XDEBUG_CLIENT_PORT='$XDEBUG_CLIENT_PORT' ist ungueltig. Erwartet eine Portnummer."
+        || die "XDEBUG_CLIENT_PORT='$XDEBUG_CLIENT_PORT' is invalid. Expected a port number."
     is_integer "$XDEBUG_LOG_LEVEL" \
-        || die "XDEBUG_LOG_LEVEL='$XDEBUG_LOG_LEVEL' ist ungueltig. Erwartet 0-10."
+        || die "XDEBUG_LOG_LEVEL='$XDEBUG_LOG_LEVEL' is invalid. Expected 0-10."
 
-    [ -n "$PHP_TIMEZONE" ] || die 'PHP_TIMEZONE ist leer.'
-    [ -n "$PHP_ERROR_REPORTING" ] || die 'PHP_ERROR_REPORTING ist leer.'
+    [ -n "$PHP_TIMEZONE" ] || die 'PHP_TIMEZONE is empty.'
+    [ -n "$PHP_ERROR_REPORTING" ] || die 'PHP_ERROR_REPORTING is empty.'
 }
 
 # ---------------------------------------------------------------------------
-# Regeln, die sich aus den aufgeloesten Werten ergeben
+# Rules derived from the resolved values
 # ---------------------------------------------------------------------------
 
 xdebug_is_active() {
     [ -n "$XDEBUG_MODE" ] && [ "$XDEBUG_MODE" != 'off' ]
 }
 
-# PCOV und Xdebug schliessen sich gegenseitig aus. Diese Konfliktloesung ist der
-# tragfaehige Kern des Bestands (E10) und bleibt erhalten: PCOV gewinnt, weil es
-# ausdruecklich eingeschaltet wurde.
+# PCOV and Xdebug are mutually exclusive. PCOV wins because it was
+# explicitly enabled.
 enforce_pcov_xdebug_exclusion() {
     [ "$PCOV_ENABLED" = '1' ] || return 0
     xdebug_is_active || return 0
 
-    log_info "PCOV ist aktiv — XDEBUG_MODE wird von '$XDEBUG_MODE' auf 'off' gesetzt (PCOV und Xdebug schliessen sich aus)."
+    log_info "PCOV is active - XDEBUG_MODE is set from '$XDEBUG_MODE' to 'off' (PCOV and Xdebug are mutually exclusive)."
     XDEBUG_MODE='off'
 }
 
-# A10.3 — JIT-Automatik. Ohne sie schreibt der Entrypoint opcache.jit=1254 und
-# xdebug.mode=debug gemeinsam in die INI; PHP schaltet JIT dann selbst ab und
-# warnt bei JEDEM Aufruf (L-A). Bei phpcli war das der Default-Zustand.
+# JIT auto-policy. Without it, the entrypoint would write opcache.jit=1254
+# together with xdebug.mode=debug into the ini; PHP then disables JIT itself
+# and warns on every single call.
 #
-# Diese Regel schlaegt bewusst auch einen explizit gesetzten OPCACHE_JIT: der
-# Wert waere technisch wirkungslos, und ihn stehen zu lassen wuerde genau die
-# Warnung zurueckbringen, die A10.3 beseitigt. Der Vorgang wird gemeldet.
+# This rule deliberately overrides an explicitly set OPCACHE_JIT too: the
+# value would be technically ineffective, and leaving it would bring back
+# exactly the warning this policy avoids. The change is logged.
 enforce_jit_policy() {
-    # Der Grund ist nicht "Xdebug", sondern "eine Extension uebernimmt
-    # zend_execute_ex()". Das trifft auf Xdebug UND auf PCOV zu — PHP schaltet
-    # JIT in beiden Faellen selbst ab und warnt bei jedem Aufruf.
-    #
-    # Dass PCOV dazugehoert, kostete P2 einen blinden Fleck: die JIT-Automatik
-    # kannte nur Xdebug, und ausgerechnet das test-Profil (XDEBUG_MODE=off,
-    # PCOV_ENABLED=1, JIT=1254) warnte damit bei JEDEM Aufruf — genau die
-    # Warnung, die A10.3/L-A beseitigen soll. Aufgedeckt vom P8-Test am
-    # gebauten Image (Befund B18); im Prueffall der Bibliothek war es nicht
-    # sichtbar, weil dort kein PHP laeuft.
+    # The actual reason is not "Xdebug" but "an extension takes over
+    # zend_execute_ex()" - true for both Xdebug and PCOV. PHP disables JIT
+    # itself in both cases and warns on every call.
     _jit_blocker=''
     if xdebug_is_active; then
         _jit_blocker="Xdebug (XDEBUG_MODE=$XDEBUG_MODE)"
@@ -250,34 +228,34 @@ enforce_jit_policy() {
         off|disable) return 0 ;;
     esac
 
-    log_info "$_jit_blocker ist aktiv — opcache.jit wird von '$OPCACHE_JIT' auf 'off' gesetzt. PHP wuerde JIT sonst selbst deaktivieren und bei jedem Aufruf warnen."
+    log_info "$_jit_blocker is active - opcache.jit is set from '$OPCACHE_JIT' to 'off'. PHP would otherwise disable JIT itself and warn on every call."
     OPCACHE_JIT='off'
     OPCACHE_JIT_BUFFER_SIZE='0'
 }
 
-# A10.4 — in prod ist ein aktives Xdebug ein Abbruchgrund, kein Hinweis. Damit
-# ist das Fehlkonfigurations-Risiko aus REQUIREMENTS_ANALYSE.md §4.3 im Image
-# selbst geschlossen, statt an einen CI-Check delegiert, der nicht existiert (L-F).
+# In prod, active Xdebug is a hard abort, not just a warning. This closes
+# the misconfiguration risk in the image itself instead of relying on an
+# external check.
 guard_production() {
     [ "$APP_ENV" = 'prod' ] || return 0
     xdebug_is_active || return 0
 
-    die "APP_ENV=prod, aber Xdebug ist mit XDEBUG_MODE='$XDEBUG_MODE' aktiv. Das ist in Produktion nicht zulaessig (Leistung und Angriffsflaeche). Entweder XDEBUG_MODE=off setzen oder APP_ENV=dev bzw. test verwenden."
+    die "APP_ENV=prod, but Xdebug is active with XDEBUG_MODE='$XDEBUG_MODE'. This is not allowed in production (performance and attack surface). Either set XDEBUG_MODE=off or use APP_ENV=dev or test."
 }
 
 # ---------------------------------------------------------------------------
-# Zielort der Laufzeit-INI
+# Runtime ini destination
 # ---------------------------------------------------------------------------
-# Regelfall ist /home/$APP_USER/php-config, das per Symlink in conf.d haengt —
-# so schreibt der Entrypoint als appuser, ohne conf.d beschreibbar zu machen
-# (tragfaehiger Kern des Bestands, E10).
+# The normal case is /home/$APP_USER/php-config, symlinked into conf.d -
+# this lets the entrypoint write as appuser without making conf.d itself
+# writable.
 #
-# Ist dieses Verzeichnis nicht beschreibbar, laeuft der Container mit einer im
-# Image unbekannten Kennung (A4.4). Dann weicht die INI in ein temporaeres
-# Verzeichnis aus, das ueber PHP_INI_SCAN_DIR eingebunden wird. Das
-# Default-conf.d muss dabei ausdruecklich mit aufgefuehrt werden, sonst gingen
-# die Extension-INIs verloren; unser Verzeichnis steht dahinter, damit
-# 99-runtime-config.ini garantiert zuletzt laedt.
+# If that directory is not writable, the container is running under an
+# identity unknown to the image. The ini then falls back to a temporary
+# directory wired in via PHP_INI_SCAN_DIR; the default conf.d must be
+# listed explicitly there too, or the extension inis would be lost, and our
+# directory comes after it so 99-runtime-config.ini is guaranteed to load
+# last.
 resolve_ini_dir() {
     INI_DIR="/home/$APP_USER/php-config"
 
@@ -288,23 +266,23 @@ resolve_ini_dir() {
 
     INI_DIR="${TMPDIR:-/tmp}/php-config"
     mkdir -p "$INI_DIR" \
-        || die "Weder /home/$APP_USER/php-config noch $INI_DIR sind beschreibbar."
+        || die "Neither /home/$APP_USER/php-config nor $INI_DIR is writable."
     export PHP_INI_SCAN_DIR="/usr/local/etc/php/conf.d:$INI_DIR"
     export INI_DIR
 
-    log_warn "/home/$APP_USER/php-config ist nicht beschreibbar (Container laeuft unter einer im Image unbekannten Kennung). Die Laufzeit-INI weicht nach $INI_DIR aus, eingebunden ueber PHP_INI_SCAN_DIR."
+    log_warn "/home/$APP_USER/php-config is not writable (container running under an identity unknown to the image). The runtime ini falls back to $INI_DIR, wired in via PHP_INI_SCAN_DIR."
 }
 
 # ---------------------------------------------------------------------------
-# INI-Erzeugung
+# ini generation
 # ---------------------------------------------------------------------------
-# Die Datei heisst 99-runtime-config.ini und laedt damit garantiert nach allen
-# Extension-INIs — insbesondere nach 00-opcache.ini, das OPcache als
-# zend_extension vor Xdebug bringt.
+# The file is named 99-runtime-config.ini, guaranteeing it loads after all
+# extension inis - in particular after 00-opcache.ini, which loads OPcache
+# as a zend_extension ahead of Xdebug.
 write_runtime_ini() {
     cat > "$INI_DIR/99-runtime-config.ini" <<PHPINI
 ; ---------------------------------------------------------------------------
-; Erzeugt beim Containerstart von entrypoint.sh — Aenderungen sind fluechtig.
+; Generated at container start by entrypoint.sh - changes here are transient.
 ; APP_ENV=$APP_ENV
 ; ---------------------------------------------------------------------------
 memory_limit = $PHP_MEMORY_LIMIT
@@ -333,8 +311,8 @@ opcache.fast_shutdown = 1
 opcache.jit = $OPCACHE_JIT
 opcache.jit_buffer_size = $OPCACHE_JIT_BUFFER_SIZE
 
-; Xdebug — der Modus wird zusaetzlich als Umgebungsvariable exportiert, weil
-; Xdebug 3 ihr Vorrang vor dieser Einstellung gibt.
+; Xdebug - the mode is additionally exported as an environment variable,
+; since Xdebug 3 gives it precedence over this setting.
 xdebug.mode = $XDEBUG_MODE
 xdebug.start_with_request = $XDEBUG_START_WITH_REQUEST
 xdebug.client_host = $XDEBUG_CLIENT_HOST
@@ -348,7 +326,7 @@ PHPINI
 }
 
 # ---------------------------------------------------------------------------
-# Einstiegspunkt
+# Entry point
 # ---------------------------------------------------------------------------
 apply_php_configuration() {
     APP_ENV="${APP_ENV:-dev}"

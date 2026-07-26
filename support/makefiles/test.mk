@@ -1,22 +1,18 @@
 # ---------------------------------------------------------------------------
-# test.mk — Prueflauf
+# test.mk — the test run
 # ---------------------------------------------------------------------------
-# Make orchestriert, die Skripte behaupten. Die Zusicherungen selbst stehen in
-# tests/ und nicht hier: in den Bestands-Repos lagen sie als PHP-Einzeiler
-# mitten im Makefile, mit `\$$`-Maskierung ueber mehrere Ebenen — unlesbar und
-# ausserhalb von make nicht ausfuehrbar. Die Skripte laufen auch einzeln.
+# Make orchestrates, the scripts assert. The assertions themselves live in
+# tests/, not here, and can also run standalone.
 #
-# TEST-IMAGES: gebaut wird ueber dieselbe support/docker-bake.hcl wie alles
-# andere, nur mit einem anderen Registry-Praefix. Damit ueberschreibt ein
-# Testlauf NIE die
-# lokal liegenden headgent/*-Images — und der Test prueft trotzdem exakt das
-# Artefakt, das spaeter gepusht wuerde.
+# TEST IMAGES: built via the same support/docker-bake.hcl as everything else,
+# just with a different registry prefix, so a test run never overwrites the
+# local headgent/*-Images while still testing exactly the artifact that would
+# later be pushed.
 #
-# EINE PHP-Version je Lauf (PHP_VERSION aus der .env, per Umgebung
-# ueberschreibbar). Absicht: `make build-all` uebersetzt drei Versionen
-# GLEICHZEITIG und braucht dafuer spuerbar Plattenplatz (Befund B15) — ein
-# Testlauf soll das nicht nebenbei ausloesen. Die Matrix faehrt die CI (P11),
-# dort baut ohnehin ein Job je Version.
+# ONE PHP version per run (PHP_VERSION from .env, overridable via the
+# environment): `make build-all` compiles three versions at once and needs
+# noticeable disk space, which a test run should not trigger incidentally. The
+# CI drives the full matrix, building one job per version.
 # ---------------------------------------------------------------------------
 ##@ Test
 
@@ -24,23 +20,23 @@ TEST_REGISTRY  ?= php-image-builder-test
 CLI_TEST_IMAGE  = $(TEST_REGISTRY)/$(IMAGE_NAME_CLI):$(PHP_VERSION)
 FPM_TEST_IMAGE  = $(TEST_REGISTRY)/$(IMAGE_NAME_FPM):$(PHP_VERSION)
 
-# Eigener Host-Port fuer den Demo-Stack im Prueflauf: ein per `make demo-up`
-# laufender Stack belegt DEMO_HTTP_PORT, und ein Testlauf soll ihn nicht
-# abschiessen. Aus demselben Grund faehrt check-demo-stack.sh unter einem
-# eigenen Projektnamen.
+# Own host port for the demo stack during the test run: a stack already
+# running via `make demo-up` occupies DEMO_HTTP_PORT, and a test run should not
+# tear it down. For the same reason check-demo-stack.sh runs under its own
+# project name.
 DEMO_TEST_PORT ?= 18080
 
 TESTS_DIR = tests
 
 # ---------------------------------------------------------------------------
-# Statische Pruefung — braucht kein Image
+# Static checks — no image required
 # ---------------------------------------------------------------------------
 HADOLINT_CONFIG  ?= support/hadolint.yaml
 HADOLINT_IMAGE   ?= hadolint/hadolint:latest
 SHELLCHECK_IMAGE ?= koalaman/shellcheck:stable
 
-# Alle Shell-Dateien des Repos. php-extensions.env wird gesourct, nicht
-# ausgefuehrt, gehoert aber zur selben Pruefung.
+# All shell files in the repo. php-extensions.env is sourced, not executed,
+# but belongs to the same check.
 SHELL_FILES = src/shared/entrypoint/entrypoint.sh \
               src/shared/entrypoint/lib-user.sh \
               src/shared/entrypoint/lib-phpini.sh \
@@ -50,7 +46,7 @@ SHELL_FILES = src/shared/entrypoint/entrypoint.sh \
 
 DOCKERFILES = src/base/Dockerfile src/cli/Dockerfile src/fpm/Dockerfile
 
-test-lint: ## hadolint ueber alle Dockerfiles, shellcheck ueber alle Shell-Dateien
+test-lint: ## hadolint over all Dockerfiles, shellcheck over all shell files
 	@echo ">>> hadolint"
 	@for f in $(DOCKERFILES); do \
 	  docker run --rm -i -v "$(CURDIR)/$(HADOLINT_CONFIG):/hadolint.yaml:ro" \
@@ -60,21 +56,21 @@ test-lint: ## hadolint ueber alle Dockerfiles, shellcheck ueber alle Shell-Datei
 	@echo ">>> shellcheck"
 	@docker run --rm -v "$(CURDIR):/mnt" -w /mnt $(SHELLCHECK_IMAGE) \
 	  --external-sources --source-path=src/shared/entrypoint $(SHELL_FILES)
-	@echo "  ✅ $(words $(SHELL_FILES)) Shell-Dateien sauber"
+	@echo "  ✅ $(words $(SHELL_FILES)) shell files clean"
 .PHONY: test-lint
 
 # ---------------------------------------------------------------------------
-# Logik-Pruefung der Entrypoint-Bibliotheken — ohne gebautes Image
+# Logic checks for the entrypoint libraries — no built image required
 # ---------------------------------------------------------------------------
-test-phpini: ## APP_ENV-Profile, Vorrangregel und Validierung (lib-phpini.sh)
+test-phpini: ## APP_ENV profiles, precedence rule, and validation (lib-phpini.sh)
 	@bash $(TESTS_DIR)/check-phpini.sh
 .PHONY: test-phpini
 
-test-bake: ## Aufgeloeste Bake-Definition: base-Abhaengigkeit und Tag-Satz (A1.2/A1.3/A9.2)
+test-bake: ## Resolved bake definition: base dependency and tag set
 	@bash $(TESTS_DIR)/check-bake-graph.sh
 .PHONY: test-bake
 
-test-user: ## UID/GID-Angleichung in Isolation (lib-user.sh, in alpine)
+test-user: ## UID/GID alignment in isolation (lib-user.sh, in alpine)
 	@docker run --rm --platform linux/amd64 \
 	  -v "$(CURDIR)/src/shared/entrypoint/lib-user.sh:/lib-user.sh:ro" \
 	  -v "$(CURDIR)/$(TESTS_DIR)/check-user-alignment.sh:/check.sh:ro" \
@@ -82,59 +78,59 @@ test-user: ## UID/GID-Angleichung in Isolation (lib-user.sh, in alpine)
 .PHONY: test-user
 
 # ---------------------------------------------------------------------------
-# Pruefung am gebauten Image
+# Checks against the built image
 # ---------------------------------------------------------------------------
-test-images: buildx-builder-create ## Test-Images fuer PHP_VERSION bauen (eigenes Praefix, ueberschreibt nichts)
-	@echo "🔧 Baue Test-Images fuer PHP $(PHP_VERSION) unter $(TEST_REGISTRY)/ ..."
+test-images: buildx-builder-create ## Build test images for PHP_VERSION (own prefix, overwrites nothing)
+	@echo "🔧 Building test images for PHP $(PHP_VERSION) under $(TEST_REGISTRY)/ ..."
 	@$(call cache_flags); \
 	 DOCKER_HUB=$(TEST_REGISTRY) PHP_VERSIONS="$(PHP_VERSION)" \
 	 docker buildx bake -f $(BAKE_FILE) --load \
 	   $$CFROM $$CTO $(BAKE_PLATFORM_FLAG) $(BUILD_EXTRA_FLAGS)
 .PHONY: test-images
 
-test-extensions: test-images ## Alle erwarteten Extensions in cli UND fpm geladen
+test-extensions: test-images ## All expected extensions loaded in cli AND fpm
 	@bash $(TESTS_DIR)/check-extensions.sh $(CLI_TEST_IMAGE)
 	@bash $(TESTS_DIR)/check-extensions.sh $(FPM_TEST_IMAGE)
 .PHONY: test-extensions
 
-test-opcache: test-images ## OPcache/JIT je Profil und AK15-Revalidierung im laufenden FPM
+test-opcache: test-images ## OPcache/JIT per profile and revalidation in the running FPM
 	@bash $(TESTS_DIR)/check-opcache.sh $(FPM_TEST_IMAGE)
 .PHONY: test-opcache
 
-test-app-env: test-images ## APP_ENV-Profile wirken im echten Image (AK13/AK14)
+test-app-env: test-images ## APP_ENV profiles take effect in the real image
 	@bash $(TESTS_DIR)/check-app-env.sh $(CLI_TEST_IMAGE)
 .PHONY: test-app-env
 
-test-uid: test-images ## UID/GID gegen echte Docker-Volumes (AK4, soweit ohne Linux-Host moeglich)
+test-uid: test-images ## UID/GID against real Docker volumes (as far as possible without a Linux host)
 	@bash $(TESTS_DIR)/check-uid-image.sh $(CLI_TEST_IMAGE)
 .PHONY: test-uid
 
-# Braucht --privileged: der Linux-Host ist ein docker:*-dind-Container mit
-# eigenem Daemon. Das ist der Preis dafuer, den Bind-Mount-Nachweis ohne
-# GitHub-Runner fuehren zu koennen (AK4/A4.5).
+# Requires --privileged: the Linux host is a docker:*-dind container with its
+# own daemon — the price of proving the bind-mount behavior without a
+# GitHub runner.
 DIND_IMAGE ?= docker:28-dind
 
-test-uid-linux: test-images ## UID/GID gegen einen ECHTEN Linux-Bind-Mount (AK4/A4.5, letzte Haelfte)
+test-uid-linux: test-images ## UID/GID against a REAL Linux bind mount
 	@bash $(TESTS_DIR)/check-uid-linux-host.sh $(CLI_TEST_IMAGE) $(DIND_IMAGE)
 .PHONY: test-uid-linux
 
-test-nginx: test-images ## nginx-Vorlage gegen das UNVERAENDERTE offizielle Image (A6/AK7)
+test-nginx: test-images ## nginx template against the UNMODIFIED official image
 	@bash $(TESTS_DIR)/check-nginx-template.sh $(FPM_TEST_IMAGE) nginx:$(NGINX_VERSION)-alpine
 .PHONY: test-nginx
 
-test-demo: test-images ## Demo-Stack: ein `up`, alle Dienste healthy, DB verbunden (A8/AK9/AK12)
+test-demo: test-images ## Demo stack: one `up`, all services healthy, DB connected
 	@bash $(TESTS_DIR)/check-demo-stack.sh $(TEST_REGISTRY) $(DEMO_TEST_PORT)
 .PHONY: test-demo
 
-test-labels: test-images ## OCI-Labels in cli UND fpm, ueber `FROM base` vererbt (A7.4/AK8)
+test-labels: test-images ## OCI labels in cli AND fpm, inherited via `FROM base`
 	@bash $(TESTS_DIR)/check-oci-labels.sh $(CLI_TEST_IMAGE) $(PHP_VERSION)-$(IMAGE_DATE)
 	@bash $(TESTS_DIR)/check-oci-labels.sh $(FPM_TEST_IMAGE) $(PHP_VERSION)-$(IMAGE_DATE)
 .PHONY: test-labels
 
-test-boot: test-images ## cli und fpm starten; fpm wird healthy (FastCGI-Ping)
-	@echo ">>> Start von cli und fpm"
+test-boot: test-images ## Start cli and fpm; fpm becomes healthy (FastCGI ping)
+	@echo ">>> Starting cli and fpm"
 	@docker run --rm --entrypoint php $(CLI_TEST_IMAGE) --version >/dev/null \
-	  && echo "  ✅ cli startet"
+	  && echo "  ✅ cli starts"
 	@cid=$$(docker run -d $(FPM_TEST_IMAGE)); \
 	 status=starting; \
 	 for i in $$(seq 1 30); do \
@@ -146,17 +142,17 @@ test-boot: test-images ## cli und fpm starten; fpm wird healthy (FastCGI-Ping)
 	 docker logs $$cid > /tmp/fpm-boot.log 2>&1 || true; \
 	 docker rm -f $$cid >/dev/null 2>&1 || true; \
 	 if [ "$$status" != "healthy" ]; then \
-	   echo "  ❌ fpm nicht healthy (status=$$status)"; cat /tmp/fpm-boot.log; exit 1; \
+	   echo "  ❌ fpm not healthy (status=$$status)"; cat /tmp/fpm-boot.log; exit 1; \
 	 fi; \
-	 echo "  ✅ fpm startet und antwortet auf /ping"
+	 echo "  ✅ fpm starts and responds on /ping"
 .PHONY: test-boot
 
 # ---------------------------------------------------------------------------
-# Buendel
+# Bundle
 # ---------------------------------------------------------------------------
-# Reihenfolge nach Laufzeit: was ohne Image auskommt, laeuft zuerst und faellt
-# damit frueh durch, statt erst nach einem Build.
-test-all: test-lint test-bake test-phpini test-user test-boot test-labels test-extensions test-app-env test-uid test-uid-linux test-opcache test-nginx test-demo ## Alle Pruefungen
+# Ordered by runtime: what runs without an image goes first, failing fast
+# instead of only after a build.
+test-all: test-lint test-bake test-phpini test-user test-boot test-labels test-extensions test-app-env test-uid test-uid-linux test-opcache test-nginx test-demo ## All checks
 	@echo ""
-	@echo "✅ Alle Pruefungen bestanden — PHP $(PHP_VERSION)"
+	@echo "✅ All checks passed — PHP $(PHP_VERSION)"
 .PHONY: test-all
