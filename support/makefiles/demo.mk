@@ -5,12 +5,12 @@
 # Build-Targets duenne Wrapper um `bake` sind: der Aufruf traegt zwei Griffe,
 # die man nicht jedes Mal von Hand richtig hinschreiben will.
 #
-#   --project-directory .   Compose nimmt sonst compose/ als Projektverzeichnis
+#   --project-directory .   Compose nimmt sonst tests/demo/ als Projektverzeichnis
 #                           und findet die .env im Root nicht — jede Variable
 #                           waere leer (gemessen 2026-07-25).
 #   DOCKER_HUB=...          Der Stack verweist auf headgent/phpfpm:<ver>, wie
 #                           ein Projekt es schreiben wuerde. Unter diesem Namen
-#                           liegt bis zum ersten Push (N6) aber nur der
+#                           liegt bis zum ersten Push aber nur der
 #                           Bestand, und der ist startunfaehig (B9). Bis dahin
 #                           faehrt der Stack die lokal gebauten Test-Images.
 #
@@ -19,7 +19,7 @@
 # ---------------------------------------------------------------------------
 ##@ Demo-Stack
 
-DEMO_FILE     ?= compose/demo-stack.yml
+DEMO_FILE     ?= tests/demo/demo-stack.yml
 DEMO_REGISTRY ?= $(TEST_REGISTRY)
 
 # Das --wait macht die Zusicherung aus A8.2 zur Startbedingung: der Aufruf

@@ -10,14 +10,15 @@
 # Request-Betrieb entgegengesetzt sein muessen (max_execution_time, STOPSIGNAL,
 # HEALTHCHECK). Genau daran haengt, dass cli und fpm zwei Artefakte bleiben.
 #
-# `FROM base` wird von docker-bake.hcl ueber contexts = { base = "target:base" }
-# aufgeloest (A1.2) — base wird dabei nicht publiziert.
+# `FROM base` wird von support/docker-bake.hcl ueber
+# contexts = { base = "target:base" } aufgeloest (A1.2) — base wird dabei nicht
+# publiziert.
 #
 # DL3006 ("always tag the version explicitly") ist hier ein Fehlalarm: `base` ist
 # ein benannter Build-Context, kein Registry-Image — es gibt nichts zu taggen.
 # hadolint kennt das bake-Konzept nicht. Der Ignore steht bewusst inline und
-# nicht in .hadolint.yaml, damit ein echtes ungetaggtes FROM in einem kuenftigen
-# Dockerfile weiterhin auffaellt.
+# nicht in support/hadolint.yaml, damit ein echtes ungetaggtes FROM in einem
+# kuenftigen Dockerfile weiterhin auffaellt.
 # ---------------------------------------------------------------------------
 # hadolint ignore=DL3006
 FROM base

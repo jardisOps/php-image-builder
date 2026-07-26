@@ -8,7 +8,7 @@
 #
 # ACHTUNG — NICHT AUSGEFUEHRT. Diese Targets sind geschrieben, aber bewusst nie
 # gelaufen. Der erste Push auf headgent/phpcli bzw. headgent/phpfpm ist der
-# einzige Punkt dieses Vorhabens mit Aussenwirkung (N6 in docs/PROGRESS.md):
+# einzige Punkt dieses Vorhabens mit Aussenwirkung (docs/TAG-STRATEGIE.md):
 # er ueberschreibt die wandernden Tags :<ver> und :latest, die laufende Projekte
 # ziehen. Vor dem ersten Lauf wird eine Tag-Strategie vorgelegt und freigegeben.
 # ---------------------------------------------------------------------------

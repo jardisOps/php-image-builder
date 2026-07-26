@@ -5,7 +5,7 @@
 # vorherige Wert zeigte auf ein Verzeichnis auf genau einem Rechner und haette
 # den Test auf jedem anderen System und auf dem CI-Runner (P11) scheitern
 # lassen. Befund B17.
-REPO_ROOT=$(CDPATH='' cd -- "$(dirname -- "$0")/../.." && pwd)
+REPO_ROOT=$(CDPATH='' cd -- "$(dirname -- "$0")/.." && pwd)
 LIB="$REPO_ROOT/src/shared/entrypoint/lib-phpini.sh"
 [ -r "$LIB" ] || { echo "❌ lib-phpini.sh nicht gefunden unter $LIB" >&2; exit 2; }
 PASS=0; FAIL=0

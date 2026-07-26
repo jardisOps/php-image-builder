@@ -175,7 +175,7 @@ ENV APP_USER=appuser \
 #
 # SC2086 wie oben: $PKGS ist eine Paketliste und muss aufgespalten werden.
 # Uebernommen aus phpcli/src/Dockerfile:93-99, wo es nie auffiel, weil phpcli
-# als einziges Bestands-Repo keine .hadolint.yaml hatte (D15).
+# als einziges Bestands-Repo keine hadolint-Konfiguration hatte (D15).
 # hadolint ignore=SC2086
 RUN set -eux; \
     apk upgrade --no-cache; \

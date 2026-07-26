@@ -53,9 +53,8 @@ include ./support/makefiles/docker.build.push.mk
 include ./support/makefiles/test.mk
 include ./support/makefiles/demo.mk
 include ./support/makefiles/clean.mk
-# Unveraendert aus dem Bestand uebernommen (PLAN, Bauform-Tabelle). In P1 war sie
-# uebersehen worden — die Zielstruktur nannte sie, das Repo bekam sie nie
-# (Befund B32, nachgezogen in P12 auf Entscheidung Rolf 2026-07-26).
+# Unveraendert aus dem Bestand uebernommen. Sie hat mit dem Bauen der Images
+# nichts zu tun und steht nur hier, weil sie es in den Vorgaenger-Repos auch tat.
 include ./support/makefiles/ssh.mk
 
 # ---------------------------------------------------------------------------
@@ -142,7 +141,7 @@ info: ## Build-Konfiguration anzeigen
 	@printf "  %-30s %s\n" "min/max_spare:"     "$(FPM_PM_MIN_SPARE_SERVERS)/$(FPM_PM_MAX_SPARE_SERVERS)"
 	@printf "  %-30s %s\n" "max_requests:"      "$(FPM_PM_MAX_REQUESTS)"
 	@echo ""
-	@printf "\033[1mDemo-Stack (compose/demo-stack.yml):\033[0m\n"
+	@printf "\033[1mDemo-Stack (tests/demo/demo-stack.yml):\033[0m\n"
 	@printf "  %-30s %s\n" "Host-Port:"     "http://localhost:$(DEMO_HTTP_PORT)"
 	@printf "  %-30s %s\n" "fpm-Image:"     "$(DEMO_REGISTRY)/$(IMAGE_NAME_FPM):$(PHP_VERSION)"
 	@printf "  %-30s %s\n" "Datenbank:"     "mariadb:$(MARIADB_VERSION), $(DEMO_DB_NAME) als $(DEMO_DB_USER)"

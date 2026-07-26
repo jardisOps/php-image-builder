@@ -17,7 +17,7 @@ set -eu
 IMAGE=${1:?Aufruf: check-oci-labels.sh <image> <erwartete-version>}
 ERWARTETE_VERSION=${2:?Aufruf: check-oci-labels.sh <image> <erwartete-version>}
 
-REPO_ROOT=$(CDPATH='' cd -- "$(dirname -- "$0")/../.." && pwd)
+REPO_ROOT=$(CDPATH='' cd -- "$(dirname -- "$0")/.." && pwd)
 
 PASS=0; FAIL=0
 ok()    { echo "  ✅ $1"; PASS=$((PASS + 1)); }

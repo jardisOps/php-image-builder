@@ -23,7 +23,7 @@
 set -eu
 
 IMAGE=${1:?Aufruf: check-extensions.sh <image>}
-REPO_ROOT=$(CDPATH='' cd -- "$(dirname -- "$0")/../.." && pwd)
+REPO_ROOT=$(CDPATH='' cd -- "$(dirname -- "$0")/.." && pwd)
 EXT_FILE="$REPO_ROOT/src/shared/php-extensions.env"
 [ -r "$EXT_FILE" ] || { echo "❌ $EXT_FILE nicht lesbar" >&2; exit 2; }
 
@@ -34,7 +34,7 @@ fi
 
 # PHP_EXT_CORE traegt Namen, PHP_EXT_PECL die Schreibweise name-version.
 # shellcheck source-path=SCRIPTDIR
-# shellcheck source=../../src/shared/php-extensions.env
+# shellcheck source=../src/shared/php-extensions.env
 . "$EXT_FILE"
 
 # Vom Basis-Image erwartet, nicht von uns gebaut (B12).

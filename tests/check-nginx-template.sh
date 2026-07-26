@@ -2,7 +2,7 @@
 # ---------------------------------------------------------------------------
 # check-nginx-template.sh <fpm-image> [nginx-image] — die nginx-Vorlage (A6/AK7)
 # ---------------------------------------------------------------------------
-# Prueft compose/nginx/templates/default.conf.template gegen das UNVERAENDERTE
+# Prueft tests/nginx/templates/default.conf.template gegen das UNVERAENDERTE
 # offizielle nginx-Image: kein eigener Entrypoint, kein eigener Build (A6.3).
 # Der Aufbau ist derselbe, den ein Projekt fahren soll — fpm-Container plus
 # offizielles nginx, gemeinsames /app.
@@ -23,9 +23,9 @@ set -eu
 FPM_IMAGE=${1:?Aufruf: check-nginx-template.sh <fpm-image> [nginx-image]}
 NGINX_IMAGE=${2:-nginx:1.28-alpine}
 
-REPO_ROOT=$(CDPATH='' cd -- "$(dirname -- "$0")/../.." && pwd)
-TEMPLATES="$REPO_ROOT/compose/nginx/templates"
-DEFAULTS="$REPO_ROOT/compose/nginx/nginx-defaults.env"
+REPO_ROOT=$(CDPATH='' cd -- "$(dirname -- "$0")/.." && pwd)
+TEMPLATES="$REPO_ROOT/tests/nginx/templates"
+DEFAULTS="$REPO_ROOT/tests/nginx/nginx-defaults.env"
 
 SFX=$$
 NET=check-nginx-net-$SFX

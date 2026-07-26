@@ -14,10 +14,10 @@
 #
 # Ohne make:
 #
-#   docker compose -f compose/demo-stack.yml --project-directory . up -d --wait
+#   docker compose -f tests/demo/demo-stack.yml --project-directory . up -d --wait
 #
 # --project-directory ist NICHT verzichtbar und keine Nacharbeit im Sinne von
-# AK9: Compose nimmt sonst compose/ als Projektverzeichnis, liest dort eine
+# AK9: Compose nimmt sonst tests/demo/ als Projektverzeichnis, liest dort eine
 # .env, die es nicht gibt, und setzt jede Variable auf leer (gemessen
 # 2026-07-25). Alle Pfade in dieser Datei sind deshalb vom Repo-Root aus
 # geschrieben. Die Werte kommen aus der .env im Root — kein Wert ist hier ein
@@ -89,7 +89,7 @@ services:
       # Der Anwendungscode. Schreibbar gemountet, weil eine echte Anwendung hier
       # Cache und Logs ablegt; der Entrypoint gleicht appuser an den Eigentuemer
       # dieses Verzeichnisses an (A4).
-      - ./compose/demo-app:${APP_ROOT}
+      - ./tests/demo/app:${APP_ROOT}
     # Kein healthcheck:-Block — das Image bringt einen mit (FastCGI-Ping gegen
     # den eigenen Pool, src/fpm/Dockerfile). A8.2 ist damit erfuellt, ohne ihn
     # hier ein zweites Mal zu pflegen.
@@ -108,7 +108,7 @@ services:
       # Die elf Vorlagen-Variablen mit ihren Defaults. envsubst kennt keine
       # Default-Schreibweise — ohne diese Datei bleiben Platzhalter stehen und
       # nginx startet nicht (A6.4, in P9 gegengeprueft).
-      - ./compose/nginx/nginx-defaults.env
+      - ./tests/nginx/nginx-defaults.env
     environment:
       # A8.3 — exemplarisch befuellt. environment schlaegt env_file, dieselbe
       # Richtung wie die Vorrangregel A10.2 bei den PHP-Werten.
@@ -124,10 +124,10 @@ services:
       # HTTP_X_FORWARDED_PROTO gemeinsam umlegt.
       REQUEST_SCHEME: http
     volumes:
-      - ./compose/nginx/templates:/etc/nginx/templates:ro
+      - ./tests/nginx/templates:/etc/nginx/templates:ro
       # nginx liest nur — das war der Grund, aus dem es kein eigenes Image mehr
       # braucht (E9): Lesen verlangt keine angeglichene UID.
-      - ./compose/demo-app:${APP_ROOT}:ro
+      - ./tests/demo/app:${APP_ROOT}:ro
     ports:
       - "${DEMO_HTTP_PORT}:80"
     # A8.2. Das offizielle nginx bringt keinen Healthcheck mit. Geprueft wird

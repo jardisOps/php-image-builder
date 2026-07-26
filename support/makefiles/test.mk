@@ -2,12 +2,13 @@
 # test.mk — Prueflauf
 # ---------------------------------------------------------------------------
 # Make orchestriert, die Skripte behaupten. Die Zusicherungen selbst stehen in
-# support/tests/ und nicht hier: in den Bestands-Repos lagen sie als PHP-Einzeiler
+# tests/ und nicht hier: in den Bestands-Repos lagen sie als PHP-Einzeiler
 # mitten im Makefile, mit `\$$`-Maskierung ueber mehrere Ebenen — unlesbar und
 # ausserhalb von make nicht ausfuehrbar. Die Skripte laufen auch einzeln.
 #
-# TEST-IMAGES: gebaut wird ueber dieselbe docker-bake.hcl wie alles andere, nur
-# mit einem anderen Registry-Praefix. Damit ueberschreibt ein Testlauf NIE die
+# TEST-IMAGES: gebaut wird ueber dieselbe support/docker-bake.hcl wie alles
+# andere, nur mit einem anderen Registry-Praefix. Damit ueberschreibt ein
+# Testlauf NIE die
 # lokal liegenden headgent/*-Images — und der Test prueft trotzdem exakt das
 # Artefakt, das spaeter gepusht wuerde.
 #
@@ -29,11 +30,12 @@ FPM_TEST_IMAGE  = $(TEST_REGISTRY)/$(IMAGE_NAME_FPM):$(PHP_VERSION)
 # eigenen Projektnamen.
 DEMO_TEST_PORT ?= 18080
 
-TESTS_DIR = support/tests
+TESTS_DIR = tests
 
 # ---------------------------------------------------------------------------
 # Statische Pruefung — braucht kein Image
 # ---------------------------------------------------------------------------
+HADOLINT_CONFIG  ?= support/hadolint.yaml
 HADOLINT_IMAGE   ?= hadolint/hadolint:latest
 SHELLCHECK_IMAGE ?= koalaman/shellcheck:stable
 
@@ -51,8 +53,8 @@ DOCKERFILES = src/base/Dockerfile src/cli/Dockerfile src/fpm/Dockerfile
 test-lint: ## hadolint ueber alle Dockerfiles, shellcheck ueber alle Shell-Dateien
 	@echo ">>> hadolint"
 	@for f in $(DOCKERFILES); do \
-	  docker run --rm -i -v "$(CURDIR)/.hadolint.yaml:/.hadolint.yaml:ro" \
-	    $(HADOLINT_IMAGE) hadolint --config /.hadolint.yaml - < "$$f" || exit 1; \
+	  docker run --rm -i -v "$(CURDIR)/$(HADOLINT_CONFIG):/hadolint.yaml:ro" \
+	    $(HADOLINT_IMAGE) hadolint --config /hadolint.yaml - < "$$f" || exit 1; \
 	  echo "  ✅ $$f"; \
 	done
 	@echo ">>> shellcheck"

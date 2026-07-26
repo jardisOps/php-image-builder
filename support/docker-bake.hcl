@@ -1,5 +1,5 @@
 # ---------------------------------------------------------------------------
-# docker-bake.hcl — die eine Build-Beschreibung fuer alle Targets
+# support/docker-bake.hcl — die eine Build-Beschreibung fuer alle Targets
 # ---------------------------------------------------------------------------
 # Loest die duplizierte buildx-Schleifenlogik der beiden Bestands-Repos ab
 # (Plan-Optimierung 1). Dort standen dieselben ~35 --build-arg-Zeilen viermal

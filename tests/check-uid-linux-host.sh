@@ -2,7 +2,7 @@
 # ---------------------------------------------------------------------------
 # check-uid-linux-host.sh <cli-image> [dind-image] — AK4/A4.5, letzte Haelfte
 # ---------------------------------------------------------------------------
-# Der Nachweis, den PLAN.md fuer P11 auf einem Linux-Runner vorsah: die
+# Der Nachweis, der urspruenglich einem Linux-Runner vorbehalten war: die
 # UID/GID-Angleichung gegen einen ECHTEN BIND-MOUNT von einem ECHTEN
 # Linux-Dateisystem.
 #

@@ -6,8 +6,8 @@
 #   jardisOps/phpfpm   .github/workflows/phpfpm.yml  (Matrix, hadolint, Trivy)
 #
 # Uebernommen sind daraus alle Trigger samt Keepalive-Job (A9.3) und die
-# Push-Guard-Logik (PRs bauen und pruefen, publizieren aber nie). Was hier NEU
-# ist, steht im PRD unter A7 und A9.2.
+# Push-Guard-Logik (PRs bauen und pruefen, publizieren aber nie). Neu sind das
+# blockierende Trivy-Gate und die Bake-Pruefung im lint-Job.
 #
 # -----------------------------------------------------------------------------
 # NICHT SCHARF — N6
@@ -16,7 +16,7 @@
 # Repository-Variable PUBLISH_ENABLED auf 'true' steht. Diese Variable existiert
 # nicht, und sie anzulegen ist eine bewusste Handlung.
 #
-# Grund (N6 in docs/PROGRESS.md): der erste Push auf headgent/phpcli bzw.
+# Grund (docs/TAG-STRATEGIE.md): der erste Push auf headgent/phpcli bzw.
 # headgent/phpfpm ist der einzige Punkt dieses Vorhabens mit Aussenwirkung. Er
 # ueberschreibt die wandernden Tags :<ver> und :latest, die laufende Projekte
 # ziehen. Vor dem ersten Lauf wird eine Tag-Strategie vorgelegt und freigegeben
@@ -42,11 +42,9 @@ on:
     paths:
       - '.env'
       - 'src/**'
+      - 'tests/**'
       - 'support/**'
-      - 'compose/**'
-      - 'docker-bake.hcl'
       - 'Makefile'
-      - '.hadolint.yaml'
       - '.dockerignore'
       - '.github/workflows/ci.yml'
       - '!**/*.md'
@@ -57,11 +55,9 @@ on:
     paths:
       - '.env'
       - 'src/**'
+      - 'tests/**'
       - 'support/**'
-      - 'compose/**'
-      - 'docker-bake.hcl'
       - 'Makefile'
-      - '.hadolint.yaml'
       - '.dockerignore'
       - '.github/workflows/ci.yml'
       - '!**/*.md'
@@ -256,7 +252,7 @@ jobs:
       - name: QEMU einrichten (arm64)
         uses: docker/setup-qemu-action@v4
 
-      # `make push` ist der duenne Wrapper um docker-bake.hcl: Plattformen,
+      # `make push` ist der duenne Wrapper um support/docker-bake.hcl: Plattformen,
       # Tag-Satz und Attestations stehen dort an genau einer Stelle. Der
       # Bestand trug dieselben ~35 --build-arg-Zeilen viermal.
       - name: Bauen und pushen (PHP ${{ matrix.php_version }}, multi-arch)

@@ -1,7 +1,8 @@
 # ---------------------------------------------------------------------------
 # docker.build.local.mk — lokale Builds (--load)
 # ---------------------------------------------------------------------------
-# Duenner Wrapper um docker-bake.hcl. Die Build-Args stehen dort, nicht hier:
+# Duenner Wrapper um support/docker-bake.hcl. Die Build-Args stehen dort, nicht
+# hier:
 # in den Bestands-Repos standen dieselben ~35 --build-arg-Zeilen in jedem
 # einzelnen Target (Plan-Optimierung 1).
 #
@@ -19,7 +20,7 @@
 # ---------------------------------------------------------------------------
 ##@ Image Builder (Local)
 
-BAKE_FILE      ?= docker-bake.hcl
+BAKE_FILE      ?= support/docker-bake.hcl
 BAKE_TARGETS   ?=
 BUILD_PLATFORM ?=
 

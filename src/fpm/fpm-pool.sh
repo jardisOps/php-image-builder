@@ -24,7 +24,7 @@
 # dem Wechsel neu und scheitert daran. Der Griff, der das verhindern sollte —
 # `chown` auf die stdio-Deskriptoren — ist wirkungslos, weil dort eine anonyme
 # Pipe haengt. Belegt: headgent/phpfpm:8.2/:8.3/:8.4 starten deshalb alle nicht.
-# Ausfuehrlich in entrypoint.sh bei handover() und in docs/PROGRESS.md (B9).
+# Ausfuehrlich in entrypoint.sh bei handover().
 #
 # Sicherheitseinordnung: der Master parst die Konfiguration, oeffnet Socket und
 # Logs und verwaltet Worker — er verarbeitet KEINE Requests. Der gesamte

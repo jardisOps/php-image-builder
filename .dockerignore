@@ -8,18 +8,17 @@
 .github/
 .gitignore
 .dockerignore
-.hadolint.yaml
 
 # Build-Steuerung (wird als Build-Arg uebergeben, nicht ins Image kopiert)
+# support/ deckt docker-bake.hcl und hadolint.yaml mit ab — beide liegen dort.
 .env
 Makefile
 support/
-docker-bake.hcl
+tests/
 .buildx-cache/
 
-# Dokumentation & Demo (nicht Teil einer Laufzeit)
+# Dokumentation (nicht Teil einer Laufzeit)
 docs/
-compose/
 LICENSE
 **/*.md
 

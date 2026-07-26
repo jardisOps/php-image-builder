@@ -2,7 +2,7 @@
 # ---------------------------------------------------------------------------
 # check-demo-stack.sh [registry] [host-port] — der Demo-Stack (A8/AK9/AK12)
 # ---------------------------------------------------------------------------
-# Faehrt compose/demo-stack.yml hoch und misst, was der Stack belegen soll:
+# Faehrt tests/demo/demo-stack.yml hoch und misst, was der Stack belegen soll:
 #
 #   AK9   ein Aufruf, keine Nacharbeit — `up -d --wait` ist die Zusicherung
 #         selbst: er kehrt erst zurueck, wenn jeder Dienst mit Healthcheck
@@ -29,8 +29,8 @@ set -eu
 REGISTRY=${1:-php-image-builder-test}
 HTTP_PORT=${2:-18080}
 
-REPO_ROOT=$(CDPATH='' cd -- "$(dirname -- "$0")/../.." && pwd)
-STACK="$REPO_ROOT/compose/demo-stack.yml"
+REPO_ROOT=$(CDPATH='' cd -- "$(dirname -- "$0")/.." && pwd)
+STACK="$REPO_ROOT/tests/demo/demo-stack.yml"
 PROJECT=demo-stack-check-$$
 
 # Ablagen mit derselben Laufkennung wie der Projektname: zwei gleichzeitige

@@ -1,7 +1,7 @@
 <?php
 
 /**
- * Demo-Anwendung des Stacks aus compose/demo-stack.yml (P10).
+ * Demo-Anwendung des Stacks aus tests/demo/demo-stack.yml (P10).
  *
  * Zweck: zeigen, dass die drei Teile wirklich zusammenspielen — das offizielle
  * nginx mit unserer Vorlage aus P9, headgent/phpfpm und das offizielle
@@ -15,7 +15,7 @@
  * Verbindung als leeres Feld zeigt, meldet Erfolg, wo keiner ist. Wer von hier
  * abschreibt, laesst genau diese Ausgaben weg.
  *
- * Die Ausgabe ist zugleich der Messpunkt von support/tests/check-demo-stack.sh.
+ * Die Ausgabe ist zugleich der Messpunkt von tests/check-demo-stack.sh.
  * Wer hier Marken (PROBE=..., DB=...) umbenennt, zieht dort nach.
  */
 
@@ -141,7 +141,7 @@ header('Content-Type: text/html; charset=utf-8');
 
 <p class="lead">
     Drei Container: das offizielle <code>nginx</code> mit der Vorlage aus
-    <code>compose/nginx/templates/</code>, <code>phpfpm</code> aus diesem Repo
+    <code>tests/nginx/templates/</code>, <code>phpfpm</code> aus diesem Repo
     und das offizielle <code>mariadb</code>. Kein eigener nginx-Build, kein
     eigener Datenbank-Build.
 </p>

@@ -8,8 +8,8 @@
 #
 # Warum das auch auf macOS traegt: ein Named Volume liegt in der Linux-VM und
 # traegt dort echte Unix-Eigentuemer. Ein Helfer-Container setzt sie, unser
-# Image sieht sie wie auf einem Linux-Host. Damit sind alle DREI von PLAN.md
-# geforderten Bedingungen hier pruefbar:
+# Image sieht sie wie auf einem Linux-Host. Damit sind alle DREI geforderten
+# Bedingungen hier pruefbar:
 #
 #   Host-UID != 1000     Volume gehoert 1234:1234
 #   belegte Ziel-GID     Volume gehoert 1234:20 — GID 20 ist in Alpine "dialout"
