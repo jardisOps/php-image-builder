@@ -34,6 +34,7 @@ das mit dem **unveränderten** offiziellen `nginx`-Image läuft
 - [nginx-Vorlage statt nginx-Image](#nginx-vorlage-statt-nginx-image)
 - [Demo-Stack](#demo-stack)
 - [Der Prüflauf](#der-prüflauf)
+- [Aufräumen](#aufräumen)
 - [Aufbau des Repos](#aufbau-des-repos)
 - [CI und Veröffentlichung](#ci-und-veröffentlichung)
 - [Betriebsbedingungen und bekannte Eigenheiten](#betriebsbedingungen-und-bekannte-eigenheiten)
@@ -113,6 +114,31 @@ make build CACHE_BACKEND=none          # auto | gha | registry | local | none
 | `make demo-down` | Container, Netz und Volumes entfernen |
 | `make demo-logs` | Logs folgen |
 | `make demo-config` | aufgelöste Stack-Definition, startet nichts |
+
+### Aufräumen
+
+Ein Bauwerkzeug erzeugt Müll — Test-Images unter zwei Namen mal drei Versionen,
+baumelnde Layer aus jedem abgebrochenen Lauf, den buildx-Cache. Was die Targets
+anfassen und was bewusst nicht, steht unter [Aufräumen](#aufräumen).
+
+| Target | Wirkung |
+|---|---|
+| `make disk-usage` | zeigt, was Docker belegt und was davon aus diesem Repo stammt — **löscht nichts** |
+| `make clean` | der Regelfall: Demo-Reste, Test-Images, baumelnde Layer |
+| `make clean-test-images` | nur die Test-Images des Prüflaufs, alle Versionen |
+| `make clean-images` | die lokal gebauten `headgent/*`-Images, alle Versionen |
+| `make clean-dangling` | baumelnde Layer (`<none>`) |
+| `make clean-cache` | den buildx-Cache leeren |
+| `make clean-demo` | Container, Netz und Volumes des Demo-Stacks |
+| `make clean-all` | alles aus diesem Repo: `clean` plus `headgent/*` plus Cache |
+| `make clean-system` | **global**, verlangt `CONFIRM=ja` — siehe unten |
+
+### SSH-Schlüssel
+
+`make ssh-generate-ed25519`, `ssh-generate-rsa`, `ssh-show-keys`, `ssh-add-key`,
+`ssh-start-agent` — unverändert aus den Bestands-Repos übernommene, interaktive
+Wrapper um `ssh-keygen` und `ssh-add`. Sie haben mit dem Bauen der Images nichts
+zu tun und stehen nur hier, weil sie es in den Vorgänger-Repos auch taten.
 
 ---
 
@@ -333,6 +359,52 @@ B27 und B31 dokumentiert.
 
 ---
 
+## Aufräumen
+
+`make disk-usage` zeigt zuerst, worum es überhaupt geht: was Docker insgesamt
+belegt, welche Images aus diesem Repo stammen, und wie viele baumelnde Layer
+herumliegen. Es löscht nichts.
+
+Danach genügt in aller Regel:
+
+```sh
+make clean          # Demo-Reste, Test-Images, baumelnde Layer
+make clean-all      # zusätzlich die headgent/*-Images und den buildx-Cache
+```
+
+**Die Regel, an die sich diese Targets halten:** angefasst wird, was *dieses
+Repo* erzeugt hat. Die Referenzen kommen aus der `.env`, nicht aus einem Glob
+über alles Lokale — fremde Images, Volumes und Container eines
+Entwicklungsrechners gehen dieses Repo nichts an.
+
+Zwei Einschränkungen, die ehrlicher benannt als beschönigt gehören:
+
+- **`clean-dangling` ist zwangsläufig rechnerweit.** Ein baumelnder Layer trägt
+  keinen Namen, also lässt sich nicht feststellen, aus wessen Build er stammt.
+  Die Operation ist die übliche und ungefährliche — ein Layer ohne Tag wird von
+  keinem Image mehr referenziert —, aber sie ist nicht auf dieses Repo begrenzt.
+- **`clean-images` trifft auch den Bestand.** Unter `headgent/phpcli` und
+  `headgent/phpfpm` liegen bis zum ersten Push die aus der Registry gezogenen
+  Bestands-Images. Sie sind wiederbeschaffbar, aber sie sind weg.
+
+Für den Vorschlaghammer gibt es ein eigenes Target, und es ist verriegelt:
+
+```sh
+make clean-system              # zeigt nur, was es kosten würde, und bricht ab
+make clean-system CONFIRM=ja   # entfernt JEDES ungenutzte Image, Netz und Volume
+```
+
+`clean-system` greift ausdrücklich über dieses Repo hinaus und trifft auch die
+Artefakte fremder Projekte. Ein versehentlich getipptes `make clean-system` soll
+nicht der Moment sein, in dem sie verschwinden — deshalb passiert ohne
+`CONFIRM=ja` nichts außer einer Anzeige. Umgebende Leerzeichen sind egal, alles
+andere als genau `ja` bricht ab (`Ja`, `JA`, `yes` blockieren).
+
+Keines dieser Targets hängt an `test-all`. Sie löschen genau die Artefakte,
+gegen die der Prüflauf prüft — sie gehören daneben, nicht hinein.
+
+---
+
 ## Aufbau des Repos
 
 ```
@@ -347,7 +419,9 @@ php-image-builder/
 │   │   ├── docker.build.local.mk # bake --load
 │   │   ├── docker.build.push.mk  # bake --push (nie ausgeführt)
 │   │   ├── test.mk               # die dreizehn Prüfstufen
-│   │   └── demo.mk               # Demo-Stack
+│   │   ├── demo.mk               # Demo-Stack
+│   │   ├── clean.mk              # Aufräumen, auf dieses Repo begrenzt
+│   │   └── ssh.mk                # SSH-Schlüssel (aus dem Bestand)
 │   └── tests/                    # elf Prüfskripte
 ├── src/
 │   ├── shared/

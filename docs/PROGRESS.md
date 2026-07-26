@@ -1648,6 +1648,9 @@ Gegenprobe-Pflicht selbst gefunden hat.
 | `README.md` | **neu.** Die Bedienoberfläche des Repos: Targets, Konfigurationsweg, `APP_ENV`-Profiltabelle mit den vier Sicherungen, UID/GID-Verhalten, nginx-Vorlage mit allen elf Variablen, Demo-Stack, die dreizehn Prüfstufen, Aufbau, CI samt N6-Sperre, die Betriebsbedingungen und eine Umstiegs-Tabelle für Konsumenten |
 | `.claude/CLAUDE.md` | **neu.** Nur, was beim *Arbeiten* am Repo gilt: die Außengrenze N6, die Dokumentenordnung, der Prüflauf samt der sieben „grün ohne zu messen"-Fallen, sieben nicht verhandelbare Bauregeln, die Arbeitsweise. **Nicht versioniert** — `.gitignore:3` schließt `.claude` aus, genau wie in beiden Bestands-Repos (dort ebenfalls vorhanden und ungetrackt). Bewusst so belassen; wer die Konvention ändern will, entscheidet das getrennt |
 | `src/base/Dockerfile` | **geändert:** `oniguruma-dev` und `curl-dev` aus der apk-Liste der Build-Stage entfernt, mit dem Messergebnis als Kommentar (siehe B33) |
+| `support/makefiles/ssh.mk` | **nachgezogen** aus `phpfpm/support/makefiles/`, unverändert wie im Plan vorgesehen (Entscheidung Rolf zu B32) |
+| `support/makefiles/clean.mk` | **neu.** Neun Aufräum-Targets (Entscheidung Rolf 2026-07-26, nach P12 angefordert) — siehe unten |
+| `Makefile` | **geändert:** die beiden neuen Module eingebunden |
 | `docs/PROGRESS.md` | **geändert:** P11 auf abgeschlossen, dieser Abschnitt, Befunde B32 und B33 |
 | `docs/HANDOVER.md` | **geändert:** Stand nachgezogen |
 
@@ -1748,7 +1751,64 @@ Entscheidung steht aus.**
    Zwei Fehler kamen dabei heraus: ein Target fehlte (`init`) und eine Datei war
    genannt, die es nicht gibt (`ssh.mk` — daraus wurde B32).
 
-### Befund aus P12
+### Nachtrag — Aufräum-Targets (`clean.mk`)
+
+Auf Anforderung Rolf am 2026-07-26, nach dem P12-Commit: Helferbefehle, um Platz
+zurückzuholen. Anlass ist **B15** — `build-all` übersetzt drei PHP-Versionen
+gleichzeitig, und auf einer vollen Docker-VM endet das mit „No space left on
+device". Gemessen beim Bau der Targets: 105 Images, 14,58 GB, davon 9,33 GB
+wiedergewinnbar, plus 32 baumelnde Layer.
+
+| Target | Wirkung |
+|---|---|
+| `disk-usage` | zeigt Belegung und was davon aus diesem Repo stammt; löscht nichts |
+| `clean` | Demo-Reste, Test-Images, baumelnde Layer — der Regelfall |
+| `clean-test-images` / `clean-images` | die Test-Images bzw. die lokalen `headgent/*`, je alle Tags |
+| `clean-dangling` / `clean-cache` / `clean-demo` | die drei Einzelfälle |
+| `clean-all` | alles aus diesem Repo |
+| `clean-system` | **global**, hinter `CONFIRM=ja` verriegelt |
+
+**Die tragende Entscheidung: kein `docker system prune` als bequemer
+Rundumschlag.** Auf einem Entwicklungsrechner liegen fremde Images, Volumes und
+Container daneben, und die gehen dieses Repo nichts an — die Referenzen kommen
+deshalb aus der `.env` (A2.1), nicht aus einem Glob über alles Lokale. Genau ein
+Target bricht die Regel bewusst (`clean-system`); es zeigt vorher `docker system
+df` und verlangt `CONFIRM=ja`, sonst bricht es ab.
+
+Zwei Einschränkungen stehen ausdrücklich im Code und in der README, statt
+beschönigt zu werden: `clean-dangling` ist zwangsläufig rechnerweit (ein Layer
+ohne Tag trägt keinen Eigentümer), und `clean-images` trifft bis zum ersten Push
+auch die aus der Registry gezogenen Bestands-Images.
+
+**Nachgewiesen** an einer Attrappe statt an den echten Test-Images: drei Tags
+unter `clean-probe/` plus ein gestoppter Container, `make clean-test-images
+TEST_REGISTRY=clean-probe` → alles weg, `headgent/*` unberührt (10 Images
+unverändert), zweiter Lauf meldet sauber „nichts vorhanden" statt zu scheitern.
+`clean-dangling` hat anschließend 32 Layer und 146,3 MB freigegeben, der leere
+Fall meldet „keine baumelnden Layer". `make test-lint` bleibt grün.
+
+**Die Verriegelung von `clean-system` hat zweimal etwas gelehrt.** Erstens war
+sie asymmetrisch: `CONFIRM=" ja"` kam durch, `CONFIRM="ja "` nicht — Make
+entfernt bei einer Kommandozeilen-Zuweisung führende Leerzeichen selbst. Eine
+Verriegelung, die je nach Seite des Leerzeichens anders entscheidet, ist keine;
+`$(strip ...)` stellt das gerade.
+
+Zweitens — und das ist der lehrreichere Teil — **war die erste Prüfung dieser
+Verriegelung wertlos.** Sie lief über `make -n`, und ein Trockenlauf druckt die
+`prune`-Zeile unabhängig davon, ob die Bedingung sie erlaubt hätte: alle acht
+Varianten meldeten „entriegelt", auch die leere. Gemessen wurde nichts. Der
+gültige Nachweis führt über eine `docker`-Attrappe im `PATH`, die ihre Aufrufe
+protokolliert statt sie auszuführen — damit lässt sich das Target **echt**
+laufen lassen, ohne dass etwas gelöscht wird. Ergebnis: `ja` in jeder
+Whitespace-Variante entriegelt, `Ja`, `JA`, `yes`, `jaa` und der leere Wert
+blockieren. Gegenprobe: die Attrappe protokolliert bei `CONFIRM=ja`
+tatsächlich `docker system prune -a --volumes -f` — sie hätte also angeschlagen.
+
+Neunte Auflage derselben Klasse. Diesmal in der Prüfung einer Sicherung, und der
+Fehler war so alt wie **B19**: ein Aufrufweg gewählt, der den zu prüfenden
+Mechanismus gar nicht ausführt.
+
+### Befunde aus P12
 
 **B32 — die Zielstruktur des Plans nennt `support/makefiles/ssh.mk`; das Repo hat
 sie nie bekommen.** `PLAN.md` führt sie zweimal: in der Bauform-Tabelle
@@ -1759,11 +1819,13 @@ sie in beiden Repos (`phpcli/support/makefile/ssh.mk`,
 übernommen, und in sechs Sessions ist es niemandem aufgefallen; gefunden hat es
 erst der Faktencheck der README gegen den tatsächlichen Verzeichnisbaum.
 
-Fachlich ist das Weglassen vermutlich richtig — SSH-Schlüsselverwaltung ist
+Fachlich wäre das Weglassen vertretbar gewesen — SSH-Schlüsselverwaltung ist
 keine PHP-Laufzeit, dieselbe Grenze, aus der heraus nginx kein Build-Target mehr
 ist (E9). **Aber es war keine Entscheidung, sondern eine Auslassung**, und der
-Plan sagt etwas anderes. Vorgelegt zur Entscheidung: ersatzlos streichen (mit
-Nachtrag im Plan) oder nachziehen.
+Plan sagt etwas anderes. **Entschieden am 2026-07-26 (Rolf): nachziehen.**
+Unverändert übernommen, wie die Bauform-Tabelle es vorsah; `make help` führt die
+Sektion „SSH Keys" mit fünf Targets, `test-lint` bleibt grün (`.mk`-Dateien
+gehen nicht durch shellcheck).
 
 Die Lehre reiht sich neben B14 und B30: **eine Zielstruktur im Plan ist eine
 Zusage, die niemand nachzählt.** Erst der Abgleich Dokument gegen Dateibaum
@@ -1808,6 +1870,21 @@ Build-Abbruch unter 8.5; hier passiert schlicht nichts. Die Änderung bleibt
 trotzdem stehen — nicht als Optimierung, sondern weil die Zeile einen Bedarf
 behauptete, den es nicht gibt. Die Messung ist das Ergebnis, nicht die Ersparnis.
 
+**B34 — `docker ps --filter ancestor=<tag>` arbeitet auf der Image-ID, nicht auf
+dem Tag.** Aufgefallen beim Nachweis von `clean-test-images`: die Attrappe trug
+drei Tags auf derselben Alpine-ID, und die Meldung schrieb den einen Container
+dem *erstbesten* dieser Tags zu — nicht dem, aus dem er tatsächlich erzeugt
+worden war. Im Echtbetrieb fällt das nicht auf, weil `cli` und `fpm`
+verschiedene IDs haben; die Meldung wäre trotzdem eine Behauptung über etwas,
+das gar nicht gemessen wurde. Sie nennt jetzt die entfernten Container beim
+Namen, statt sie einem Tag zuzuschreiben.
+
+Achte Auflage derselben Klasse wie B11, B16, B19, B20, B21, B27 und B31 — und
+diesmal nicht in einem Prüffall, sondern in einer Statusmeldung. **Auch eine
+Ausgabe kann etwas anderes berichten, als sie ermittelt hat.** Gefunden wurde es
+wieder nur, weil der Nachweis überhaupt gefahren wurde, statt die Targets nach
+dem Schreiben für richtig zu halten.
+
 ---
 
 ## Offene Punkte / Risiken
@@ -1822,8 +1899,8 @@ behauptete, den es nicht gibt. Die Messung ist das Ergebnis, nicht die Ersparnis
 | ~~N3~~ | ~~FrankenPHP-OS-Variante~~ — **entschieden 2026-07-25: Alpine**, wenige Minuten später mit dem ganzen Target gestrichen (E11). Der offene Default-Port ist im Abschnitt „P7 — entfallen" trotzdem belegt festgehalten | — | erledigt |
 | ~~O1~~ | ~~Image-Name für FrankenPHP~~ — **entschieden: `headgent/frankenphp`**, dann mit E11 gegenstandslos | — | erledigt |
 | ~~AK4~~ | ~~UID-Nachweis ist auf macOS prinzipiell nicht führbar~~ — **erbracht am 2026-07-26** in einem `docker:28-dind`-Linux-Host statt auf einem GitHub-Runner (Entscheidung Rolf; N6 verbietet die CI-Auslösung). 13 Zusicherungen, Gegenprobe gegen den Bestand zeigt U1 und U2 erstmals **gemessen** | — | erledigt |
-| **O7** | **AK8/H1 — der Trivy-Lauf selbst ist nicht nachweisbar, solange N6 gilt.** Die Konfiguration ist korrekt und lokal verifiziert (0 CRITICAL/HIGH auf beiden Test-Images, mit und ohne `ignore-unfixed`), die GitHub-Actions-Verdrahtung ist es nicht. Zu entscheiden: gilt die lokale Verifikation als Ersatznachweis, oder bleibt AK8 bis zum ersten CI-Lauf offen? | P12-Abschluss | mittel |
-| **O8** | **B32 — `support/makefiles/ssh.mk` steht im Plan, existiert aber nicht.** Zu entscheiden: ersatzlos streichen (Empfehlung — SSH-Schlüsselverwaltung ist keine PHP-Laufzeit, dieselbe Grenze wie E9) mit Nachtrag in `PLAN.md`, oder aus dem Bestand nachziehen | P12-Abschluss | niedrig |
+| ~~O7~~ | ~~AK8/H1 — der Trivy-Lauf selbst ist nicht nachweisbar, solange N6 gilt~~ — **entschieden 2026-07-26 (Rolf): die lokale Verifikation genügt, mit Vermerk.** AK8 ist abgehakt; im PRD steht bei AK8, was ungeprüft bleibt (die GitHub-Actions-Verdrahtung selbst) und wann es nachgezogen wird (erster CI-Lauf, also mit dem Fall von N6) | — | erledigt |
+| ~~O8~~ | ~~B32 — `support/makefiles/ssh.mk` steht im Plan, existiert aber nicht~~ — **entschieden 2026-07-26 (Rolf): nachziehen.** Unverändert aus `phpfpm/support/makefiles/` übernommen, im `Makefile` eingebunden; `make help` zeigt die Sektion „SSH Keys", `test-lint` bleibt grün. Die Zielstruktur des Plans stimmt damit wieder | — | erledigt |
 | ~~O6~~ | ~~Zwei Härtungen an der nginx-Vorlage warten auf Entscheidung~~ — **entschieden 2026-07-26 (Freigabe Rolf): beide umsetzen.** `try_files $uri =404;` in der `.php`-Fallback-Location (**B24**) und die verlorenen Security-Header bei statischen Dateien (**B25**, nach der dokumentierten Empfehlung **Variante (b)**: die Zeile `add_header Cache-Control "public";` löschen, damit die Location die Server-Header wieder erbt). **Umgesetzt und belegt am 2026-07-26** — Abschnitt „O6 — umgesetzt", `test-nginx` steht bei 55/55 | — | erledigt |
 
 ### Wartet auf ausdrückliche Freigabe (nach außen wirkend)
@@ -1914,14 +1991,13 @@ UID/GID-Neubau (A4/E7 gegen U1–U3). **L-B ist mit dem `test`-Profil erledigt:*
 ## Nächste Phase
 
 **Keine mehr.** Alle Phasen des Plans sind abgeschlossen (P1–P6, P8–P12; P7
-entfallen mit E11). Was aussteht, sind drei Entscheidungen und keine Arbeit:
+entfallen mit E11), alle Akzeptanzkriterien sind abgehakt (AK8 mit Vermerk), O7
+und O8 sind entschieden. Es steht genau ein Punkt aus:
 
-1. **N6** — der erste Push, nach vorgelegter Tag-Strategie. Der einzige Punkt
-   mit Außenwirkung. Die Umstiegs-Tabelle der `README.md` ist der Entwurf der
-   Release-Notiz dazu.
-2. **O7** — AK8/H1: gilt die lokale Trivy-Verifikation als Ersatznachweis,
-   solange N6 den CI-Lauf verbietet?
-3. **O8** — Befund B32: `support/makefiles/ssh.mk` streichen oder nachziehen?
+**N6 — der erste Push**, nach vorgelegter und freigegebener Tag-Strategie. Der
+einzige Punkt mit Außenwirkung, den dieses Vorhaben je hatte. Die
+Umstiegs-Tabelle der `README.md` ist der Entwurf der Release-Notiz dazu; der
+Vorschlag zur Tag-Strategie steht bei N6 in der Tabelle oben.
 
 Weiter liegen unverändert und ohne Termin: die Archivierung von
 `jardisOps/phpcli` und `jardisOps/phpfpm` (E8), das gegenstandslose

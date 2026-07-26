@@ -248,18 +248,26 @@ Die dort als H1–H6 priorisierten Maßnahmen werden im konsolidierten Repo umge
 
 ## 7 · Akzeptanzkriterien
 
-- [ ] AK1 — Ein Repo baut alle Targets aus Abschnitt 2 mit einem `docker buildx bake`-Aufruf.
-- [ ] AK2 — `base`, `cli` und `fpm` teilen nachweislich **eine** PHP-Versions- und Extensions-Definition; kein Wert ist doppelt gepflegt.
-- [ ] AK3 — Kein Image-Name hat sich geändert; `headgent/phpcli` und `headgent/phpfpm` sind mit der neuen Versionsreihe fortsetzbar.
-- [ ] AK4 — Der UID/GID-Nachweis aus A4.5 ist erbracht: Host-UID ≠ 1000, belegte Ziel-GID und frisches Named Volume funktionieren auf Linux.
+- [x] AK1 — Ein Repo baut alle Targets aus Abschnitt 2 mit einem `docker buildx bake`-Aufruf.
+- [x] AK2 — `base`, `cli` und `fpm` teilen nachweislich **eine** PHP-Versions- und Extensions-Definition; kein Wert ist doppelt gepflegt.
+- [x] AK3 — Kein Image-Name hat sich geändert; `headgent/phpcli` und `headgent/phpfpm` sind mit der neuen Versionsreihe fortsetzbar.
+- [x] AK4 — Der UID/GID-Nachweis aus A4.5 ist erbracht: Host-UID ≠ 1000, belegte Ziel-GID und frisches Named Volume funktionieren auf Linux.
 - [x] ~~AK5 — FrankenPHP liegt als lauffähiges Docker-Image vor~~ — **entfallen (E11)**.
 - [x] ~~AK6 — Das FrankenPHP-Image trägt dieselbe Extension-Menge~~ — **entfallen (E11)**.
-- [ ] AK7 — Die nginx-Config enthält keine hartkodierten Werte mehr aus der Liste in 1.3, der Betrieb ohne TLS-Proxy ist korrekt, und sie läuft mit dem **unveränderten** offiziellen Image ohne eigenen Entrypoint.
-- [ ] AK8 — H1–H5 plus H10 sind umgesetzt; Trivy blockiert bei CRITICAL/HIGH und läuft nicht mehr mit `continue-on-error`.
-- [ ] AK9 — Der Demo-Stack startet mit `docker compose up` ohne Nacharbeit. *(Der Zusatz „das FrankenPHP-Profil ebenfalls" ist mit E11 entfallen.)*
-- [ ] AK10 — Ein CI-Workflow ersetzt beide bestehenden; eine `base`-Änderung baut alle abhängigen Targets neu.
-- [ ] AK11 — Jede in Abschnitt 1.1 gelistete Drift ist entweder aufgehoben oder als bewusstes Delta begründet.
-- [ ] AK13 — `APP_ENV=dev|test|prod` setzt in allen Targets ein konsistentes Profil; eine explizit gesetzte Einzelvariable schlägt das Profil weiterhin.
-- [ ] AK14 — Bei aktivem Xdebug erscheint **keine** JIT-Warnung mehr (L-A behoben), und `APP_ENV=prod` mit aktivem Xdebug bricht sichtbar ab (L-F behoben).
-- [ ] AK15 — Im `dev`-Profil bemerkt auch das FPM-Target Code-Änderungen ohne Container-Neustart (L-C behoben).
-- [ ] AK12 — Das Repo baut kein nginx-Image mehr; der Demo-Stack belegt, dass das offizielle Image mit der gelieferten Config auskommt.
+- [x] AK7 — Die nginx-Config enthält keine hartkodierten Werte mehr aus der Liste in 1.3, der Betrieb ohne TLS-Proxy ist korrekt, und sie läuft mit dem **unveränderten** offiziellen Image ohne eigenen Entrypoint.
+- [x] AK8 — H1–H5 plus H10 sind umgesetzt; Trivy blockiert bei CRITICAL/HIGH und läuft nicht mehr mit `continue-on-error`.
+  > **Abgehakt am 2026-07-26 mit Vermerk (Entscheidung Rolf).** H2–H5 und H10 sind
+  > einzeln am Artefakt belegt. Für H1 gibt es keinen CI-Lauf — N6 verbietet ihn —,
+  > deshalb wurde der Scan lokal geführt: `trivy image` gegen beide Test-Images,
+  > jeweils mit **und** ohne `--ignore-unfixed`, **0 CRITICAL/HIGH**. Das belegt die
+  > Konfiguration funktional und zugleich die Wirksamkeit von A7.7/H10.
+  > **Ungeprüft bleibt die GitHub-Actions-Verdrahtung selbst** — Job-Reihenfolge,
+  > die Parameter der `trivy-action`, der Summary-Schritt. Sie wird beim ersten
+  > CI-Lauf nachgezogen, also frühestens mit dem Fall von N6.
+- [x] AK9 — Der Demo-Stack startet mit `docker compose up` ohne Nacharbeit. *(Der Zusatz „das FrankenPHP-Profil ebenfalls" ist mit E11 entfallen.)*
+- [x] AK10 — Ein CI-Workflow ersetzt beide bestehenden; eine `base`-Änderung baut alle abhängigen Targets neu.
+- [x] AK11 — Jede in Abschnitt 1.1 gelistete Drift ist entweder aufgehoben oder als bewusstes Delta begründet.
+- [x] AK13 — `APP_ENV=dev|test|prod` setzt in allen Targets ein konsistentes Profil; eine explizit gesetzte Einzelvariable schlägt das Profil weiterhin.
+- [x] AK14 — Bei aktivem Xdebug erscheint **keine** JIT-Warnung mehr (L-A behoben), und `APP_ENV=prod` mit aktivem Xdebug bricht sichtbar ab (L-F behoben).
+- [x] AK15 — Im `dev`-Profil bemerkt auch das FPM-Target Code-Änderungen ohne Container-Neustart (L-C behoben).
+- [x] AK12 — Das Repo baut kein nginx-Image mehr; der Demo-Stack belegt, dass das offizielle Image mit der gelieferten Config auskommt.

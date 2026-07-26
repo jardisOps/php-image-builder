@@ -52,6 +52,11 @@ include ./support/makefiles/docker.build.local.mk
 include ./support/makefiles/docker.build.push.mk
 include ./support/makefiles/test.mk
 include ./support/makefiles/demo.mk
+include ./support/makefiles/clean.mk
+# Unveraendert aus dem Bestand uebernommen (PLAN, Bauform-Tabelle). In P1 war sie
+# uebersehen worden — die Zielstruktur nannte sie, das Repo bekam sie nie
+# (Befund B32, nachgezogen in P12 auf Entscheidung Rolf 2026-07-26).
+include ./support/makefiles/ssh.mk
 
 # ---------------------------------------------------------------------------
 # Setup

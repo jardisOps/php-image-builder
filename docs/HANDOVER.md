@@ -3,9 +3,9 @@
 **Stand:** 2026-07-26, Ende der siebten Umsetzungs-Session. **Alle Phasen sind
 abgeschlossen** — P1–P6, P8–P12 und O6; **P7 ist entfallen** (E11). Das
 Akzeptanz-Gate ist gegen AK1–AK15 geführt: **vierzehn der fünfzehn wirksamen
-Kriterien sind erfüllt**, AK8 ist teilweise erfüllt und wartet auf eine
-Entscheidung (O7). Offen sind damit nur noch Entscheidungen, keine Arbeit:
-**N6** (erster Push), **O7** (AK8/Trivy), **O8** (`ssh.mk`).
+Kriterien sind erfüllt** und AK8 ist mit Vermerk abgehakt (O7 entschieden). O8
+ist entschieden und umgesetzt. **Offen ist genau ein Punkt: N6, der erste
+Push.**
 
 Arbeitsverzeichnis: `/Users/Rolf/Development/headgent/devops/docker/php-image-builder/`
 Projekt- und künftiger Repo-Name: **`php-image-builder`**.
@@ -29,8 +29,9 @@ drei **Entscheidungen**, keine Arbeitspakete.
 | Aufgeräumt | keine Testcontainer, -volumes oder -netze übrig; `headgent/*` unberührt |
 | **P11** | **abgeschlossen.** `.github/workflows/ci.yml` (vier Jobs, alle Trigger, `publish` abgeschaltet), OCI-Labels, drei neue Prüfstufen, **AK4 erbracht** |
 | **P12** | **abgeschlossen.** `README.md` (gegengeprüft, nicht nur geschrieben), `.claude/CLAUDE.md` (unversioniert, wie im Bestand), Akzeptanz-Gate gegen AK1–AK15 |
-| **Akzeptanz** | **14 von 15 wirksamen Kriterien erfüllt** (AK5/AK6 entfallen mit E11). **AK11** ist erstmals vollständig geführt: 15 von 16 Drifts aufgehoben, genau eine (D10) bleibt begründetes Delta. **AK8 teilweise** — siehe O7 |
-| Wartet auf Entscheidung | **N6** (erster Push, Tag-Strategie), **O7** (AK8/Trivy-Nachweis), **O8** (`ssh.mk`, Befund B32) |
+| **Akzeptanz** | **Alle AK abgehakt.** 14 von 15 wirksamen Kriterien voll erfüllt (AK5/AK6 entfallen mit E11); **AK8 mit Vermerk** — H2–H5 und H10 am Artefakt, H1 lokal statt in der CI (O7). **AK11** ist erstmals vollständig geführt: 15 von 16 Drifts aufgehoben, genau eine (D10) bleibt begründetes Delta |
+| Nachgezogen nach P12 | `support/makefiles/ssh.mk` (O8/B32) und `support/makefiles/clean.mk` — neun Aufräum-Targets gegen B15, auf dieses Repo begrenzt, `clean-system` hinter `CONFIRM=ja` |
+| Wartet auf Entscheidung | **nur noch N6** — erster Push, Tag-Strategie |
 
 Einstieg: Kurzform:
 
@@ -45,7 +46,7 @@ Konfigurationsweg, `APP_ENV`-Profile, nginx-Vorlage, Prüfstufen,
 Betriebsbedingungen und eine Umstiegs-Tabelle für Konsumenten. Die
 Arbeitsanweisung für Änderungen am Repo steht in `.claude/CLAUDE.md`.
 
-**Womit die nächste Session beginnt — drei Entscheidungen:**
+**Womit die nächste Session beginnt — der eine offene Punkt:**
 
 1. **N6 — der erste Push.** Der Workflow ist geschrieben, aber nicht scharf:
    `publish` läuft nur bei `vars.PUBLISH_ENABLED == 'true'`, und diese Variable
@@ -54,13 +55,10 @@ Arbeitsanweisung für Änderungen am Repo steht in `.claude/CLAUDE.md`.
    PROGRESS: Nebentag `:<ver>-next`, `:latest` und `:<ver>` unangetastet, bis in
    einem Projekt gegengeprüft. Die Umstiegs-Tabelle der README ist zugleich der
    Entwurf der Release-Notiz.
-2. **O7 — AK8.** H2–H5 und H10 sind am Artefakt belegt; der Trivy-Lauf selbst
-   (H1) braucht einen CI-Lauf, den N6 verbietet. Lokal nachgeholt: **0
-   CRITICAL/HIGH** auf beiden Test-Images, mit und ohne `ignore-unfixed`. Gilt
-   das als Ersatznachweis, oder bleibt AK8 bis zum ersten CI-Lauf offen?
-3. **O8 — Befund B32.** `support/makefiles/ssh.mk` steht in der Zielstruktur des
-   Plans, wurde in P1 aber nie übernommen. Empfehlung: ersatzlos streichen, mit
-   Nachtrag im Plan.
+   Beim ersten CI-Lauf wird zugleich nachgezogen, was AK8 offengelassen hat:
+   die GitHub-Actions-Verdrahtung des Trivy-Gates (O7 — der Scan selbst ist
+   lokal belegt, **0 CRITICAL/HIGH** auf beiden Images, mit und ohne
+   `ignore-unfixed`).
 
 ---
 
@@ -142,7 +140,15 @@ make push / make push-all           # geschrieben, NIE ausgeführt — siehe N6
 ```
 
 `make build-all` übersetzt drei PHP-Versionen **gleichzeitig** und braucht
-entsprechend Plattenplatz (Befund B15).
+entsprechend Plattenplatz (Befund B15). Dagegen gibt es seit P12 die
+Aufräum-Targets:
+
+```sh
+make disk-usage                     # Belegung, davon aus diesem Repo — loescht nichts
+make clean                          # Demo-Reste, Test-Images, baumelnde Layer
+make clean-all                      # zusaetzlich headgent/* und der buildx-Cache
+make clean-system CONFIRM=ja        # GLOBAL, trifft auch fremde Projekte
+```
 
 ---
 
@@ -261,10 +267,8 @@ lokalen `headgent/*`-Images nicht. Eine andere Version prüfen:
 - **N6 — der erste Push ist der einzige Punkt mit Außenwirkung.** Vorher eine
   Tag-Strategie vorlegen (Vorschlag: Nebentag `:<ver>-next`, `:latest` und
   `:<ver>` unangetastet, bis in einem Projekt gegengeprüft).
-- **O7 — AK8/H1**: gilt die lokale Trivy-Verifikation als Ersatznachweis,
-  solange N6 den CI-Lauf verbietet?
-- **O8 — B32**: `support/makefiles/ssh.mk` streichen (mit Nachtrag im Plan) oder
-  nachziehen?
+- ~~O7 — AK8/H1~~ und ~~O8 — B32~~ sind am 2026-07-26 entschieden: die lokale
+  Trivy-Verifikation genügt (mit Vermerk im PRD), `ssh.mk` ist nachgezogen.
 - Kein GitHub-Repo, kein Remote (`make init` steht bereit, ist nie gelaufen).
 - `jardisOps/phpcli` und `jardisOps/phpfpm` sind unberührt und **nicht**
   archiviert (E8).
