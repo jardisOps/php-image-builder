@@ -35,6 +35,11 @@ make build BUILD_PLATFORM=linux/amd64  # a single platform instead of the host a
 make build CACHE_BACKEND=none          # auto | gha | registry | local | none
 ```
 
+The `gha` backend takes three more switches, all of them only relevant in CI:
+`CACHE_SCOPE` (the namespace written and read), `CACHE_READ_SCOPES` (further
+namespaces read but never written) and `CACHE_MODE` (`rw` or `w`, write
+only). What they are for is in [CI and publishing](#ci-and-publishing).
+
 (The leading-variable form, `PHP_VERSION=8.5 make build`, does **not** work —
 for a plain environment variable the included `.env` file wins.)
 
@@ -44,8 +49,9 @@ publishing](#ci-and-publishing).
 
 ### Publishing
 
-> Written but never executed — see [Publishing is
-> blocked](../README.md#publishing-is-blocked).
+> `make push` / `push-all` publish to Docker Hub and run only after explicit
+> approval — see [Who is allowed to
+> publish](../README.md#who-is-allowed-to-publish).
 
 ### Testing
 
@@ -358,7 +364,13 @@ without the interval jumping between 28 and 3 days.
 |---|---|
 | `lint` | `make test-static` (`test-lint` + `test-bake`, version-independent) |
 | `build-test` | matrix 8.3 / 8.4 / 8.5, each `make test-image-suite`, then Trivy |
-| `publish` | multi-arch build and push with SBOM and provenance attestation |
+| `publish` | multi-arch build and push with SBOM and provenance attestation — schedule and `workflow_dispatch` only |
+
+**A publishing run cannot be cancelled by a commit.** The concurrency group
+carries the trigger, and only `push` and `pull_request` cancel what is already
+running. Otherwise a commit landing on `main` during the monthly run would
+interrupt a `--push` halfway through its manifest — `cancel-in-progress` is a
+property of the arriving run, not of the one being cancelled.
 
 `test-static` and `test-image-suite` (`support/makefiles/test.mk`) split
 `make test-all` into its version-independent and per-version halves so the
@@ -371,16 +383,57 @@ actionable. Findings **without** a fix sit in the official base image and cannot
 be fixed by us; they would keep the pipeline permanently red and are therefore
 reported in full in the job summary instead of blocking.
 
-> ### Publishing is blocked
+It scans the **test** image, not the pushed one. That is a second object built
+from the same source — amd64 only, no attestations, its own name — whose
+filesystem layers match the amd64 half of what `publish` pushes. For a scanner,
+which reads packages and versions, the two are the same. The arm64 half is
+scanned by nothing: CI builds it, but never boots or scans it.
+
+### The layer cache
+
+Both building jobs use BuildKit's GitHub Actions cache. It needs
+`ACTIONS_RUNTIME_TOKEN` and the cache service URL, and the runner hands those
+to JavaScript actions only — **never to a `run:` step**. Without them buildx
+does not complain, it discards `--cache-from`/`--cache-to` silently. That is
+why an `actions/github-script` step lifts the variables into the job
+environment before every `make` call that builds. Without that step the cache
+setting is decoration: measured in run 30236711245, not a single cached step
+and every extension recompiled.
+
+| Job | writes | reads |
+|---|---|---|
+| `build-test` | `test-<ver>` | `test-<ver>` |
+| `publish` | `publish-<ver>` | `publish-<ver>` **and** `test-<ver>` |
+
+Separate write namespaces, because a cache key is immutable once written and
+the second writer of a shared one loses its entry. That would hit whichever job
+finishes last, and in `publish` those are the arm64 layers — the expensive
+ones. Reading `test-<ver>` is what saves `publish` the second amd64 build.
+
+**The scheduled run writes but does not read** (`CACHE_MODE=w`). It exists to
+pick up patched base layers; reading the stored cache would hand it exactly the
+state it is meant to replace, and it would republish it under a new date tag.
+
+Do not expect the cache to halve the publish job. Measured in the same run,
+`publish (8.4)`, 47 minutes in total: the extension build takes **240 s on
+amd64 and 2774 s on arm64** under emulation. Both architectures run in
+parallel, so the clock follows arm64 — and no arm64 layer can ever come out of
+`build-test`, which builds amd64 only. Within a run the cache saves about four
+minutes. It earns its keep across runs, where a `publish` whose sources have
+not changed skips the arm64 compile as well. Getting at those 46 minutes for
+real means a native arm64 runner, one job per architecture and a merged
+manifest — a rebuild of the push path, deliberately not done here.
+
+> ### Publishing
 >
-> See [Publishing is blocked](../README.md#publishing-is-blocked) in the README
-> for the full block (`PUBLISH_ENABLED`, reference count, first-push rule).
+> See [Who is allowed to publish](../README.md#who-is-allowed-to-publish) in
+> the README for both conditions (`PUBLISH_ENABLED`, and schedule or
+> `workflow_dispatch` — never a commit).
 >
-> The plan is two channels (`next` and `stable`): the first push goes exclusively
-> to `:<ver>-next` and `:<ver>-<date>`, promotion happens later via a registry
-> retag of the verified digest rather than a second build. The full decision
-> document lives as a working paper in `docs/TAG-STRATEGIE.md` and is not part of
-> the repository.
+> What is published today: `:<ver>` and the immutable `:<ver>-<date>` twin for
+> 8.3 / 8.4 / 8.5, plus `:latest` on the highest version, for both images and
+> both architectures. The working paper behind that tag set,
+> `docs/TAG-STRATEGIE.md`, is not part of the repository.
 
 ---
 

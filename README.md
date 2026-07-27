@@ -55,7 +55,7 @@ make demo-up       # demo stack: mariadb + fpm + official nginx
 | `make demo-up` / `demo-down` | demo stack on `http://localhost:8088` |
 | `make disk-usage` | what Docker occupies and how much of it comes from this repo — **deletes nothing** |
 | `make clean` / `clean-all` | clean up; `clean-system` is global and guarded by `CONFIRM=ja` |
-| `make push` / `push-all` | **blocked**, see below |
+| `make push` / `push-all` | publishes to Docker Hub — **only after explicit approval**, see below |
 | `make push-print` | the resolved push definition — same flags as `push`, but `--print`. Pushes nothing, needs no login |
 
 A value on the `make` command line beats `.env`:
@@ -116,25 +116,35 @@ A target Dockerfile contains only what follows from its purpose. For `cli` that
 is four lines: `max_execution_time=0`, `STOPSIGNAL SIGTERM`, a health check on
 `php`/`composer`, and the `CMD`. Everything else lives in `base`.
 
-## Publishing is blocked
+## Who is allowed to publish
 
-The CI's `publish` job only runs when the repository variable
-`PUBLISH_ENABLED` holds exactly `true`. It currently holds `false`, so the job
-is skipped. Note what that switch does **not** do: it is not limited to one PHP
-version. With it on, every push to `main` that touches a build path publishes
-the whole matrix. Narrowing to a single version is a property of the
-`workflow_dispatch` input `php_versions`, not of the variable.
-No `docker login`, no `--push`. `make push-print` resolves the exact same
-command line without executing it — that is where a wrong flag surfaces, rather
-than in the middle of a publish run.
+Two conditions have to hold together, and a commit satisfies neither on its
+own:
 
-The block stays until the tag strategy is approved. Nothing is currently
-published under `headgent/phpcli` or `headgent/phpfpm`: the registry entries
-were removed on 2026-07-26, so the **26 active references — all on
-`headgent/phpcli:8.3`** — can no longer pull. Machines with a filled Docker
-cache keep working; a fresh CI runner or `docker compose pull` does not.
-The first push out of this repository therefore restores service, and the tag
-set it writes decides what those 26 get.
+| Condition | State |
+|---|---|
+| repository variable `PUBLISH_ENABLED` is exactly `true` | currently `false` |
+| trigger is the monthly schedule or a manual `workflow_dispatch` | a push to `main` never publishes |
+
+The split is the point. Publishing overwrites the floating `:<ver>` and
+`:latest` tags that running projects pull — the one step here with external
+effect, and it must not ride along on an incidental commit. Because it cannot,
+the switch may stay on, which is what lets the monthly run keep the published
+patch level current by itself.
+
+The switch is **not** limited to one PHP version: with it on, a scheduled run
+publishes the whole matrix. Narrowing to a single version is a property of the
+`workflow_dispatch` input `php_versions`.
+
+`make push` and `make push-all` are the manual path and stay out of CI.
+`make push-print` resolves the exact same command line without executing it —
+that is where a wrong flag surfaces, rather than in the middle of a publish
+run.
+
+Published since 2026-07-26/27, verified at the registry: `:8.3`, `:8.4`, `:8.5`
+plus the immutable `:<ver>-<date>` twin for each, and `:latest` pointing at 8.5
+— for both `headgent/phpcli` and `headgent/phpfpm`, `linux/amd64` and
+`linux/arm64`.
 
 ## Known operating conditions
 

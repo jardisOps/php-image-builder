@@ -2,30 +2,33 @@
 # ci.yml — the single CI workflow
 # =============================================================================
 # Builds and tests both PHP images (cli, fpm) across the PHP version matrix:
-# a keepalive job for the scheduled trigger, a push guard for PRs (build and
-# test, never publish), and a blocking Trivy CVE gate.
+# a keepalive job for the scheduled trigger, a build-and-test guard for every
+# push and pull request, and a blocking Trivy CVE gate.
 #
 # -----------------------------------------------------------------------------
-# PUBLISH DISABLED
+# WHO IS ALLOWED TO PUBLISH
 # -----------------------------------------------------------------------------
-# The publish job exists but is switched off: it only runs when the repository
-# variable PUBLISH_ENABLED is 'true'. That variable does not exist, and
-# creating it is a deliberate act.
+# Only the monthly schedule and a manual workflow_dispatch, and only while the
+# repository variable PUBLISH_ENABLED holds 'true'. It currently holds 'false'.
 #
-# Reason: the first push to headgent/phpcli / headgent/phpfpm is the only step
-# in this project with external effect — it overwrites the floating :<ver> and
-# :latest tags that running projects pull. A tag strategy must be approved
-# before that first run (see docs/TAG-STRATEGIE.md).
+# A push to main deliberately cannot publish, no matter what the variable says.
+# Publishing overwrites the floating :<ver> and :latest tags that running
+# projects pull — it is the one step in this project with external effect, and
+# it must not ride along on an incidental commit. Splitting the two is what
+# lets the switch stay on so the monthly run can do its job: keep the
+# published base-image patch level current on its own.
 #
-# Until then: no docker login, no --push, no CI trigger for it.
+# Turning the switch on is a deliberate act. Local `make push` / `push-all`
+# stay out of it entirely — they are for an approved, manual publish.
 # =============================================================================
 name: Build, Test and Push PHP Images
 
 on:
   # php_versions narrows the publish matrix for a deliberate, staged rollout —
   # e.g. bring :8.3 back first, check it, then the rest. It affects ONLY the
-  # publish job; lint and build-test always cover the whole matrix. Every other
-  # trigger falls back to the default, so schedule and push publish all three.
+  # publish job; lint and build-test always cover the whole matrix. The
+  # scheduled run has no inputs and falls back to the default, so it publishes
+  # all three.
   workflow_dispatch:
     inputs:
       php_versions:
@@ -68,9 +71,16 @@ on:
       - '.github/workflows/ci.yml'
       - '!**/*.md'
 
+# A superseded build guard should be cancelled; a run that is pushing to the
+# registry must not be. Both halves are needed for that: the trigger is part
+# of the group, so a commit landing on main cannot cancel a scheduled publish
+# — cancel-in-progress is a property of the ARRIVING run, and without the
+# split the commit would take the publish down with it. And only push and
+# pull_request cancel at all, so a second dispatch waits for the first instead
+# of interrupting a `--push` halfway through its manifest.
 concurrency:
-  group: ${{ github.ref }}-build
-  cancel-in-progress: true
+  group: ${{ github.ref }}-${{ github.event_name }}-build
+  cancel-in-progress: ${{ github.event_name == 'push' || github.event_name == 'pull_request' }}
 
 # Baseline permissions for all jobs; individual jobs extend them below.
 permissions:
@@ -140,14 +150,60 @@ jobs:
         with:
           driver-opts: image=moby/buildkit:buildx-stable-1
 
+      # -----------------------------------------------------------------------
+      # The layer cache only works with these three variables
+      # -----------------------------------------------------------------------
+      # BuildKit's `type=gha` cache needs ACTIONS_RUNTIME_TOKEN and the cache
+      # service URL. The runner hands those to JavaScript actions only, never
+      # to a `run:` step — and buildx then drops --cache-from/--cache-to
+      # silently: no import, no export, no error. That is why every extension
+      # was recompiled in run 30236711245 although both jobs asked for the
+      # cache. docker/build-push-action injects them itself; a direct
+      # `docker buildx bake` out of the Makefile does not get them.
+      #
+      # Only variables that actually carry a value are exported: an empty
+      # ACTIONS_RUNTIME_TOKEN is worse than none at all — buildx would take it
+      # for a real one and abort with "token is malformed". The token is
+      # registered for log masking before it is exported, because from here on
+      # it sits in the environment of ordinary `run:` steps in a public
+      # repository. And if it is missing, the job says so: silence is what
+      # made this defect invisible in the first place.
+      - name: Expose the Actions cache credentials to buildx
+        uses: actions/github-script@v9
+        with:
+          script: |
+            for (const key of ['ACTIONS_RESULTS_URL', 'ACTIONS_CACHE_URL', 'ACTIONS_RUNTIME_TOKEN']) {
+              const value = process.env[key]
+              if (!value) continue
+              if (key === 'ACTIONS_RUNTIME_TOKEN') core.setSecret(value)
+              core.exportVariable(key, value)
+            }
+            if (!process.env.ACTIONS_RUNTIME_TOKEN) {
+              core.warning('ACTIONS_RUNTIME_TOKEN is missing — buildx discards the layer cache without an error, so this job rebuilds everything.')
+            }
+
+      # CACHE_SCOPE per PHP version and job: BuildKit's default is a single
+      # shared namespace in which the matrix jobs overwrite each other. The
+      # scheduled run reads nothing (CACHE_MODE=w) — it exists to pick up
+      # patched base layers, and the stored cache is exactly what it must not
+      # take.
       - name: Test run (PHP ${{ matrix.php_version }})
-        run: make test-image-suite PHP_VERSION=${{ matrix.php_version }} CACHE_BACKEND=gha
+        run: |
+          make test-image-suite PHP_VERSION=${{ matrix.php_version }} \
+            CACHE_BACKEND=gha \
+            CACHE_SCOPE=test-${{ matrix.php_version }} \
+            CACHE_MODE=${{ github.event_name == 'schedule' && 'w' || 'rw' }}
 
       # -----------------------------------------------------------------------
       # Trivy — blocking CVE gate
       # -----------------------------------------------------------------------
-      # Scans the TEST image, the exact artifact the publish job would push,
-      # before any push happens. Blocks only on CRITICAL/HIGH findings that
+      # Scans the TEST image before any push happens. It is not the pushed
+      # artifact but a second object built from the same source: amd64 only,
+      # without attestations, under its own name. Its filesystem layers match
+      # the amd64 half of what publish pushes — only metadata differs, so what
+      # a scanner reads, packages and their versions, is the same. The arm64
+      # half is covered by nothing here: CI builds it but never boots or scans
+      # it. Blocks only on CRITICAL/HIGH findings that
       # have a fix available (ignore-unfixed: true) — findings without a fix
       # can't be resolved and would block the pipeline forever, so they are
       # reported instead (next step) rather than dropped.
@@ -203,10 +259,16 @@ jobs:
   # publish — multi-arch build with push, SBOM and attestations
   # ===========================================================================
   # DISABLED, see the file header. Three conditions gate it together:
-  #   vars.PUBLISH_ENABLED == 'true'      the repository variable doesn't exist
-  #   github.event_name != 'pull_request' push guard
-  #   needs: [lint, build-test]           nothing publishes without passing
-  #                                       the Trivy gate
+  #   vars.PUBLISH_ENABLED == 'true'   the master switch, currently 'false'
+  #   schedule or workflow_dispatch    a commit never publishes, no matter
+  #                                    what the switch says
+  #   needs: [lint, build-test]        nothing publishes without passing the
+  #                                    Trivy gate
+  #
+  # The trigger condition is what makes the master switch usable: with it,
+  # PUBLISH_ENABLED can stay on permanently without every incidental commit to
+  # main pushing the whole matrix. The monthly schedule then publishes the
+  # patched base layers by itself — which is the entire point of running it.
   #
   # id-token: write + attestations: write apply to this job for both images.
   # SBOM and provenance attestation are produced during the build itself via
@@ -214,7 +276,7 @@ jobs:
   # follow-up step — they belong on the manifest that gets pushed.
   publish:
     needs: [lint, build-test]
-    if: ${{ vars.PUBLISH_ENABLED == 'true' && github.event_name != 'pull_request' }}
+    if: ${{ vars.PUBLISH_ENABLED == 'true' && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') }}
     runs-on: ubuntu-latest
     strategy:
       # `inputs` is null for every trigger other than workflow_dispatch, so the
@@ -245,6 +307,25 @@ jobs:
       - name: Set up QEMU (arm64)
         uses: docker/setup-qemu-action@v4
 
+      # Same reason and same script as in build-test: without these variables
+      # buildx discards the cache flags without a word. The copy stands for
+      # the same reason as the duplicated `paths:` list above — a workflow
+      # cannot reuse a step, and a composite action would hide eight lines
+      # behind a file of its own. Edit both together.
+      - name: Expose the Actions cache credentials to buildx
+        uses: actions/github-script@v9
+        with:
+          script: |
+            for (const key of ['ACTIONS_RESULTS_URL', 'ACTIONS_CACHE_URL', 'ACTIONS_RUNTIME_TOKEN']) {
+              const value = process.env[key]
+              if (!value) continue
+              if (key === 'ACTIONS_RUNTIME_TOKEN') core.setSecret(value)
+              core.exportVariable(key, value)
+            }
+            if (!process.env.ACTIONS_RUNTIME_TOKEN) {
+              core.warning('ACTIONS_RUNTIME_TOKEN is missing — buildx discards the layer cache without an error, so this job rebuilds everything.')
+            }
+
       # `make push` is a thin wrapper around support/docker-bake.hcl: platforms,
       # tag set and attestations live there in one place.
       # The namespace comes from DOCKER_HUB in .env — the single source of
@@ -253,5 +334,17 @@ jobs:
       # Makefile's `include ./.env` overrides it, and the line would suggest a
       # control that does not exist. The account behind DOCKER_USER_NAME must
       # therefore have write access to that namespace.
+      #
+      # This job writes its own cache scope and reads the test job's on top:
+      # a cache key is immutable, so a shared scope would let whichever job
+      # finishes second lose its entry — here that would be the arm64 layers,
+      # the ones that cost 46 of the 47 minutes. Reading `test-<ver>` is what
+      # saves the second amd64 build; arm64 only ever comes from this job's
+      # own scope, from an earlier run.
       - name: Build and push (PHP ${{ matrix.php_version }}, multi-arch)
-        run: make push PHP_VERSION=${{ matrix.php_version }} CACHE_BACKEND=gha
+        run: |
+          make push PHP_VERSION=${{ matrix.php_version }} \
+            CACHE_BACKEND=gha \
+            CACHE_SCOPE=publish-${{ matrix.php_version }} \
+            CACHE_READ_SCOPES=test-${{ matrix.php_version }} \
+            CACHE_MODE=${{ github.event_name == 'schedule' && 'w' || 'rw' }}

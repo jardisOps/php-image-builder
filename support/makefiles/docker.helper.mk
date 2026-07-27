@@ -61,7 +61,6 @@ IMAGE_CREATED  ?= $(shell date -u +%Y-%m-%dT%H:%M:%SZ)
 # Build switches
 # ---------------------------------------------------------------------------
 PLATFORMS ?= linux/amd64 linux/arm64
-NO_CACHE  ?= false
 
 # bake wants the platforms comma-separated; they are maintained
 # space-separated like everywhere else in the repo. The conversion happens
@@ -85,6 +84,24 @@ BUILD_ATTEST_FLAGS ?= --provenance=mode=max --sbom=true
 CACHE_BACKEND ?= auto
 CACHE_REF     ?=
 CACHE_DIR     ?= .buildx-cache
+
+# gha only. BuildKit writes into one shared "buildkit" namespace by default,
+# so the matrix jobs would overwrite each other; CI passes one scope per PHP
+# version and job. Empty keeps BuildKit's default.
+#   CACHE_SCOPE        written and read
+#   CACHE_READ_SCOPES  read in addition, never written — how the publish job
+#                      picks up what the test job just built. A cache key is
+#                      immutable once written and the second writer loses, so
+#                      a shared write scope would drop whichever job finishes
+#                      last: the arm64 layers, the expensive ones.
+CACHE_SCOPE       ?=
+CACHE_READ_SCOPES ?=
+
+# rw = read and write (default), w = write only. The scheduled rebuild runs
+# with w: it exists to pick up patched base layers, and reading the stored
+# cache would republish the previous state under a new date tag. It still
+# writes, so the cache never ages past the last scheduled run.
+CACHE_MODE ?= rw
 
 # ---------------------------------------------------------------------------
 # buildx builder
@@ -124,9 +141,14 @@ define cache_flags
     elif [ "$${CI:-}" = "true" ]; then BACKEND="registry"; \
     else BACKEND="none"; fi; \
   fi; \
+  SCOPE=""; if [ -n "$(CACHE_SCOPE)" ]; then SCOPE=",scope=$(CACHE_SCOPE)"; fi; \
+  READ_SCOPES="$(CACHE_READ_SCOPES)"; \
   case "$$BACKEND" in \
-    gha)      CFROM="--set=*.cache-from=type=gha"; \
-              CTO="--set=*.cache-to=type=gha,mode=max";; \
+    gha)      CFROM="--set=*.cache-from=type=gha$$SCOPE"; \
+              for s in $$READ_SCOPES; do \
+                CFROM="$$CFROM --set=*.cache-from=type=gha,scope=$$s"; \
+              done; \
+              CTO="--set=*.cache-to=type=gha,mode=max$$SCOPE";; \
     registry) if [ -z "$(CACHE_REF)" ]; then echo "ERROR: CACHE_REF is required for the registry backend" >&2; exit 2; fi; \
               CFROM="--set=*.cache-from=type=registry,ref=$(CACHE_REF)"; \
               CTO="--set=*.cache-to=type=registry,ref=$(CACHE_REF),mode=max";; \
@@ -136,5 +158,10 @@ define cache_flags
     none|"")  CFROM=""; CTO="";; \
     *)        echo "ERROR: unknown CACHE_BACKEND=$$BACKEND" >&2; exit 2;; \
   esac; \
-  echo ">> Cache backend: $$BACKEND"
+  case "$(CACHE_MODE)" in \
+    rw)       ;; \
+    w)        CFROM="";; \
+    *)        echo "ERROR: unknown CACHE_MODE=$(CACHE_MODE), expected rw or w" >&2; exit 2;; \
+  esac; \
+  echo ">> Cache backend: $$BACKEND, mode $(CACHE_MODE)$${SCOPE:+, scope $(CACHE_SCOPE)}"
 endef
