@@ -414,6 +414,26 @@ ones. Reading `test-<ver>` is what saves `publish` the second amd64 build.
 pick up patched base layers; reading the stored cache would hand it exactly the
 state it is meant to replace, and it would republish it under a new date tag.
 
+**A broken cache slows the build down, it does not stop it.** The gha export
+carries `ignore-error=true`, because a failing export is otherwise fatal and
+would turn every job red — and block publishing with them. That is not a
+theory: the run that first reached the cache service died exactly that way.
+Measured against an injected fault, a well-formed token pointed at an endpoint
+answering HTML:
+
+| Import | Export | Result |
+|---|---|---|
+| fails | not requested | build succeeds — a failing `cache-from` is not fatal by itself |
+| fails | fails, no `ignore-error` | build dies, exit 1 |
+| fails | fails, `ignore-error=true` | build succeeds, exit 0 |
+
+The price is that a permanently broken cache no longer announces itself by
+failing. It is still in the log — an `exporting to GitHub Actions Cache` error
+block, and `importing cache manifest` without any `CACHED` step following it —
+and it shows in the clock: `build-test` runs about 220 s per version off a warm
+cache and about 500 s without one. If a job is back at 500 s, look at those
+lines first.
+
 Do not expect the cache to halve the publish job. Measured in the same run,
 `publish (8.4)`, 47 minutes in total: the extension build takes **240 s on
 amd64 and 2774 s on arm64** under emulation. Both architectures run in

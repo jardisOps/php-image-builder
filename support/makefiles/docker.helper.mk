@@ -133,6 +133,15 @@ build-cache-delete: ## Delete all cached image layers
 # cache_flags — sets CFROM/CTO for the chosen backend type
 # ---------------------------------------------------------------------------
 # Embedded in one shell line: $(call cache_flags) ; docker buildx bake ...
+#
+# The gha export carries `ignore-error=true`: a failing cache must slow the
+# build down, never stop it — an outage at GitHub would otherwise turn every
+# job red and block publishing with them. Measured with an injected fault, a
+# well-formed token pointed at an endpoint answering HTML: without the flag
+# the build dies with exit 1, with it exit 0, and both error blocks stay in
+# the log. The import side needs nothing, a failing cache-from is not fatal by
+# itself. local and registry deliberately do without it: those are picked by
+# hand on a command line, where a failed export is news.
 define cache_flags
   set +u; \
   BACKEND="$${CACHE_BACKEND:-auto}"; \
@@ -148,7 +157,7 @@ define cache_flags
               for s in $$READ_SCOPES; do \
                 CFROM="$$CFROM --set=*.cache-from=type=gha,scope=$$s"; \
               done; \
-              CTO="--set=*.cache-to=type=gha,mode=max$$SCOPE";; \
+              CTO="--set=*.cache-to=type=gha,mode=max,ignore-error=true$$SCOPE";; \
     registry) if [ -z "$(CACHE_REF)" ]; then echo "ERROR: CACHE_REF is required for the registry backend" >&2; exit 2; fi; \
               CFROM="--set=*.cache-from=type=registry,ref=$(CACHE_REF)"; \
               CTO="--set=*.cache-to=type=registry,ref=$(CACHE_REF),mode=max";; \
