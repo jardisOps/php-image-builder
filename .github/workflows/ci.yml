@@ -161,6 +161,15 @@ jobs:
       # cache. docker/build-push-action injects them itself; a direct
       # `docker buildx bake` out of the Makefile does not get them.
       #
+      # ACTIONS_CACHE_URL — the legacy v1 endpoint — is deliberately NOT among
+      # them, even where the runner still sets it. Exporting it makes buildx
+      # fill in the v1 `url` attribute, and that endpoint answers with an HTML
+      # error page: run 30241132642 died on `failed to parse error response
+      # 400` in every import and export. ACTIONS_RESULTS_URL (v2) is the one
+      # that answers. The three core.info lines record what the runner
+      # actually offered, so the next change to this step argues from a
+      # measurement instead of a guess.
+      #
       # Only variables that actually carry a value are exported: an empty
       # ACTIONS_RUNTIME_TOKEN is worse than none at all — buildx would take it
       # for a real one and abort with "token is malformed". The token is
@@ -172,12 +181,15 @@ jobs:
         uses: actions/github-script@v9
         with:
           script: |
-            for (const key of ['ACTIONS_RESULTS_URL', 'ACTIONS_CACHE_URL', 'ACTIONS_RUNTIME_TOKEN']) {
+            for (const key of ['ACTIONS_RESULTS_URL', 'ACTIONS_RUNTIME_TOKEN']) {
               const value = process.env[key]
               if (!value) continue
               if (key === 'ACTIONS_RUNTIME_TOKEN') core.setSecret(value)
               core.exportVariable(key, value)
             }
+            core.info(`ACTIONS_RESULTS_URL=${process.env.ACTIONS_RESULTS_URL || '(unset)'}`)
+            core.info(`ACTIONS_CACHE_URL=${process.env.ACTIONS_CACHE_URL || '(unset)'} — deliberately not exported`)
+            core.info(`ACTIONS_CACHE_SERVICE_V2=${process.env.ACTIONS_CACHE_SERVICE_V2 || '(unset)'}`)
             if (!process.env.ACTIONS_RUNTIME_TOKEN) {
               core.warning('ACTIONS_RUNTIME_TOKEN is missing — buildx discards the layer cache without an error, so this job rebuilds everything.')
             }
@@ -316,12 +328,15 @@ jobs:
         uses: actions/github-script@v9
         with:
           script: |
-            for (const key of ['ACTIONS_RESULTS_URL', 'ACTIONS_CACHE_URL', 'ACTIONS_RUNTIME_TOKEN']) {
+            for (const key of ['ACTIONS_RESULTS_URL', 'ACTIONS_RUNTIME_TOKEN']) {
               const value = process.env[key]
               if (!value) continue
               if (key === 'ACTIONS_RUNTIME_TOKEN') core.setSecret(value)
               core.exportVariable(key, value)
             }
+            core.info(`ACTIONS_RESULTS_URL=${process.env.ACTIONS_RESULTS_URL || '(unset)'}`)
+            core.info(`ACTIONS_CACHE_URL=${process.env.ACTIONS_CACHE_URL || '(unset)'} — deliberately not exported`)
+            core.info(`ACTIONS_CACHE_SERVICE_V2=${process.env.ACTIONS_CACHE_SERVICE_V2 || '(unset)'}`)
             if (!process.env.ACTIONS_RUNTIME_TOKEN) {
               core.warning('ACTIONS_RUNTIME_TOKEN is missing — buildx discards the layer cache without an error, so this job rebuilds everything.')
             }
