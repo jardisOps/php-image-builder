@@ -56,7 +56,7 @@ STOPSIGNAL SIGTERM
 # Through nginx to FPM's ping endpoint — a healthy web image means the full
 # request chain answers, not just the interpreter.
 HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \
-  CMD wget -q -O- http://127.0.0.1:8081/ping | grep -q pong
+  CMD ["sh", "-c", "wget -q -O- http://127.0.0.1:8081/ping | grep -q pong"]
 
 EXPOSE 80
 

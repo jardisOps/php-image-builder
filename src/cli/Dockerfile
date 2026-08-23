@@ -40,7 +40,7 @@ STOPSIGNAL SIGTERM
 # Composer. Deliberately not the fpm target's FastCGI ping — no FPM listens
 # here, and the container would be permanently unhealthy.
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-  CMD sh -c "php --version >/dev/null && composer --version >/dev/null"
+  CMD ["sh", "-c", "php --version >/dev/null && composer --version >/dev/null"]
 
 # Inherited and deliberately left as is: EXPOSE 9000 from the fpm base image.
 # Docker has no "unexpose"; the line is pure metadata and opens nothing.
