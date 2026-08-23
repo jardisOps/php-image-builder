@@ -21,8 +21,8 @@ WAS view — what the images can do for a project.
 PHP 8.3 / 8.4 / 8.5 on Alpine, `linux/amd64` + `linux/arm64`. Tags per series:
 `:<ver>` (floating), `:<ver>-<date>` (immutable — pin THIS in projects that need
 reproducibility; all images of one run share the date, so combinations pin
-cleanly), `:latest` (highest PHP version). `phpweb` is built and tested but not
-yet published.
+cleanly), `:latest` (highest PHP version). `phpweb` is published since 2026-08-23
+with the same tag set.
 
 ## What every image does at container start
 
