@@ -257,9 +257,9 @@ All three services have health checks, the database lives in `tmpfs`, and the
 nginx variables from the table above are filled in as an example. The host port
 is configurable via `DEMO_HTTP_PORT` in `.env`.
 
-Until the first push, `make demo-up` runs the locally built test images. The
-compose file references `headgent/phpfpm:<ver>` the way a project would write it;
-nothing is published under that name yet.
+`make demo-up` runs the locally built test images. The compose file references
+`headgent/phpfpm:<ver>` the way a project would write it; with the series
+published, a machine without a local build pulls the registry image instead.
 
 ---
 
@@ -339,9 +339,9 @@ Two limitations that deserve to be named rather than glossed over:
   it is not scoped to this repository.
 - **`clean-images` also hits `headgent/*` images that this repository did not
   build.** The targets go by the references in `.env`, and those name the
-  published series. Nothing is published under it at the moment, so whatever a
-  machine still holds under that name is a local copy — and `clean-images`
-  removes it without a way back.
+  published series — whatever a machine holds under that name, local build or
+  pulled copy, `clean-images` removes it. Published tags can be re-pulled;
+  anything only built locally is gone without a way back.
 
 There is a separate target for the sledgehammer, and it is guarded:
 
@@ -460,8 +460,8 @@ manifest — a rebuild of the push path, deliberately not done here.
 > `workflow_dispatch` — never a commit).
 >
 > What is published today: `:<ver>` and the immutable `:<ver>-<date>` twin for
-> 8.3 / 8.4 / 8.5, plus `:latest` on the highest version, for both images and
-> both architectures. The working paper behind that tag set,
+> 8.3 / 8.4 / 8.5, plus `:latest` on the highest version, for all three images
+> (`phpcli`, `phpfpm`, and since 2026-08-23 `phpweb`) and both architectures. The working paper behind that tag set,
 > `docs/TAG-STRATEGIE.md`, is not part of the repository.
 
 ---
