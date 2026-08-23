@@ -19,6 +19,7 @@
 TEST_REGISTRY  ?= php-image-builder-test
 CLI_TEST_IMAGE  = $(TEST_REGISTRY)/$(IMAGE_NAME_CLI):$(PHP_VERSION)
 FPM_TEST_IMAGE  = $(TEST_REGISTRY)/$(IMAGE_NAME_FPM):$(PHP_VERSION)
+WEB_TEST_IMAGE  = $(TEST_REGISTRY)/$(IMAGE_NAME_WEB):$(PHP_VERSION)
 
 # Own host port for the demo stack during the test run: a stack already
 # running via `make demo-up` occupies DEMO_HTTP_PORT, and a test run should not
@@ -42,9 +43,13 @@ SHELL_FILES = src/shared/entrypoint/entrypoint.sh \
               src/shared/entrypoint/lib-phpini.sh \
               src/shared/php-extensions.env \
               src/fpm/fpm-pool.sh \
+              src/web/20-nginx-config.sh \
+              src/web/s6/php-fpm/run src/web/s6/php-fpm/finish \
+              src/web/s6/nginx/run src/web/s6/nginx/finish \
+              src/web/s6/.s6-svscan/finish \
               $(wildcard $(TESTS_DIR)/*.sh)
 
-DOCKERFILES = src/base/Dockerfile src/cli/Dockerfile src/fpm/Dockerfile
+DOCKERFILES = src/base/Dockerfile src/cli/Dockerfile src/fpm/Dockerfile src/web/Dockerfile
 
 test-lint: ## hadolint over all Dockerfiles, shellcheck over all shell files
 	@echo ">>> hadolint"
@@ -122,10 +127,15 @@ test-demo: test-images ## Demo stack: one `up`, all services healthy, DB connect
 	@bash $(TESTS_DIR)/check-demo-stack.sh $(TEST_REGISTRY) $(DEMO_TEST_PORT)
 .PHONY: test-demo
 
-test-labels: test-images ## OCI labels in cli AND fpm, inherited via `FROM base`
+test-labels: test-images ## OCI labels in cli, fpm AND web, inherited via `FROM base`
 	@bash $(TESTS_DIR)/check-oci-labels.sh $(CLI_TEST_IMAGE) $(PHP_VERSION)-$(IMAGE_DATE)
 	@bash $(TESTS_DIR)/check-oci-labels.sh $(FPM_TEST_IMAGE) $(PHP_VERSION)-$(IMAGE_DATE)
+	@bash $(TESTS_DIR)/check-oci-labels.sh $(WEB_TEST_IMAGE) $(PHP_VERSION)-$(IMAGE_DATE)
 .PHONY: test-labels
+
+test-web: test-images ## web image: nginx→fpm chain answers, a dead process kills the container
+	@bash $(TESTS_DIR)/check-web-image.sh $(WEB_TEST_IMAGE)
+.PHONY: test-web
 
 test-boot: test-images ## Start cli and fpm; fpm becomes healthy (FastCGI ping)
 	@echo ">>> Starting cli and fpm"
@@ -158,7 +168,7 @@ test-boot: test-images ## Start cli and fpm; fpm becomes healthy (FastCGI ping)
 # CLI/FPM_TEST_IMAGE, no test-images dependency). TEST_IMAGE_STAGES is
 # everything else, unchanged in order.
 TEST_STATIC_STAGES = test-lint test-bake
-TEST_IMAGE_STAGES  = test-phpini test-user test-boot test-labels test-extensions test-app-env test-uid test-uid-linux test-opcache test-nginx test-demo
+TEST_IMAGE_STAGES  = test-phpini test-user test-boot test-labels test-extensions test-app-env test-uid test-uid-linux test-opcache test-nginx test-web test-demo
 
 test-static: $(TEST_STATIC_STAGES) ## Version-independent checks only (no image)
 .PHONY: test-static

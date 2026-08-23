@@ -1,11 +1,11 @@
 # php-image-builder
 
-A repository that builds Headgent's PHP runtime images: **`headgent/phpcli`** and
-**`headgent/phpfpm`**, for PHP **8.3 / 8.4 / 8.5** on Alpine, for `linux/amd64`
-and `linux/arm64`, from **one** source of configuration and in **one**
-`docker buildx bake` run.
+A repository that builds Headgent's PHP runtime images: **`headgent/phpcli`**,
+**`headgent/phpfpm`** and **`headgent/phpweb`**, for PHP **8.3 / 8.4 / 8.5** on
+Alpine, for `linux/amd64` and `linux/arm64`, from **one** source of
+configuration and in **one** `docker buildx bake` run.
 
-Both images share one `base` target, one entrypoint core and one `.env`, so no
+All images share one `base` target, one entrypoint core and one `.env`, so no
 value and no piece of shell exists twice.
 
 | Target | Published as | Base | Purpose |
@@ -13,14 +13,17 @@ value and no piece of shell exists twice.
 | `base` | — (**not** published) | `php:<ver>-fpm-alpine<alpine>` | PHP version, extensions, Composer, user, entrypoint core — described exactly once |
 | `cli` | `headgent/phpcli` | `base` | workers, queue consumers, cron, Composer, CI and build contexts |
 | `fpm` | `headgent/phpfpm` | `base` | php-fpm only, sidecar behind a separate web server |
+| `web` | `headgent/phpweb` | `fpm` | php-fpm **and** nginx in one image, s6-supervised — the base for baked deploy images |
 
-**nginx is not a build target.** Instead of its own image, this repository ships
-the fully parameterised server configuration as a versioned asset
-(`tests/nginx/`) that runs with the **unmodified** official `nginx` image.
+**A standalone nginx image is not a build target.** For the sidecar pattern this
+repository ships the fully parameterised server configuration as a versioned
+asset (`src/shared/nginx/`) that runs with the **unmodified** official `nginx`
+image; the `web` target renders exactly that same asset internally at container
+start.
 
 > **The detailed version lives in the [handbook](support/HANDBOOK.md)** — every
 > target, all `.env` groups, the `APP_ENV` profiles, runtime UID/GID, the nginx
-> template, the thirteen test stages and CI.
+> template, the fourteen test stages and CI.
 
 ---
 
@@ -38,8 +41,8 @@ the fully parameterised server configuration as a versioned asset
 ```sh
 make help          # every target with its help text
 make info          # the resolved build configuration
-make build         # cli + fpm for PHP_VERSION from .env, loaded locally
-make test-all      # the full test run (thirteen stages)
+make build         # cli + fpm + web for PHP_VERSION from .env, loaded locally
+make test-all      # the full test run (fourteen stages)
 make demo-up       # demo stack: mariadb + fpm + official nginx
 ```
 
@@ -51,7 +54,7 @@ make demo-up       # demo stack: mariadb + fpm + official nginx
 |---|---|
 | `make build` / `build-all` | one PHP version from `.env` / the whole matrix |
 | `make bake-print` | the resolved bake definition, builds nothing |
-| `make test-all` | the test run, thirteen stages — stages can be run individually |
+| `make test-all` | the test run, fourteen stages — stages can be run individually |
 | `make demo-up` / `demo-down` | demo stack on `http://localhost:8088` |
 | `make disk-usage` | what Docker occupies and how much of it comes from this repo — **deletes nothing** |
 | `make clean` / `clean-all` | clean up; `clean-system` is global and guarded by `CONFIRM=ja` |
@@ -97,16 +100,17 @@ php-image-builder/
 │   ├── shared/
 │   │   ├── php-extensions.env    # the extension list, once
 │   │   ├── php-ini/              # static INI fragments
+│   │   ├── nginx/                # nginx template and its defaults (sidecar asset + web target)
 │   │   └── entrypoint/           # core (POSIX sh) + UID/GID + APP_ENV profiles
 │   ├── base/Dockerfile
 │   ├── cli/Dockerfile            # four effective lines on FROM base
-│   └── fpm/                      # Dockerfile + fpm-pool.sh
-├── tests/                        # eleven check scripts, runnable individually
-│   ├── demo/                     # demo stack and its sample application
-│   └── nginx/                    # nginx template and its defaults
+│   ├── fpm/                      # Dockerfile + fpm-pool.sh
+│   └── web/                      # Dockerfile + nginx rendering + s6 service dirs
+├── tests/                        # twelve check scripts, runnable individually
+│   └── demo/                     # demo stack and its sample application
 ├── support/
 │   ├── makefiles/                # the make modules
-│   ├── docker-bake.hcl           # matrix: base → cli/fpm via contexts
+│   ├── docker-bake.hcl           # matrix: base → cli/fpm, fpm → web via contexts
 │   ├── hadolint.yaml
 │   └── HANDBOOK.md
 └── .github/workflows/ci.yml
@@ -144,14 +148,15 @@ run.
 Published since 2026-07-26/27, verified at the registry: `:8.3`, `:8.4`, `:8.5`
 plus the immutable `:<ver>-<date>` twin for each, and `:latest` pointing at 8.5
 — for both `headgent/phpcli` and `headgent/phpfpm`, `linux/amd64` and
-`linux/arm64`.
+`linux/arm64`. `headgent/phpweb` is built and tested but **not yet published**
+— its first push is a separate, explicit approval.
 
 ## Known operating conditions
 
 - **`make build-all` needs disk space** — bake builds all three PHP versions
   simultaneously.
 - **`make test-all` requires `--privileged`** — `test-uid-linux` starts a
-  `docker:28-dind` container. Without that capability the remaining twelve stages
+  `docker:28-dind` container. Without that capability the remaining thirteen stages
   can still be run individually.
 - **The demo stack listens on port 8088**, the test run additionally uses 18080.
 

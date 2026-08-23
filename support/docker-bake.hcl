@@ -27,6 +27,7 @@ variable "IMAGE_DATE" {}
 variable "DOCKER_HUB" {}
 variable "IMAGE_NAME_CLI" {}
 variable "IMAGE_NAME_FPM" {}
+variable "IMAGE_NAME_WEB" {}
 
 # --- Build-args for the base target -----------------------------------------
 # Not all of them are `variable` blocks: PHP_VERSION and IMAGE_VERSION come
@@ -112,7 +113,7 @@ function "image_tags" {
 # prerequisite. bake still builds it because cli and fpm pull it in via
 # contexts = { base = ... }, without its own tag and without --load.
 group "default" {
-  targets = ["cli", "fpm"]
+  targets = ["cli", "fpm", "web"]
 }
 
 # ---------------------------------------------------------------------------
@@ -197,4 +198,19 @@ target "fpm" {
     FPM_PM_MAX_SPARE_SERVERS   = FPM_PM_MAX_SPARE_SERVERS
     FPM_PM_MAX_REQUESTS        = FPM_PM_MAX_REQUESTS
   }
+}
+
+# ---------------------------------------------------------------------------
+# web — published as headgent/phpweb
+# ---------------------------------------------------------------------------
+# Builds on the matching fpm matrix target: fpm plus nginx and s6, the
+# self-contained runtime for baked deploy images. All build-args arrive via
+# fpm; the web layer itself needs none.
+target "web" {
+  name       = "web-${slug(php)}"
+  matrix     = { php = php_list }
+  context    = "."
+  dockerfile = "src/web/Dockerfile"
+  contexts   = { fpm = "target:fpm-${slug(php)}" }
+  tags       = image_tags(IMAGE_NAME_WEB, php)
 }

@@ -77,6 +77,7 @@ info: ## Show build configuration
 	@printf "  %-30s %s\n" "base (not published):" "php:<ver>-*-alpine$(ALPINE_VERSION)"
 	@printf "  %-30s %s\n" "cli:"                     "$(CLI_IMAGE)"
 	@printf "  %-30s %s\n" "fpm:"                     "$(FPM_IMAGE)"
+	@printf "  %-30s %s\n" "web:"                     "$(WEB_IMAGE)"
 	@echo ""
 	@printf "\033[1mVersions:\033[0m\n"
 	@printf "  %-30s %s\n" "Alpine:"          "$(ALPINE_VERSION)"

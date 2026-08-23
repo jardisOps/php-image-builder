@@ -1,0 +1,4 @@
+#!/bin/sh
+# FPM under s6 supervision. Foreground comes from the official image's
+# zz-docker.conf (daemonize = no); stderr joins the container log.
+exec php-fpm 2>&1

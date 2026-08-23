@@ -26,6 +26,7 @@ PHP_LATEST   := $(lastword $(PHP_VERSIONS))
 # references.
 CLI_IMAGE = $(DOCKER_HUB)/$(IMAGE_NAME_CLI)
 FPM_IMAGE = $(DOCKER_HUB)/$(IMAGE_NAME_FPM)
+WEB_IMAGE = $(DOCKER_HUB)/$(IMAGE_NAME_WEB)
 
 # ---------------------------------------------------------------------------
 # Immutable date tag (UTC)

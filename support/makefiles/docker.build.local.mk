@@ -10,7 +10,7 @@
 #   make build PHP_VERSION=8.5     builds 8.5, not the 8.3 from .env
 #
 # Two optional switches:
-#   BAKE_TARGETS    empty = group "default" (cli + fpm). `make build
+#   BAKE_TARGETS    empty = group "default" (cli + fpm + web). `make build
 #                   BAKE_TARGETS=fpm` builds only one target — including base,
 #                   which is pulled in automatically as its build context.
 #   BUILD_PLATFORM  empty = host platform. `make build
@@ -27,7 +27,7 @@ BUILD_PLATFORM ?=
 BAKE_PLATFORM_FLAG = $(if $(strip $(BUILD_PLATFORM)),--set '*.platform=$(strip $(BUILD_PLATFORM))')
 
 build: buildx-builder-create ## Build cli and fpm for PHP_VERSION locally (--load)
-	@echo "🔧 Building $(if $(strip $(BAKE_TARGETS)),$(BAKE_TARGETS),cli + fpm) for PHP $(PHP_VERSION) ..."
+	@echo "🔧 Building $(if $(strip $(BAKE_TARGETS)),$(BAKE_TARGETS),cli + fpm + web) for PHP $(PHP_VERSION) ..."
 	@$(call cache_flags); \
 	 PHP_VERSIONS="$(PHP_VERSION)" docker buildx bake -f $(BAKE_FILE) --load \
 	   $$CFROM $$CTO $(BAKE_PLATFORM_FLAG) $(BUILD_EXTRA_FLAGS) $(BAKE_TARGETS)
@@ -35,7 +35,7 @@ build: buildx-builder-create ## Build cli and fpm for PHP_VERSION locally (--loa
 .PHONY: build
 
 build-all: buildx-builder-create ## Build cli and fpm for ALL PHP_VERSIONS locally (--load)
-	@echo "🔧 Building $(if $(strip $(BAKE_TARGETS)),$(BAKE_TARGETS),cli + fpm) for PHP $(PHP_VERSIONS) ..."
+	@echo "🔧 Building $(if $(strip $(BAKE_TARGETS)),$(BAKE_TARGETS),cli + fpm + web) for PHP $(PHP_VERSIONS) ..."
 	@$(call cache_flags); \
 	 docker buildx bake -f $(BAKE_FILE) --load \
 	   $$CFROM $$CTO $(BAKE_PLATFORM_FLAG) $(BUILD_EXTRA_FLAGS) $(BAKE_TARGETS)

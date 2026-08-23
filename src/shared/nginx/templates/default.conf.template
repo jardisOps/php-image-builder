@@ -14,11 +14,11 @@
 #     web:
 #       image: nginx:1.28-alpine                   # NGINX_VERSION from .env
 #       env_file:
-#         - ./tests/nginx/nginx-defaults.env       # defaults
+#         - ./src/shared/nginx/nginx-defaults.env       # defaults
 #       environment:
 #         HOST: example.com                          # overrides the defaults
 #       volumes:
-#         - ./tests/nginx/templates:/etc/nginx/templates:ro
+#         - ./src/shared/nginx/templates:/etc/nginx/templates:ro
 #         - ./tests/demo/app:/app:ro               # nginx only reads
 #
 # All variables, their defaults and their effect are documented in
