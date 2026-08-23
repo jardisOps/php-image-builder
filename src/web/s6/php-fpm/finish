@@ -1,0 +1,5 @@
+#!/bin/sh
+# A dead pool must take the container down, not leave nginx answering 502
+# forever. During a normal stop svscan is already terminating and this is a
+# no-op.
+exec s6-svscanctl -t /etc/s6

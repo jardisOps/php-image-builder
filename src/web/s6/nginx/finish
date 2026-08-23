@@ -1,0 +1,3 @@
+#!/bin/sh
+# Same rule as for php-fpm: one process down means the container goes down.
+exec s6-svscanctl -t /etc/s6

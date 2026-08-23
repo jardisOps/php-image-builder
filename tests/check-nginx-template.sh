@@ -2,7 +2,7 @@
 # ---------------------------------------------------------------------------
 # check-nginx-template.sh <fpm-image> [nginx-image] - the nginx template
 # ---------------------------------------------------------------------------
-# Tests tests/nginx/templates/default.conf.template against the UNMODIFIED
+# Tests src/shared/nginx/templates/default.conf.template against the UNMODIFIED
 # official nginx image: no custom entrypoint, no custom build. Same setup a
 # project would run - an fpm container plus official nginx, sharing /app.
 #
@@ -21,8 +21,8 @@ FPM_IMAGE=${1:?Usage: check-nginx-template.sh <fpm-image> [nginx-image]}
 NGINX_IMAGE=${2:-nginx:1.28-alpine}
 
 REPO_ROOT=$(CDPATH='' cd -- "$(dirname -- "$0")/.." && pwd)
-TEMPLATES="$REPO_ROOT/tests/nginx/templates"
-DEFAULTS="$REPO_ROOT/tests/nginx/nginx-defaults.env"
+TEMPLATES="$REPO_ROOT/src/shared/nginx/templates"
+DEFAULTS="$REPO_ROOT/src/shared/nginx/nginx-defaults.env"
 
 SFX=$$
 NET=check-nginx-net-$SFX

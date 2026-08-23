@@ -1,0 +1,4 @@
+#!/bin/sh
+# nginx master in the foreground; the config was rendered and verified by
+# entrypoint.d/20-nginx-config.sh before s6 starts.
+exec nginx -g 'daemon off;' 2>&1

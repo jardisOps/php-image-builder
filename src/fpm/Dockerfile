@@ -58,7 +58,7 @@ RUN set -eux; \
 # responding pool the image is useless. ping.path/ping.response are set by
 # fpm-pool.sh.
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-  CMD sh -c "SCRIPT_NAME=/ping SCRIPT_FILENAME=/ping REQUEST_METHOD=GET cgi-fcgi -bind -connect 127.0.0.1:9000 | grep -q pong"
+  CMD ["sh", "-c", "SCRIPT_NAME=/ping SCRIPT_FILENAME=/ping REQUEST_METHOD=GET cgi-fcgi -bind -connect 127.0.0.1:9000 | grep -q pong"]
 
 # EXPOSE 9000 and STOPSIGNAL SIGQUIT come from the official fpm image and are
 # both correct here — they are neither repeated nor changed (unlike cli,
