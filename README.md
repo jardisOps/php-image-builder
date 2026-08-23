@@ -148,8 +148,8 @@ run.
 Published since 2026-07-26/27, verified at the registry: `:8.3`, `:8.4`, `:8.5`
 plus the immutable `:<ver>-<date>` twin for each, and `:latest` pointing at 8.5
 — for both `headgent/phpcli` and `headgent/phpfpm`, `linux/amd64` and
-`linux/arm64`. `headgent/phpweb` is built and tested but **not yet published**
-— its first push is a separate, explicit approval.
+`linux/arm64`. `headgent/phpweb` is published since 2026-08-23 with the same
+tag set and architectures.
 
 ## Known operating conditions
 
