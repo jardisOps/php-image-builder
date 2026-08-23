@@ -56,8 +56,8 @@ print($1)
 }
 
 # --- base is a precursor, not an artifact -----------------------------------
-check "default group builds exactly cli and fpm" \
-      "$(ask "','.join(sorted(d['group']['default']['targets']))")" "cli,fpm"
+check "default group builds exactly cli, fpm and web" \
+      "$(ask "','.join(sorted(d['group']['default']['targets']))")" "cli,fpm,web"
 
 check "no base target carries a tag" \
       "$(ask "sum(len(t.get('tags',[])) for n,t in d['target'].items() if n.startswith('base-'))")" "0"
@@ -72,9 +72,23 @@ errors=$(ask "';'.join(
 )")
 count=$(ask "sum(1 for n in d['target'] if n.startswith('cli-') or n.startswith('fpm-'))")
 if [ -z "$errors" ]; then
-  ok "all $count published targets pull target:base-<own-version>"
+  ok "all $count cli/fpm targets pull target:base-<own-version>"
 else
   bad "these targets don't hang off their own base: $errors"
+fi
+
+# web builds on fpm, not base — same guarantee one level up: a change to fpm
+# (and transitively base) must rebuild the matching web target.
+errors=$(ask "';'.join(
+    n for n,t in d['target'].items()
+    if n.startswith('web-')
+    and t.get('contexts',{}).get('fpm') != 'target:fpm-' + n.split('-',1)[1]
+)")
+web_count=$(ask "sum(1 for n in d['target'] if n.startswith('web-'))")
+if [ -z "$errors" ] && [ "$web_count" -ge 1 ]; then
+  ok "all $web_count web targets pull target:fpm-<own-version>"
+else
+  bad "web targets missing or not hanging off their own fpm: ${errors:-count=$web_count}"
 fi
 
 # Control check for the line above: it's only worth anything if targets were
@@ -91,7 +105,7 @@ fi
 # exactly once per image name.
 errors=$(ask "';'.join(
     n for n,t in d['target'].items()
-    if (n.startswith('cli-') or n.startswith('fpm-'))
+    if (n.startswith('cli-') or n.startswith('fpm-') or n.startswith('web-'))
     and len([x for x in t.get('tags',[]) if not x.endswith(':latest')]) != 2
 )")
 if [ -z "$errors" ]; then
@@ -101,7 +115,7 @@ else
 fi
 
 check "exactly one :latest per published image" \
-      "$(ask "len([x for t in d['target'].values() for x in t.get('tags',[]) if x.endswith(':latest')])")" "2"
+      "$(ask "len([x for t in d['target'].values() for x in t.get('tags',[]) if x.endswith(':latest')])")" "3"
 
 # All date tags of one run must carry the same date — otherwise a project
 # couldn't pin phpcli and phpfpm as a combination.
@@ -112,7 +126,7 @@ check "exactly one :latest per published image" \
 # errors).
 date_tags="[x.rsplit(':',1)[1] for t in d['target'].values() for x in t.get('tags',[])]"
 check "there are date tags to check at all" \
-      "$(ask "sum(1 for tag in $date_tags if '-' in tag)")" "6"
+      "$(ask "sum(1 for tag in $date_tags if '-' in tag)")" "9"
 check "all date tags of one run carry the same date" \
       "$(ask "len(set(tag.rsplit('-',1)[1] for tag in $date_tags if '-' in tag))")" "1"
 

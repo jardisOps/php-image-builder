@@ -14,7 +14,7 @@
 ##@ Image Builder (Push to Registry)
 
 push: buildx-builder-create .check-docker-login ## Build and push cli and fpm for PHP_VERSION (multi-arch)
-	@echo "🚀 Building and pushing $(if $(strip $(BAKE_TARGETS)),$(BAKE_TARGETS),cli + fpm) for PHP $(PHP_VERSION) ..."
+	@echo "🚀 Building and pushing $(if $(strip $(BAKE_TARGETS)),$(BAKE_TARGETS),cli + fpm + web) for PHP $(PHP_VERSION) ..."
 	@$(call cache_flags); \
 	 PHP_VERSIONS="$(PHP_VERSION)" docker buildx bake -f $(BAKE_FILE) --push \
 	   --set '*.platform=$(PLATFORMS_CSV)' \
@@ -35,7 +35,7 @@ push-print: ## Resolved push definition (dry run — same flags as push, pushes 
 .PHONY: push-print
 
 push-all: buildx-builder-create .check-docker-login ## Build and push cli and fpm for ALL PHP_VERSIONS (multi-arch)
-	@echo "🚀 Building and pushing $(if $(strip $(BAKE_TARGETS)),$(BAKE_TARGETS),cli + fpm) for PHP $(PHP_VERSIONS) ..."
+	@echo "🚀 Building and pushing $(if $(strip $(BAKE_TARGETS)),$(BAKE_TARGETS),cli + fpm + web) for PHP $(PHP_VERSIONS) ..."
 	@$(call cache_flags); \
 	 docker buildx bake -f $(BAKE_FILE) --push \
 	   --set '*.platform=$(PLATFORMS_CSV)' \

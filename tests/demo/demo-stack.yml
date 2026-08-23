@@ -103,7 +103,7 @@ services:
       # The eleven template variables with their defaults. envsubst has no
       # default syntax — without this file, unresolved placeholders stay in
       # place and nginx refuses to start.
-      - ./tests/nginx/nginx-defaults.env
+      - ./src/shared/nginx/nginx-defaults.env
     environment:
       # Set exemplarily. environment overrides env_file, same precedence
       # direction as for the PHP values.
@@ -119,7 +119,7 @@ services:
       # HTTP_X_FORWARDED_PROTO together.
       REQUEST_SCHEME: http
     volumes:
-      - ./tests/nginx/templates:/etc/nginx/templates:ro
+      - ./src/shared/nginx/templates:/etc/nginx/templates:ro
       # nginx only reads — which is why it needs no image of its own: reading
       # requires no UID alignment.
       - ./tests/demo/app:${APP_ROOT}:ro

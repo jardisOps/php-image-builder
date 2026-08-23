@@ -201,12 +201,20 @@ route provably does not work there.
 
 ## nginx template instead of an nginx image
 
-`tests/nginx/templates/default.conf.template` runs with the **unmodified**
+`src/shared/nginx/templates/default.conf.template` runs with the **unmodified**
 official `nginx` image through its built-in substitution (`/etc/nginx/templates`)
 — no custom entrypoint, no custom build.
 
 `envsubst` has no notion of defaults. The default values therefore live in
-`tests/nginx/nginx-defaults.env`; without that file nginx does not start.
+`src/shared/nginx/nginx-defaults.env`; without that file nginx does not start.
+
+The `web` target bakes this same asset and renders it at container start
+(`src/web/20-nginx-config.sh`) with `FASTCGI_UPSTREAM=127.0.0.1` — one template,
+two consumption modes, no second config dialect. Inside the `web` image the two
+processes run under `s6-svscan`; a `finish` script per service takes the whole
+container down when either process dies, and an internal health server on
+`127.0.0.1:8081` proxies to FPM's `/ping` so the image healthcheck proves the
+full nginx → fpm chain without any application code.
 
 | Variable | Default | Meaning |
 |---|---|---|
@@ -262,12 +270,12 @@ make test-all                     # PHP_VERSION from .env
 make test-all PHP_VERSION=8.5     # check a different version
 ```
 
-Thirteen stages, ordered by runtime — whatever needs no image runs first:
+Fourteen stages, ordered by runtime — whatever needs no image runs first:
 
 | Stage | Scope |
 |---|---|
-| `test-lint` | hadolint over three Dockerfiles, shellcheck over sixteen shell files |
-| `test-bake` | eight cases against the resolved bake definition: `base` dependency, tag set, `base` is not published |
+| `test-lint` | hadolint over four Dockerfiles, shellcheck over all shell files |
+| `test-bake` | thirteen cases against the resolved bake definition: `base`/`fpm` dependency chains, tag set, `base` is not published |
 | `test-phpini` | 34 cases against the profile library, without a container |
 | `test-user` | 27 cases against the UID/GID library, in `alpine:3.23` |
 | `test-boot` | `cli` starts, `fpm` becomes healthy |
@@ -278,6 +286,7 @@ Thirteen stages, ordered by runtime — whatever needs no image runs first:
 | `test-uid-linux` | 13 cases against a real Linux bind mount in `docker:28-dind` — **requires `--privileged`** |
 | `test-opcache` | 14 cases, including revalidation in a running FPM |
 | `test-nginx` | 55 cases against the unmodified official nginx image, in two instances: defaults only / everything overridden |
+| `test-web` | four cases against the combined `web` image: healthy chain, PHP answers through nginx → fpm, a dead php-fpm or nginx takes the container down |
 | `test-demo` | 21 cases against the running demo stack, including residue-free teardown |
 
 The scripts live in `tests/` and also run individually, without make. Test images
@@ -375,7 +384,7 @@ property of the arriving run, not of the one being cancelled.
 `test-static` and `test-image-suite` (`support/makefiles/test.mk`) split
 `make test-all` into its version-independent and per-version halves so the
 former doesn't rerun in every matrix job. Locally, `make test-all` still runs
-all thirteen stages in one go.
+all fourteen stages in one go.
 
 **Trivy blocks** on CRITICAL/HIGH **with an available fix** (`ignore-unfixed`).
 Such a finding means our image is behind the patch level — so the gate is

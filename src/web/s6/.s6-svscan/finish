@@ -1,0 +1,4 @@
+#!/bin/sh
+# s6-svscan execs into this on termination; without it, shutdown ends in an
+# error exit even when everything came down cleanly.
+exit 0

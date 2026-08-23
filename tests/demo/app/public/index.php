@@ -139,7 +139,7 @@ header('Content-Type: text/html; charset=utf-8');
 
 <p class="lead">
     Three containers: the official <code>nginx</code> with the template from
-    <code>tests/nginx/templates/</code>, <code>phpfpm</code> from this repo,
+    <code>src/shared/nginx/templates/</code>, <code>phpfpm</code> from this repo,
     and the official <code>mariadb</code>. No custom nginx build, no custom
     database build.
 </p>
