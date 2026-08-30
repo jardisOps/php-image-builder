@@ -6,10 +6,15 @@
 # official nginx image: no custom entrypoint, no custom build. Same setup a
 # project would run - an fpm container plus official nginx, sharing /app.
 #
-# Two instances, because one alone proves nothing: instance A runs with only
-# the defaults file, showing the stack works without any custom config;
-# instance B overrides every value, showing the variables actually take
-# effect rather than merely matching the default by coincidence.
+# Three instances, because one alone proves nothing: instance A runs with
+# only the defaults file, showing the stack works without any custom config;
+# instance B overrides every value whose EFFECT is affordably measurable
+# (6 of 11 — overriding NGINX_PHP_PORT/NGINX_FASTCGI_UPSTREAM would cut the
+# fpm connection this very measurement runs over, NGINX_APP_ROOT would break
+# the shared volume mount); render-only instance C overrides the remaining
+# five and asserts they land in the rendered configuration, so together B+C
+# cover all 11 variables. NGINX_FASTCGI_UPSTREAM additionally gets its own
+# config-test section below (the name really lands in fastcgi_pass).
 #
 # Measured against $_SERVER inside the PHP process and against status codes,
 # not just the rendered config file. A text check on the rendered file is
@@ -271,6 +276,25 @@ if conftest no-such-host | grep -q 'host not found in upstream "no-such-host"'; 
 else
   bad "NGINX_FASTCGI_UPSTREAM has no effect on fastcgi_pass"
 fi
+
+# ---------------------------------------------------------------------------
+# Instance C — render-only: the five variables B cannot override without
+# breaking its own measurement (see header). The official entrypoint renders
+# the template, then the rendered file is asserted directly.
+# ---------------------------------------------------------------------------
+echo ">>> Instance C — render-only, the remaining five overrides"
+rendered_c=$(docker run --rm --network "$NET" --env-file "$DEFAULTS" \
+  -e NGINX_APP_ROOT=/srv \
+  -e NGINX_FASTCGI_UPSTREAM=other-app \
+  -e NGINX_PHP_PORT=9077 \
+  -e NGINX_FASTCGI_SEND_TIMEOUT=61 \
+  -e NGINX_FASTCGI_CONNECT_TIMEOUT=17 \
+  -v "$TEMPLATES:/etc/nginx/templates:ro" -v "$VOL:/app:ro" \
+  "$NGINX_IMAGE" sh -c '/docker-entrypoint.d/20-envsubst-on-templates.sh >/dev/null 2>&1; cat /etc/nginx/conf.d/default.conf')
+check "root /srv/public (NGINX_APP_ROOT)"      "$(echo "$rendered_c" | grep -c 'root   /srv/public;')" "1"
+check "fastcgi_pass other-app:9077 (2x)"       "$(echo "$rendered_c" | grep -c 'fastcgi_pass   other-app:9077;')" "2"
+check "fastcgi_send_timeout 61 (2x)"           "$(echo "$rendered_c" | grep -c 'fastcgi_send_timeout    61;')" "2"
+check "fastcgi_connect_timeout 17 (2x)"        "$(echo "$rendered_c" | grep -c 'fastcgi_connect_timeout 17;')" "2"
 
 # ---------------------------------------------------------------------------
 # Hardening — only existing .php files reach the upstream
