@@ -209,32 +209,38 @@ official `nginx` image through its built-in substitution (`/etc/nginx/templates`
 `src/shared/nginx/nginx-defaults.env`; without that file nginx does not start.
 
 The `web` target bakes this same asset and renders it at container start
-(`src/web/20-nginx-config.sh`) with `FASTCGI_UPSTREAM=127.0.0.1` — one template,
-two consumption modes, no second config dialect. Inside the `web` image the two
-processes run under `s6-svscan`; a `finish` script per service takes the whole
-container down when either process dies, and an internal health server on
-`127.0.0.1:8081` proxies to FPM's `/ping` so the image healthcheck proves the
-full nginx → fpm chain without any application code.
+(`src/web/20-nginx-config.sh`) with `NGINX_FASTCGI_UPSTREAM=127.0.0.1` — one
+template, two consumption modes, no second config dialect. Inside the `web`
+image the two processes run under `s6-svscan`; a `finish` script per service
+takes the whole container down when either process dies, and an internal
+health server on `127.0.0.1:8081` proxies to FPM's `/ping` so the image
+healthcheck proves the full nginx → fpm chain without any application code.
+
+All template variables carry an `NGINX_` prefix — they live in the same
+environment as the image's own PHP/build variables (`APP_ROOT` among them),
+and the prefix keeps the two namespaces from colliding.
 
 | Variable | Default | Meaning |
 |---|---|---|
-| `HOST` | `localhost` | `server_name` |
-| `APP_ROOT` | `/app` | root of the project inside the container |
-| `DOCUMENT_ROOT` | `/public` | subdirectory holding the front controller |
-| `INDEX_FILE` | `index.php` | front controller |
-| `FASTCGI_UPSTREAM` | `app` | hostname of the php-fpm service |
-| `PHP_PORT` | `9000` | FastCGI port |
-| `CLIENT_MAX_BODY_SIZE` | `100m` | maximum request size |
-| `FASTCGI_READ_TIMEOUT` | `600` | seconds |
-| `FASTCGI_SEND_TIMEOUT` | `600` | seconds |
-| `FASTCGI_CONNECT_TIMEOUT` | `300` | seconds |
-| `REQUEST_SCHEME` | `http` | `http` or `https` — **one** switch |
+| `NGINX_HOST` | `localhost` | `server_name` |
+| `NGINX_APP_ROOT` | `/app` | root of the project inside the container |
+| `NGINX_DOCUMENT_ROOT` | `/public` | subdirectory holding the front controller |
+| `NGINX_INDEX_FILE` | `index.php` | front controller |
+| `NGINX_FASTCGI_UPSTREAM` | `app` | hostname of the php-fpm service |
+| `NGINX_PHP_PORT` | `9000` | FastCGI port |
+| `NGINX_CLIENT_MAX_BODY_SIZE` | `100m` | maximum request size |
+| `NGINX_FASTCGI_READ_TIMEOUT` | `600` | seconds |
+| `NGINX_FASTCGI_SEND_TIMEOUT` | `600` | seconds |
+| `NGINX_FASTCGI_CONNECT_TIMEOUT` | `300` | seconds |
+| `NGINX_REQUEST_SCHEME` | `http` | `http` or `https` — **one** switch |
 
-`REQUEST_SCHEME` is deliberately a single switch: it sets `HTTPS` and
-`REQUEST_SCHEME` in the fastcgi parameters together. Two separate values could
-contradict each other. A configuration that reports `HTTPS=on` to PHP under all
-circumstances is correct behind a TLS-terminating Traefik and wrong in every
-other stack — hence one switch, filled per deployment.
+`NGINX_REQUEST_SCHEME` is deliberately a single switch: it sets `HTTPS` and
+`REQUEST_SCHEME` in the fastcgi parameters together (those fastcgi parameter
+names are protocol, not configuration, and keep their plain names). Two
+separate values could contradict each other. A configuration that reports
+`HTTPS=on` to PHP under all circumstances is correct behind a
+TLS-terminating Traefik and wrong in every other stack — hence one switch,
+filled per deployment.
 
 The template also carries `try_files` in the `.php` fallback location (so the
 `/upload.jpg/x.php` path never reaches php-fpm) and security headers for static

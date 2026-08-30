@@ -64,7 +64,7 @@ services:
   # ---------------------------------------------------------------------------
   # PHP-FPM — this repo's image
   # ---------------------------------------------------------------------------
-  # The service is named `app` because FASTCGI_UPSTREAM in nginx-defaults.env
+  # The service is named `app` because NGINX_FASTCGI_UPSTREAM in nginx-defaults.env
   # defaults to exactly that. Renaming it means updating the variable on the
   # web server too, or nginx won't find the upstream at startup.
   app:
@@ -109,15 +109,15 @@ services:
       # direction as for the PHP values.
       #
       # Only what a consuming project actually decides here is set. Everything
-      # else (APP_ROOT, DOCUMENT_ROOT, INDEX_FILE, FASTCGI_UPSTREAM, PHP_PORT,
-      # CLIENT_MAX_BODY_SIZE, the three timeouts) comes from the defaults file
-      # and applies unchanged here.
-      HOST: localhost
+      # else (APP_ROOT, NGINX_DOCUMENT_ROOT, NGINX_INDEX_FILE,
+      # NGINX_FASTCGI_UPSTREAM, NGINX_PHP_PORT, NGINX_CLIENT_MAX_BODY_SIZE, the
+      # three timeouts) comes from the defaults file and applies unchanged here.
+      NGINX_HOST: localhost
       # http = no upstream TLS proxy: HTTPS isn't passed through at all, and
       # the application builds http URLs. Behind Traefik & co. this would be
-      # https — one switch that flips HTTPS, REQUEST_SCHEME and
+      # https — one switch that flips HTTPS, NGINX_REQUEST_SCHEME and
       # HTTP_X_FORWARDED_PROTO together.
-      REQUEST_SCHEME: http
+      NGINX_REQUEST_SCHEME: http
     volumes:
       - ./src/shared/nginx/templates:/etc/nginx/templates:ro
       # nginx only reads — which is why it needs no image of its own: reading

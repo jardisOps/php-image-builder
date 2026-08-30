@@ -27,7 +27,7 @@ DEFAULTS="$REPO_ROOT/src/shared/nginx/nginx-defaults.env"
 SFX=$$
 NET=check-nginx-net-$SFX
 VOL=check-nginx-app-$SFX
-APP=app                      # service name = FASTCGI_UPSTREAM default
+APP=app                      # service name = NGINX_FASTCGI_UPSTREAM default
 WEB_A=check-nginx-a-$SFX
 WEB_B=check-nginx-b-$SFX
 
@@ -67,7 +67,7 @@ if [ "$(docker inspect -f '{{.State.Health.Status}}' "$APP-$SFX" 2>/dev/null)" !
 fi
 
 # Probe: outputs the $_SERVER values the template is measured against.
-# ?sleep=N delays the request so FASTCGI_READ_TIMEOUT becomes measurable.
+# ?sleep=N delays the request so NGINX_FASTCGI_READ_TIMEOUT becomes measurable.
 write_probe() { # <directory> <filename> <marker>
   docker exec "$APP-$SFX" sh -c "mkdir -p '$1' && cat > '$1/$2' <<'PHP'
 <?php
@@ -83,7 +83,7 @@ PHP"
 
 write_probe /app/public index.php index    # default document root
 write_probe /app/public info.php  info     # fallback location (real .php file)
-write_probe /app/web    app.php   alt      # differing DOCUMENT_ROOT/INDEX_FILE
+write_probe /app/web    app.php   alt      # differing NGINX_DOCUMENT_ROOT/NGINX_INDEX_FILE
 
 # Hardening probes (checked further below).
 #
@@ -169,14 +169,14 @@ fi
 
 # The three values whose effect isn't affordably measurable are checked
 # against the rendering. fastcgi_pass appears twice (location 2 and 3) and
-# must both times come from FASTCGI_UPSTREAM/PHP_PORT.
+# must both times come from NGINX_FASTCGI_UPSTREAM/NGINX_PHP_PORT.
 check "fastcgi_pass app:9000 (2x)"        "$(echo "$rendered" | grep -c 'fastcgi_pass   app:9000;')"      "2"
 check "client_max_body_size 100m"         "$(echo "$rendered" | grep -c 'client_max_body_size 100m;')"     "1"
 check "fastcgi_read_timeout 600 (2x)"     "$(echo "$rendered" | grep -c 'fastcgi_read_timeout    600;')"   "2"
 check "fastcgi_send_timeout 600 (2x)"     "$(echo "$rendered" | grep -c 'fastcgi_send_timeout    600;')"   "2"
 check "fastcgi_connect_timeout 300 (2x)"  "$(echo "$rendered" | grep -c 'fastcgi_connect_timeout 300;')"   "2"
 
-# Front controller: try_files falls back to ${INDEX_FILE}.
+# Front controller: try_files falls back to ${NGINX_INDEX_FILE}.
 r=$(resp "$WEB_A" /does/not/exist)
 check "GET /does/not/exist — status"     "$(status "$r")" "200"
 check "  lands in the front controller"   "$(field "$(body "$r")" PROBE)" "index"
@@ -188,7 +188,7 @@ check "GET /index.php/foo/bar — status"   "$(status "$r")" "200"
 check "  PATH_INFO"                       "$(field "$(body "$r")" PATH_INFO)" "/foo/bar"
 check "  SCRIPT_FILENAME"                 "$(field "$(body "$r")" SCRIPT_FILENAME)" "/app/public/index.php"
 check "  DOCUMENT_ROOT"                   "$(field "$(body "$r")" DOCUMENT_ROOT)" "/app/public"
-check "  SERVER_NAME from HOST"           "$(field "$(body "$r")" SERVER_NAME)" "localhost"
+check "  SERVER_NAME from NGINX_HOST"      "$(field "$(body "$r")" SERVER_NAME)" "localhost"
 
 # Location 3: a real .php file next to the front controller.
 r=$(resp "$WEB_A" /info.php)
@@ -211,29 +211,29 @@ check "GET /.env — status"                "$(status "$(resp "$WEB_A" /.env)")"
 # ---------------------------------------------------------------------------
 echo ">>> Instance B — every value overridden"
 start_web "$WEB_B" \
-  -e HOST=probe.example \
-  -e DOCUMENT_ROOT=/web \
-  -e INDEX_FILE=app.php \
-  -e REQUEST_SCHEME=https \
-  -e CLIENT_MAX_BODY_SIZE=1k \
-  -e FASTCGI_READ_TIMEOUT=1 \
+  -e NGINX_HOST=probe.example \
+  -e NGINX_DOCUMENT_ROOT=/web \
+  -e NGINX_INDEX_FILE=app.php \
+  -e NGINX_REQUEST_SCHEME=https \
+  -e NGINX_CLIENT_MAX_BODY_SIZE=1k \
+  -e NGINX_FASTCGI_READ_TIMEOUT=1 \
   || { FAIL=$((FAIL + 1)); echo "  passed: $PASS   failed: $FAIL"; exit 1; }
 ok "starts with overridden values (environment beats env_file)"
 
 r=$(resp "$WEB_B" /app.php/foo/bar)
 b=$(body "$r")
 check "GET /app.php/foo/bar — status"     "$(status "$r")" "200"
-check "  DOCUMENT_ROOT takes effect"      "$(field "$b" PROBE)" "alt"
-check "  INDEX_FILE takes effect (PATH_INFO)" "$(field "$b" PATH_INFO)" "/foo/bar"
+check "  NGINX_DOCUMENT_ROOT takes effect"      "$(field "$b" PROBE)" "alt"
+check "  NGINX_INDEX_FILE takes effect (PATH_INFO)" "$(field "$b" PATH_INFO)" "/foo/bar"
 check "  SCRIPT_FILENAME"                 "$(field "$b" SCRIPT_FILENAME)" "/app/web/app.php"
-check "  HOST takes effect"               "$(field "$b" SERVER_NAME)" "probe.example"
+check "  NGINX_HOST takes effect"               "$(field "$b" SERVER_NAME)" "probe.example"
 
 # The other side: ONE switch sets both fastcgi values.
 check "HTTPS=on behind a TLS proxy"       "$(field "$b" HTTPS)" "on"
-check "REQUEST_SCHEME=https"              "$(field "$b" REQUEST_SCHEME)" "https"
+check "NGINX_REQUEST_SCHEME=https"              "$(field "$b" REQUEST_SCHEME)" "https"
 check "HTTP_X_FORWARDED_PROTO=https"      "$(field "$b" HTTP_X_FORWARDED_PROTO)" "https"
 
-# CLIENT_MAX_BODY_SIZE: effect, not just rendering. 2000 B against 1k.
+# NGINX_CLIENT_MAX_BODY_SIZE: effect, not just rendering. 2000 B against 1k.
 #
 # --post-data and NOT --post-file: busybox-wget 1.37.0 sets the method to POST
 # with --post-file but sends no body (CONTENT_LENGTH=0). A 2 MB POST against
@@ -246,30 +246,30 @@ check "POST 2000 B against 100m — status" "$(status "$r")" "200"
 check "  body arrived (control)"          "$(field "$(body "$r")" CONTENT_LENGTH)" "2000"
 check "  as POST"                         "$(field "$(body "$r")" REQUEST_METHOD)" "POST"
 
-# FASTCGI_READ_TIMEOUT: effect. 3 s sleep against a 1 s limit.
+# NGINX_FASTCGI_READ_TIMEOUT: effect. 3 s sleep against a 1 s limit.
 check "3 s response against a 1 s limit"  "$(status "$(resp "$WEB_B" '/app.php?sleep=3' -T 30)")" "504"
 check "3 s response against a 600 s limit" "$(status "$(resp "$WEB_A" '/index.php?sleep=3' -T 30)")" "200"
 
 # ---------------------------------------------------------------------------
-# FASTCGI_UPSTREAM — the variable really lands in fastcgi_pass
+# NGINX_FASTCGI_UPSTREAM — the variable really lands in fastcgi_pass
 # ---------------------------------------------------------------------------
 # nginx resolves the upstream name already at config-test time. The only
 # difference between the two runs is the variable.
-echo ">>> FASTCGI_UPSTREAM"
+echo ">>> NGINX_FASTCGI_UPSTREAM"
 conftest() { # <upstream name>
-  docker run --rm --network "$NET" --env-file "$DEFAULTS" -e FASTCGI_UPSTREAM="$1" \
+  docker run --rm --network "$NET" --env-file "$DEFAULTS" -e NGINX_FASTCGI_UPSTREAM="$1" \
     -v "$TEMPLATES:/etc/nginx/templates:ro" -v "$VOL:/app:ro" \
     "$NGINX_IMAGE" nginx -t 2>&1 | tail -2
 }
 if conftest "$APP" | grep -q 'test is successful'; then
-  ok "FASTCGI_UPSTREAM=$APP — configuration valid"
+  ok "NGINX_FASTCGI_UPSTREAM=$APP — configuration valid"
 else
-  bad "FASTCGI_UPSTREAM=$APP — configuration test failed"
+  bad "NGINX_FASTCGI_UPSTREAM=$APP — configuration test failed"
 fi
 if conftest no-such-host | grep -q 'host not found in upstream "no-such-host"'; then
-  ok "FASTCGI_UPSTREAM=no-such-host — nginx reports the upstream visibly"
+  ok "NGINX_FASTCGI_UPSTREAM=no-such-host — nginx reports the upstream visibly"
 else
-  bad "FASTCGI_UPSTREAM has no effect on fastcgi_pass"
+  bad "NGINX_FASTCGI_UPSTREAM has no effect on fastcgi_pass"
 fi
 
 # ---------------------------------------------------------------------------

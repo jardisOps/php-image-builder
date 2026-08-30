@@ -42,8 +42,12 @@ The parameterised vhost template ships in `src/shared/nginx/` (template +
 `nginx-defaults.env`). Sidecar mode mounts it into the **unmodified** official
 nginx image (envsubst does the rest — this is what jardis-app-template does);
 `phpweb` bakes and renders the same template internally with
-`FASTCGI_UPSTREAM=127.0.0.1`. There is deliberately no standalone
-`headgent/nginx` image.
+`NGINX_FASTCGI_UPSTREAM=127.0.0.1`. All template variables carry an `NGINX_`
+prefix (`NGINX_HOST`, `NGINX_APP_ROOT`, `NGINX_DOCUMENT_ROOT`,
+`NGINX_INDEX_FILE`, `NGINX_FASTCGI_UPSTREAM`, `NGINX_PHP_PORT`,
+`NGINX_CLIENT_MAX_BODY_SIZE`, the three `NGINX_FASTCGI_*_TIMEOUT`,
+`NGINX_REQUEST_SCHEME`) to keep them apart from the image's own PHP/build
+variables. There is deliberately no standalone `headgent/nginx` image.
 
 ## Extending
 
