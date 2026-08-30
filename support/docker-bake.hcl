@@ -130,6 +130,7 @@ target "base" {
     PHP_VERSION                   = php
     ALPINE_VERSION                = ALPINE_VERSION
     COMPOSER_VERSION              = COMPOSER_VERSION
+    IMAGE_DATE                    = IMAGE_DATE
     APCU_VERSION                  = APCU_VERSION
     REDIS_VERSION                 = REDIS_VERSION
     XDEBUG_VERSION                = XDEBUG_VERSION

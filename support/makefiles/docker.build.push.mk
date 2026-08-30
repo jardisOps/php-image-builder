@@ -13,7 +13,7 @@
 # ---------------------------------------------------------------------------
 ##@ Image Builder (Push to Registry)
 
-push: buildx-builder-create .check-docker-login ## Build and push cli and fpm for PHP_VERSION (multi-arch)
+push: buildx-builder-create .check-docker-login ## Build and push cli, fpm and web for PHP_VERSION (multi-arch)
 	@echo "🚀 Building and pushing $(if $(strip $(BAKE_TARGETS)),$(BAKE_TARGETS),cli + fpm + web) for PHP $(PHP_VERSION) ..."
 	@$(call cache_flags); \
 	 PHP_VERSIONS="$(PHP_VERSION)" docker buildx bake -f $(BAKE_FILE) --push \
@@ -34,7 +34,7 @@ push-print: ## Resolved push definition (dry run — same flags as push, pushes 
 	   $$CFROM $$CTO $(BUILD_ATTEST_FLAGS) $(BUILD_EXTRA_FLAGS) $(BAKE_TARGETS)
 .PHONY: push-print
 
-push-all: buildx-builder-create .check-docker-login ## Build and push cli and fpm for ALL PHP_VERSIONS (multi-arch)
+push-all: buildx-builder-create .check-docker-login ## Build and push cli, fpm and web for ALL PHP_VERSIONS (multi-arch)
 	@echo "🚀 Building and pushing $(if $(strip $(BAKE_TARGETS)),$(BAKE_TARGETS),cli + fpm + web) for PHP $(PHP_VERSIONS) ..."
 	@$(call cache_flags); \
 	 docker buildx bake -f $(BAKE_FILE) --push \
