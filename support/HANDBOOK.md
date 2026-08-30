@@ -379,7 +379,7 @@ without the interval jumping between 28 and 3 days.
 |---|---|
 | `lint` | `make test-static` (`test-lint` + `test-bake`, version-independent) |
 | `build-test` | matrix 8.3 / 8.4 / 8.5, each `make test-image-suite`, then Trivy |
-| `publish` | multi-arch build and push with SBOM and provenance attestation — schedule and `workflow_dispatch` only |
+| `publish` | multi-arch build and push with SBOM and provenance attestation — a `main` merge (path-filtered), the monthly schedule, or `workflow_dispatch`, gated by `PUBLISH_ENABLED` |
 
 **A publishing run cannot be cancelled by a commit.** The concurrency group
 carries the trigger, and only `push` and `pull_request` cancel what is already
@@ -403,6 +403,15 @@ from the same source — amd64 only, no attestations, its own name — whose
 filesystem layers match the amd64 half of what `publish` pushes. For a scanner,
 which reads packages and versions, the two are the same. The arm64 half is
 scanned by nothing: CI builds it, but never boots or scans it.
+
+**The `apk upgrade` layer is cache-busted once per day.** Both stages in
+`src/base/Dockerfile` take a build-arg `IMAGE_DATE` with no default and print
+it as the first line of the `RUN` that runs `apk upgrade`. Without it, a PR
+build reading a warm GHA layer cache would keep serving yesterday's upgrade
+layer even after a fixed package landed in the Alpine repo — a fresh upstream
+CVE fix would sit unused and Trivy would block on a problem already solved
+upstream. `IMAGE_DATE` defaults to today (`support/makefiles/docker.helper.mk`)
+and is threaded through `support/docker-bake.hcl`'s `base` target.
 
 ### The layer cache
 
@@ -462,8 +471,9 @@ manifest — a rebuild of the push path, deliberately not done here.
 > ### Publishing
 >
 > See [Who is allowed to publish](../README.md#who-is-allowed-to-publish) in
-> the README for both conditions (`PUBLISH_ENABLED`, and schedule or
-> `workflow_dispatch` — never a commit).
+> the README: `PUBLISH_ENABLED` is the one switch, and a `main` merge that
+> touches the build inputs, the monthly schedule, or `workflow_dispatch` each
+> publish once it is on.
 >
 > What is published today: `:<ver>` and the immutable `:<ver>-<date>` twin for
 > 8.3 / 8.4 / 8.5, plus `:latest` on the highest version, for all three images
