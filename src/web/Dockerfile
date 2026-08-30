@@ -47,7 +47,11 @@ COPY src/web/s6 /etc/s6
 # In one image the upstream is always local; overrides the asset default
 # ("app") the sidecar pattern uses. An explicit ENV wins over the defaults
 # file in 20-nginx-config.sh.
-ENV FASTCGI_UPSTREAM=127.0.0.1
+ENV NGINX_FASTCGI_UPSTREAM=127.0.0.1
+
+# One image: nginx's root follows the baked APP_ROOT, same precedence as the
+# upstream override above — a reference, not a second value (build rule 1).
+ENV NGINX_APP_ROOT=${APP_ROOT}
 
 # s6-svscan is the payload and handles SIGTERM as "bring everything down";
 # the inherited SIGQUIT (correct for bare FPM) is not its shutdown signal.
