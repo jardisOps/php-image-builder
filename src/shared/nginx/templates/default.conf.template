@@ -16,7 +16,7 @@
 #       env_file:
 #         - ./src/shared/nginx/nginx-defaults.env       # defaults
 #       environment:
-#         HOST: example.com                          # overrides the defaults
+#         NGINX_HOST: example.com                     # overrides the defaults
 #       volumes:
 #         - ./src/shared/nginx/templates:/etc/nginx/templates:ro
 #         - ./tests/demo/app:/app:ro               # nginx only reads
@@ -34,13 +34,13 @@
 #
 # Without an upstream proxy, hardcoding HTTPS=on would be wrong: the
 # application would build https URLs nobody can serve. Both fastcgi values
-# below follow from REQUEST_SCHEME (http|https) and so can't drift apart.
+# below follow from NGINX_REQUEST_SCHEME (http|https) and so can't drift apart.
 #
 #   http   HTTPS is not passed through at all (if_not_empty) — exactly what
 #          the official fastcgi_params does without TLS too.
 #   https  HTTPS=on, as required behind a TLS proxy.
 ###############################################################################
-map "${REQUEST_SCHEME}" $fastcgi_https {
+map "${NGINX_REQUEST_SCHEME}" $fastcgi_https {
     "https"  on;
     default  "";
 }
@@ -49,16 +49,16 @@ server {
     listen 80 default_server;
     listen [::]:80 default_server;
 
-    server_name ${HOST};
+    server_name ${NGINX_HOST};
 
     ##############
     # Basic setup #
     ##############
-    root   ${APP_ROOT}${DOCUMENT_ROOT};
-    index  ${INDEX_FILE} index.html;
+    root   ${NGINX_APP_ROOT}${NGINX_DOCUMENT_ROOT};
+    index  ${NGINX_INDEX_FILE} index.html;
     charset UTF-8;
 
-    client_max_body_size ${CLIENT_MAX_BODY_SIZE};
+    client_max_body_size ${NGINX_CLIENT_MAX_BODY_SIZE};
     send_timeout         600;
     keepalive_timeout    70;
     server_tokens        off;
@@ -125,18 +125,18 @@ server {
     location / {
         # 1. file/directory exists? → serve directly
         # 2. otherwise internal redirect to /index.php/<original-path>
-        try_files $uri $uri/ /${INDEX_FILE}?$args;
+        try_files $uri $uri/ /${NGINX_INDEX_FILE}?$args;
     }
 
     ################################################################
     # 2. Special location: /index.php + everything after it        #
     #    – ensures correct $_SERVER['PATH_INFO']                   #
     ################################################################
-    location ~ ^/${INDEX_FILE}(/.*)?$ {
+    location ~ ^/${NGINX_INDEX_FILE}(/.*)?$ {
         include fastcgi_params;
-        fastcgi_pass   ${FASTCGI_UPSTREAM}:${PHP_PORT};
+        fastcgi_pass   ${NGINX_FASTCGI_UPSTREAM}:${NGINX_PHP_PORT};
 
-        fastcgi_param  SCRIPT_FILENAME $realpath_root/${INDEX_FILE};
+        fastcgi_param  SCRIPT_FILENAME $realpath_root/${NGINX_INDEX_FILE};
         fastcgi_param  DOCUMENT_ROOT   $realpath_root;
 
         # crucial
@@ -144,14 +144,14 @@ server {
         fastcgi_param  PATH_TRANSLATED $document_root$1;
 
         fastcgi_param  HTTPS                  $fastcgi_https if_not_empty;
-        fastcgi_param  REQUEST_SCHEME         ${REQUEST_SCHEME};
-        fastcgi_param  HTTP_X_FORWARDED_PROTO ${REQUEST_SCHEME};
+        fastcgi_param  REQUEST_SCHEME         ${NGINX_REQUEST_SCHEME};
+        fastcgi_param  HTTP_X_FORWARDED_PROTO ${NGINX_REQUEST_SCHEME};
         fastcgi_param  HTTP_X_FORWARDED_FOR   $proxy_add_x_forwarded_for;
         fastcgi_param  HTTP_X_REAL_IP         $remote_addr;
 
-        fastcgi_read_timeout    ${FASTCGI_READ_TIMEOUT};
-        fastcgi_send_timeout    ${FASTCGI_SEND_TIMEOUT};
-        fastcgi_connect_timeout ${FASTCGI_CONNECT_TIMEOUT};
+        fastcgi_read_timeout    ${NGINX_FASTCGI_READ_TIMEOUT};
+        fastcgi_send_timeout    ${NGINX_FASTCGI_SEND_TIMEOUT};
+        fastcgi_connect_timeout ${NGINX_FASTCGI_CONNECT_TIMEOUT};
 
         fastcgi_buffer_size      128k;
         fastcgi_buffers          4 256k;
@@ -170,21 +170,21 @@ server {
         try_files $uri =404;
 
         include fastcgi_params;
-        fastcgi_pass   ${FASTCGI_UPSTREAM}:${PHP_PORT};
-        fastcgi_index  ${INDEX_FILE};
+        fastcgi_pass   ${NGINX_FASTCGI_UPSTREAM}:${NGINX_PHP_PORT};
+        fastcgi_index  ${NGINX_INDEX_FILE};
 
         fastcgi_param  SCRIPT_FILENAME $realpath_root$fastcgi_script_name;
         fastcgi_param  DOCUMENT_ROOT   $realpath_root;
 
         fastcgi_param  HTTPS                  $fastcgi_https if_not_empty;
-        fastcgi_param  REQUEST_SCHEME         ${REQUEST_SCHEME};
-        fastcgi_param  HTTP_X_FORWARDED_PROTO ${REQUEST_SCHEME};
+        fastcgi_param  REQUEST_SCHEME         ${NGINX_REQUEST_SCHEME};
+        fastcgi_param  HTTP_X_FORWARDED_PROTO ${NGINX_REQUEST_SCHEME};
         fastcgi_param  HTTP_X_FORWARDED_FOR   $proxy_add_x_forwarded_for;
         fastcgi_param  HTTP_X_REAL_IP         $remote_addr;
 
-        fastcgi_read_timeout    ${FASTCGI_READ_TIMEOUT};
-        fastcgi_send_timeout    ${FASTCGI_SEND_TIMEOUT};
-        fastcgi_connect_timeout ${FASTCGI_CONNECT_TIMEOUT};
+        fastcgi_read_timeout    ${NGINX_FASTCGI_READ_TIMEOUT};
+        fastcgi_send_timeout    ${NGINX_FASTCGI_SEND_TIMEOUT};
+        fastcgi_connect_timeout ${NGINX_FASTCGI_CONNECT_TIMEOUT};
 
         fastcgi_buffer_size      128k;
         fastcgi_buffers          4 256k;

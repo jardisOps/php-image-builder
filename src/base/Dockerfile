@@ -54,6 +54,11 @@ ARG PCOV_VERSION
 ARG AMQP_VERSION
 ARG RDKAFKA_VERSION
 
+# Forces this apk-upgrade layer to rebuild once per day; the GHA layer cache
+# would otherwise keep serving a stale upgrade even after an upstream CVE fix
+# lands in the Alpine repo.
+ARG IMAGE_DATE
+
 COPY src/shared/php-extensions.env /tmp/php-extensions.env
 
 # apk upgrade also happens here: building only in the runtime stage would
@@ -80,6 +85,7 @@ COPY src/shared/php-extensions.env /tmp/php-extensions.env
 # input.
 # hadolint ignore=SC2086
 RUN set -eu; \
+    echo "patch level ${IMAGE_DATE}"; \
     . /tmp/php-extensions.env; \
     apk upgrade --no-cache; \
     apk add --no-cache \
@@ -127,6 +133,7 @@ ARG XDEBUG_CLIENT_HOST
 ARG XDEBUG_CLIENT_PORT
 ARG XDEBUG_LOG_LEVEL
 ARG XDEBUG_IDEKEY
+ARG IMAGE_DATE
 
 # The profile-driven variables (XDEBUG_MODE, PCOV_ENABLED, OPCACHE_ENABLE,
 # OPCACHE_VALIDATE_TIMESTAMPS, OPCACHE_REVALIDATE_FREQ, OPCACHE_JIT,
@@ -163,6 +170,7 @@ ENV APP_USER=appuser \
 # SC2086 as above: $PKGS is a package list and must be word-split.
 # hadolint ignore=SC2086
 RUN set -eux; \
+    echo "patch level ${IMAGE_DATE}"; \
     apk upgrade --no-cache; \
     PKGS="bash git icu-libs libzip libxml2 oniguruma libjpeg-turbo libpng freetype postgresql-libs rabbitmq-c librdkafka su-exec shadow"; \
     case ",${INSTALL_DB_CLIENTS}," in *,mysql,*) PKGS="$PKGS mysql-client";; esac; \

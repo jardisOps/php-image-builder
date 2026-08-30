@@ -122,19 +122,20 @@ is four lines: `max_execution_time=0`, `STOPSIGNAL SIGTERM`, a health check on
 
 ## Who is allowed to publish
 
-Two conditions have to hold together, and a commit satisfies neither on its
-own:
+One switch gates all three triggers (decision Rolf 2026-08-30):
 
 | Condition | State |
 |---|---|
 | repository variable `PUBLISH_ENABLED` is exactly `true` | currently `false` |
-| trigger is the monthly schedule or a manual `workflow_dispatch` | a push to `main` never publishes |
+| trigger is a merge to `main` (path-filtered), the monthly schedule, or a manual `workflow_dispatch` | any of the three publishes once the switch is on |
 
-The split is the point. Publishing overwrites the floating `:<ver>` and
-`:latest` tags that running projects pull — the one step here with external
-effect, and it must not ride along on an incidental commit. Because it cannot,
-the switch may stay on, which is what lets the monthly run keep the published
-patch level current by itself.
+Publishing overwrites the floating `:<ver>` and `:latest` tags that running
+projects pull — the one step here with external effect, so the switch stays
+the single guard. A merge to `main` that touches the build inputs (the same
+path filter that triggers CI) now publishes automatically; the monthly
+schedule still runs on its own cadence to pick up a patched base image even
+without a merge, and `workflow_dispatch` stays available for a deliberate,
+staged rollout.
 
 The switch is **not** limited to one PHP version: with it on, a scheduled run
 publishes the whole matrix. Narrowing to a single version is a property of the

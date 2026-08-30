@@ -123,11 +123,11 @@ else
 fi
 
 # The template variables take effect in the stack, not just in isolation.
-has   "SERVER_NAME from HOST" "$body" "<th>SERVER_NAME</th>"
-has   "REQUEST_SCHEME=http"  "$body" "<td>http</td>"
+has   "SERVER_NAME from NGINX_HOST" "$body" "<th>SERVER_NAME</th>"
+has   "NGINX_REQUEST_SCHEME=http"  "$body" "<td>http</td>"
 # Without a TLS proxy, HTTPS must not arrive at all. The row exists, its
 # value is "<not passed>" — an "on" anywhere in the table would mean the
-# scheme is hardcoded instead of coming from REQUEST_SCHEME.
+# scheme is hardcoded instead of coming from NGINX_REQUEST_SCHEME.
 has   "HTTPS row present" "$body" "<th>HTTPS</th>"
 hasnt "HTTPS is not passed" "$body" "<td>on</td>"
 

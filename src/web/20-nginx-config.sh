@@ -43,4 +43,4 @@ envsubst "$_ng_vars" < "$NGINX_TEMPLATE" > "$NGINX_CONF_OUT"
 # the container visibly (no silent swallowing).
 nginx -t -q || die "rendered nginx config failed 'nginx -t' — see output above"
 
-log_info "nginx vhost rendered: upstream ${FASTCGI_UPSTREAM}:${PHP_PORT}, root ${APP_ROOT}${DOCUMENT_ROOT}"
+log_info "nginx vhost rendered: upstream ${NGINX_FASTCGI_UPSTREAM}:${NGINX_PHP_PORT}, root ${NGINX_APP_ROOT}${NGINX_DOCUMENT_ROOT}"

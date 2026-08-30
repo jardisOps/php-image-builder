@@ -1,24 +1,24 @@
 # =============================================================================
 # ci.yml — the single CI workflow
 # =============================================================================
-# Builds and tests both PHP images (cli, fpm) across the PHP version matrix:
+# Builds and tests the three images (cli, fpm, web) across the PHP version matrix:
 # a keepalive job for the scheduled trigger, a build-and-test guard for every
 # push and pull request, and a blocking Trivy CVE gate.
 #
 # -----------------------------------------------------------------------------
 # WHO IS ALLOWED TO PUBLISH
 # -----------------------------------------------------------------------------
-# Only the monthly schedule and a manual workflow_dispatch, and only while the
-# repository variable PUBLISH_ENABLED holds 'true'. It currently holds 'false'.
+# A merge to main that touches the build inputs (the path filter above)
+# publishes automatically, while the repository variable PUBLISH_ENABLED
+# holds 'true' — that variable remains the one master switch (decision Rolf
+# 2026-08-30).
 #
-# A push to main deliberately cannot publish, no matter what the variable says.
-# Publishing overwrites the floating :<ver> and :latest tags that running
-# projects pull — it is the one step in this project with external effect, and
-# it must not ride along on an incidental commit. Splitting the two is what
-# lets the switch stay on so the monthly run can do its job: keep the
-# published base-image patch level current on its own.
+# The monthly schedule keeps a separate job: it rebuilds on its own cadence
+# so the published patch level stays current even without a merge.
+# workflow_dispatch stays available for a deliberate, staged rollout (see
+# php_versions below).
 #
-# Turning the switch on is a deliberate act. Local `make push` / `push-all`
+# Turning the switch off stops every path. Local `make push` / `push-all`
 # stay out of it entirely — they are for an approved, manual publish.
 # =============================================================================
 name: Build, Test and Push PHP Images
@@ -270,25 +270,25 @@ jobs:
   # ===========================================================================
   # publish — multi-arch build with push, SBOM and attestations
   # ===========================================================================
-  # DISABLED, see the file header. Three conditions gate it together:
-  #   vars.PUBLISH_ENABLED == 'true'   the master switch, currently 'false'
-  #   schedule or workflow_dispatch    a commit never publishes, no matter
-  #                                    what the switch says
+  # Three conditions gate it together:
+  #   vars.PUBLISH_ENABLED == 'true'   the one master switch (decision Rolf
+  #                                    2026-08-30)
+  #   schedule, workflow_dispatch, or  a merge to main that touches the build
+  #   push to main (path-filtered)     inputs publishes automatically; the
+  #                                    monthly schedule keeps the patch level
+  #                                    current on its own cadence, and
+  #                                    workflow_dispatch stays for a staged
+  #                                    rollout
   #   needs: [lint, build-test]        nothing publishes without passing the
   #                                    Trivy gate
   #
-  # The trigger condition is what makes the master switch usable: with it,
-  # PUBLISH_ENABLED can stay on permanently without every incidental commit to
-  # main pushing the whole matrix. The monthly schedule then publishes the
-  # patched base layers by itself — which is the entire point of running it.
-  #
-  # id-token: write + attestations: write apply to this job for both images.
-  # SBOM and provenance attestation are produced during the build itself via
-  # BUILD_ATTEST_FLAGS (support/makefiles/docker.helper.mk), not as a
-  # follow-up step — they belong on the manifest that gets pushed.
+  # id-token: write + attestations: write apply to this job for all three
+  # images. SBOM and provenance attestation are produced during the build
+  # itself via BUILD_ATTEST_FLAGS (support/makefiles/docker.helper.mk), not as
+  # a follow-up step — they belong on the manifest that gets pushed.
   publish:
     needs: [lint, build-test]
-    if: ${{ vars.PUBLISH_ENABLED == 'true' && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') }}
+    if: ${{ vars.PUBLISH_ENABLED == 'true' && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.ref == 'refs/heads/main')) }}
     runs-on: ubuntu-latest
     strategy:
       # `inputs` is null for every trigger other than workflow_dispatch, so the
