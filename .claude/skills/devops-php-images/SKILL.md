@@ -5,7 +5,7 @@ description: Headgent's published PHP runtime images from devops/php-image-build
 
 # Headgent PHP runtime images (devops/php-image-builder)
 
-Source repo: `/Users/Rolf/Development/headgent/devops/php-image-builder`
+Source repo: `devops/php-image-builder`
 ([jardisOps/php-image-builder](https://github.com/jardisOps/php-image-builder)).
 Full reference: its `README.md` and `support/HANDBOOK.md`. This skill is the
 WAS view — what the images can do for a project.
@@ -16,7 +16,7 @@ WAS view — what the images can do for a project.
 |---|---|---|
 | `headgent/phpcli` | shared `base` | workers, queue consumers, cron, Composer, CI jobs. `max_execution_time=0`, STOPSIGNAL SIGTERM |
 | `headgent/phpfpm` | shared `base` | php-fpm only, sidecar behind nginx/Traefik. FastCGI healthcheck on `/ping`, pool generated from ENV |
-| `headgent/phpweb` | `fpm` | fpm **and** nginx in ONE image, s6-supervised — the base for baked deploy images (`FROM headgent/phpweb` + project code). Healthcheck proves the whole nginx→fpm chain; a dead process takes the container down. Decision: `jardis/claude/wissensbasis/deploy-image-kombiniert-phpweb.md` |
+| `headgent/phpweb` | `fpm` | fpm **and** nginx in ONE image, s6-supervised — the base for baked deploy images (`FROM headgent/phpweb` + project code). Healthcheck proves the whole nginx→fpm chain; a dead process takes the container down. |
 
 PHP 8.3 / 8.4 / 8.5 on Alpine, `linux/amd64` + `linux/arm64`. Tags per series:
 `:<ver>` (floating), `:<ver>-<date>` (immutable — pin THIS in projects that need
