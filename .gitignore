@@ -1,7 +1,7 @@
 .idea/
 .DS_Store
 # Local working state stays untracked, but the skill sources are versioned:
-# jardis-claude's skills.manifest syncs .claude/skills/ from here.
+# (the skill sources under .claude/skills/ are tracked in this repo)
 .claude/*
 !.claude/skills/
 
