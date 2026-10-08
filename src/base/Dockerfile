@@ -229,6 +229,11 @@ RUN set -eux; \
     ln -sf "/home/${APP_USER}/php-config/99-runtime-config.ini" \
            /usr/local/etc/php/conf.d/99-runtime-config.ini
 
+# The bind-mounted APP_ROOT can appear root-owned (e.g. virtiofs on Docker
+# Desktop) while Composer runs as appuser; without this git refuses with
+# "dubious ownership".
+RUN git config --system --add safe.directory "${APP_ROOT}"
+
 WORKDIR ${APP_ROOT}
 
 # CMD, EXPOSE, STOPSIGNAL, and HEALTHCHECK are set by cli and fpm — they
