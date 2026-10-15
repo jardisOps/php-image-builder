@@ -126,7 +126,7 @@ One switch gates all three triggers (decision Rolf 2026-08-30):
 
 | Condition | State |
 |---|---|
-| repository variable `PUBLISH_ENABLED` is exactly `true` | currently `false` |
+| repository variable `PUBLISH_ENABLED` is exactly `true` | `true` since 2026-08-30 — every merge to `main` that touches the build inputs publishes |
 | trigger is a merge to `main` (path-filtered), the monthly schedule, or a manual `workflow_dispatch` | any of the three publishes once the switch is on |
 
 Publishing overwrites the floating `:<ver>` and `:latest` tags that running

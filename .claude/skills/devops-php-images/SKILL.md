@@ -54,5 +54,7 @@ variables. There is deliberately no standalone `headgent/nginx` image.
 Runtime needs are solved in THIS repo, never worked around in consuming
 projects (their house rule: no Dockerfile in the app template). Extensions land
 in `src/shared/php-extensions.env`; target-specific start logic goes into
-`/usr/local/lib/entrypoint.d/`. Publishing is gated: repository variable
-`PUBLISH_ENABLED` plus schedule/manual trigger — a commit never publishes.
+`/usr/local/lib/entrypoint.d/`. Publishing is gated by the repository
+variable `PUBLISH_ENABLED` (on since 2026-08-30): a merge to `main` that touches
+the build inputs, the monthly schedule and a manual trigger each publish; a
+commit on any other branch never does.
