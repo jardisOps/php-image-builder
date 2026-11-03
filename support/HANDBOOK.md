@@ -284,7 +284,7 @@ Fourteen stages, ordered by runtime — whatever needs no image runs first:
 | `test-bake` | thirteen cases against the resolved bake definition: `base`/`fpm` dependency chains, tag set, `base` is not published |
 | `test-phpini` | 34 cases against the profile library, without a container |
 | `test-user` | 27 cases against the UID/GID library, in `alpine:3.23` |
-| `test-boot` | `cli` starts, `fpm` becomes healthy |
+| `test-boot` | `cli` starts, `fpm` becomes healthy, git trusts `/app` (`safe.directory`) |
 | `test-labels` | seven cases per image: the OCI labels, inherited via `FROM base` |
 | `test-extensions` | 21 extensions in `cli` **and** `fpm` |
 | `test-app-env` | 15 cases: profiles, precedence rule, production guard, validation — on the built image |

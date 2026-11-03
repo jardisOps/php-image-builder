@@ -155,6 +155,7 @@ test-boot: test-images ## Start cli and fpm; fpm becomes healthy (FastCGI ping)
 	   echo "  ❌ fpm not healthy (status=$$status)"; cat /tmp/fpm-boot.log; exit 1; \
 	 fi; \
 	 echo "  ✅ fpm starts and responds on /ping"
+	@bash $(TESTS_DIR)/check-git-safe-directory.sh $(CLI_TEST_IMAGE)
 .PHONY: test-boot
 
 # ---------------------------------------------------------------------------
