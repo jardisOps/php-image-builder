@@ -1,7 +1,11 @@
 ---
 name: devops-php-images
-description: Headgent's published PHP runtime images from devops/php-image-builder — headgent/phpcli (workers, cron, Composer, CI), headgent/phpfpm (fpm sidecar behind a web server) and headgent/phpweb (fpm+nginx combined, s6-supervised, the base for baked deploy images), PHP 8.3/8.4/8.5 on Alpine, amd64+arm64. Use when choosing or configuring a runtime image, wiring APP_ENV profiles, tuning the FPM pool via ENV, pinning image versions, or deciding sidecar vs. combined deploy image. TRIGGER: headgent/phpcli, headgent/phpfpm, headgent/phpweb, php-image-builder, APP_ENV profile, Xdebug im Container, FPM pool, image tag pinning, deploy image.
+description: "Headgent PHP runtime images (devops/php-image-builder): phpcli, phpfpm, phpweb on Alpine, PHP 8.3-8.5. Use when choosing or configuring a runtime image, APP_ENV profiles, FPM pool tuning, image tag pinning, sidecar vs. combined deploy image."
 ---
+
+## Triggers
+
+Headgent's published PHP runtime images from devops/php-image-builder — headgent/phpcli (workers, cron, Composer, CI), headgent/phpfpm (fpm sidecar behind a web server) and headgent/phpweb (fpm+nginx combined, s6-supervised, the base for baked deploy images), PHP 8.3/8.4/8.5 on Alpine, amd64+arm64. Use when choosing or configuring a runtime image, wiring APP_ENV profiles, tuning the FPM pool via ENV, pinning image versions, or deciding sidecar vs. combined deploy image. TRIGGER: headgent/phpcli, headgent/phpfpm, headgent/phpweb, php-image-builder, APP_ENV profile, Xdebug im Container, FPM pool, image tag pinning, deploy image.
 
 # Headgent PHP runtime images (devops/php-image-builder)
 
