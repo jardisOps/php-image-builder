@@ -23,7 +23,7 @@ start.
 
 > **The detailed version lives in the [handbook](support/HANDBOOK.md)** — every
 > target, all `.env` groups, the `APP_ENV` profiles, runtime UID/GID, the nginx
-> template, the fourteen test stages and CI.
+> template, the fifteen test stages and CI.
 
 ---
 
@@ -42,7 +42,7 @@ start.
 make help          # every target with its help text
 make info          # the resolved build configuration
 make build         # cli + fpm + web for PHP_VERSION from .env, loaded locally
-make test-all      # the full test run (fourteen stages)
+make test-all      # the full test run (fifteen stages)
 make demo-up       # demo stack: mariadb + fpm + official nginx
 ```
 
@@ -54,7 +54,7 @@ make demo-up       # demo stack: mariadb + fpm + official nginx
 |---|---|
 | `make build` / `build-all` | one PHP version from `.env` / the whole matrix |
 | `make bake-print` | the resolved bake definition, builds nothing |
-| `make test-all` | the test run, fourteen stages — stages can be run individually |
+| `make test-all` | the test run, fifteen stages — stages can be run individually |
 | `make demo-up` / `demo-down` | demo stack on `http://localhost:8088` |
 | `make disk-usage` | what Docker occupies and how much of it comes from this repo — **deletes nothing** |
 | `make clean` / `clean-all` | clean up; `clean-system` is global and guarded by `CONFIRM=ja` |

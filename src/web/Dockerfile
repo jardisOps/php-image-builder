@@ -49,6 +49,10 @@ COPY src/web/s6 /etc/s6
 # file in 20-nginx-config.sh.
 ENV NGINX_FASTCGI_UPSTREAM=127.0.0.1
 
+# The counterpart for the pool: FastCGI has no authentication, so in one image
+# FPM listens on loopback only instead of on every pod/container interface.
+ENV FPM_LISTEN=127.0.0.1:9000
+
 # One image: nginx's root follows the baked APP_ROOT, same precedence as the
 # upstream override above — a reference, not a second value (build rule 1).
 ENV NGINX_APP_ROOT=${APP_ROOT}

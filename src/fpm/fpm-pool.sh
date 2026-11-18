@@ -31,7 +31,7 @@
 # surface lies in the workers, and those are unprivileged.
 # ---------------------------------------------------------------------------
 
-FPM_VALUE_HINT='is not set — this value must come as an ENV from the image (src/fpm/Dockerfile, fed from .env).'
+FPM_VALUE_HINT='is not set — this value must come as an ENV from the image (src/fpm/Dockerfile; the FPM_PM_* values are fed from .env).'
 
 _fpm_require_values() {
     : "${FPM_PM:?$FPM_VALUE_HINT}" \
@@ -39,7 +39,8 @@ _fpm_require_values() {
       "${FPM_PM_START_SERVERS:?$FPM_VALUE_HINT}" \
       "${FPM_PM_MIN_SPARE_SERVERS:?$FPM_VALUE_HINT}" \
       "${FPM_PM_MAX_SPARE_SERVERS:?$FPM_VALUE_HINT}" \
-      "${FPM_PM_MAX_REQUESTS:?$FPM_VALUE_HINT}"
+      "${FPM_PM_MAX_REQUESTS:?$FPM_VALUE_HINT}" \
+      "${FPM_LISTEN:?$FPM_VALUE_HINT}"
 
     case "$FPM_PM" in
         static|dynamic|ondemand) ;;
@@ -97,7 +98,7 @@ _fpm_write_pool_config() {
 ; ---------------------------------------------------------------------------
 [www]
 $FPM_USER_LINES
-listen = 9000
+listen = $FPM_LISTEN
 
 pm = $FPM_PM
 pm.max_children = $FPM_PM_MAX_CHILDREN
