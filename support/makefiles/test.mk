@@ -79,7 +79,7 @@ test-user: ## UID/GID alignment in isolation (lib-user.sh, in alpine)
 	@docker run --rm --platform linux/amd64 \
 	  -v "$(CURDIR)/src/shared/entrypoint/lib-user.sh:/lib-user.sh:ro" \
 	  -v "$(CURDIR)/$(TESTS_DIR)/check-user-alignment.sh:/check.sh:ro" \
-	  alpine:3.23 sh /check.sh
+	  alpine:$(ALPINE_VERSION) sh /check.sh
 .PHONY: test-user
 
 # ---------------------------------------------------------------------------
@@ -137,6 +137,10 @@ test-web: test-images ## web image: nginx→fpm chain answers, a dead process ki
 	@bash $(TESTS_DIR)/check-web-image.sh $(WEB_TEST_IMAGE)
 .PHONY: test-web
 
+test-hardening: test-images ## Attack surface: no setuid/setgid files, web FastCGI on loopback only
+	@bash $(TESTS_DIR)/check-hardening.sh $(CLI_TEST_IMAGE) $(FPM_TEST_IMAGE) $(WEB_TEST_IMAGE)
+.PHONY: test-hardening
+
 test-boot: test-images ## Start cli and fpm; fpm becomes healthy (FastCGI ping)
 	@echo ">>> Starting cli and fpm"
 	@docker run --rm --entrypoint php $(CLI_TEST_IMAGE) --version >/dev/null \
@@ -169,7 +173,7 @@ test-boot: test-images ## Start cli and fpm; fpm becomes healthy (FastCGI ping)
 # CLI/FPM_TEST_IMAGE, no test-images dependency). TEST_IMAGE_STAGES is
 # everything else, unchanged in order.
 TEST_STATIC_STAGES = test-lint test-bake
-TEST_IMAGE_STAGES  = test-phpini test-user test-boot test-labels test-extensions test-app-env test-uid test-uid-linux test-opcache test-nginx test-web test-demo
+TEST_IMAGE_STAGES  = test-phpini test-user test-boot test-labels test-extensions test-app-env test-uid test-uid-linux test-opcache test-nginx test-web test-hardening test-demo
 
 test-static: $(TEST_STATIC_STAGES) ## Version-independent checks only (no image)
 .PHONY: test-static

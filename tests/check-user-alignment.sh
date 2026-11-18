@@ -1,5 +1,5 @@
 #!/bin/sh
-# Runs INSIDE alpine:3.23 and checks lib-user.sh. /lib-user.sh is mounted in.
+# Runs INSIDE alpine:$ALPINE_VERSION and checks lib-user.sh. /lib-user.sh is mounted in.
 set -u
 PASS=0; FAIL=0
 

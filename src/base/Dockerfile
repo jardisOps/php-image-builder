@@ -167,6 +167,10 @@ ENV APP_USER=appuser \
 # require it; the entrypoint itself no longer needs it (POSIX sh).
 # INSTALL_DB_CLIENTS applies to all targets from here on.
 #
+# shadow also brings setuid/setgid programs (passwd, chsh, gpasswd, ...). The
+# container never needs them — the entrypoint runs usermod/groupmod as root —
+# and they are a local privilege-escalation surface, so the bits are removed.
+#
 # SC2086 as above: $PKGS is a package list and must be word-split.
 # hadolint ignore=SC2086
 RUN set -eux; \
@@ -177,6 +181,7 @@ RUN set -eux; \
     case ",${INSTALL_DB_CLIENTS}," in *,postgres,*) PKGS="$PKGS postgresql-client";; esac; \
     case ",${INSTALL_DB_CLIENTS}," in *,sqlite,*) PKGS="$PKGS sqlite";; esac; \
     apk add --no-cache $PKGS; \
+    find / -xdev -type f \( -perm -4000 -o -perm -2000 \) -exec chmod u-s,g-s {} +; \
     rm -rf /var/cache/apk/* /tmp/*; \
     cp /usr/local/etc/php/php.ini-production /usr/local/etc/php/php.ini
 

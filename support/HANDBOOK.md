@@ -216,6 +216,17 @@ takes the whole container down when either process dies, and an internal
 health server on `127.0.0.1:8081` proxies to FPM's `/ping` so the image
 healthcheck proves the full nginx → fpm chain without any application code.
 
+FastCGI has no authentication, so whoever reaches the pool's port can drive
+PHP directly, past nginx. The pool's listen address therefore follows the
+target (`FPM_LISTEN`, set in the target's Dockerfile, not in `.env`):
+
+| Target | `FPM_LISTEN` | Why |
+|---|---|---|
+| `fpm` | `9000` (all interfaces) | nginx runs in its own container and reaches the pool over the network. Restrict port 9000 at the network level — in Kubernetes a `NetworkPolicy` that admits only the nginx pod; this also covers FPM's `/status` |
+| `web` | `127.0.0.1:9000` | nginx sits in the same container; no neighbouring container or pod reaches the pool |
+
+`test-hardening` measures both from a separate container.
+
 All template variables carry an `NGINX_` prefix — they live in the same
 environment as the image's own PHP/build variables (`APP_ROOT` among them),
 and the prefix keeps the two namespaces from colliding.
@@ -276,14 +287,14 @@ make test-all                     # PHP_VERSION from .env
 make test-all PHP_VERSION=8.5     # check a different version
 ```
 
-Fourteen stages, ordered by runtime — whatever needs no image runs first:
+Fifteen stages, ordered by runtime — whatever needs no image runs first:
 
 | Stage | Scope |
 |---|---|
 | `test-lint` | hadolint over four Dockerfiles, shellcheck over all shell files |
 | `test-bake` | thirteen cases against the resolved bake definition: `base`/`fpm` dependency chains, tag set, `base` is not published |
 | `test-phpini` | 34 cases against the profile library, without a container |
-| `test-user` | 27 cases against the UID/GID library, in `alpine:3.23` |
+| `test-user` | 27 cases against the UID/GID library, in `alpine:$ALPINE_VERSION` |
 | `test-boot` | `cli` starts, `fpm` becomes healthy, git trusts `/app` (`safe.directory`) |
 | `test-labels` | seven cases per image: the OCI labels, inherited via `FROM base` |
 | `test-extensions` | 21 extensions in `cli` **and** `fpm` |
@@ -293,6 +304,7 @@ Fourteen stages, ordered by runtime — whatever needs no image runs first:
 | `test-opcache` | 14 cases, including revalidation in a running FPM |
 | `test-nginx` | 55 cases against the unmodified official nginx image, in two instances: defaults only / everything overridden |
 | `test-web` | four cases against the combined `web` image: healthy chain, PHP answers through nginx → fpm, a dead php-fpm or nginx takes the container down |
+| `test-hardening` | five cases: no setuid/setgid file in `cli`, `fpm` and `web`; the `web` pool is not reachable from a neighbouring container, the `fpm` pool is (positive control) |
 | `test-demo` | 21 cases against the running demo stack, including residue-free teardown |
 
 The scripts live in `tests/` and also run individually, without make. Test images
@@ -390,7 +402,7 @@ property of the arriving run, not of the one being cancelled.
 `test-static` and `test-image-suite` (`support/makefiles/test.mk`) split
 `make test-all` into its version-independent and per-version halves so the
 former doesn't rerun in every matrix job. Locally, `make test-all` still runs
-all fourteen stages in one go.
+all fifteen stages in one go.
 
 **Trivy blocks** on CRITICAL/HIGH **with an available fix** (`ignore-unfixed`).
 Such a finding means our image is behind the patch level — so the gate is
@@ -524,4 +536,6 @@ can run into without warning.
 | **`INSTALL_DB_CLIENTS` applies to both targets** | one switch, not one per image |
 | **`STOPSIGNAL` in the cli image is `SIGTERM`** | the fpm base image passes down `SIGQUIT`, which a pcntl worker loop does not listen for |
 | **`EXPOSE 9000` also appears in the cli image** | inherited metadata without effect; Docker has no "unexpose" |
+| **No setuid/setgid programs** (`passwd`, `chsh`, `gpasswd`, … are present but without the bit) | `shadow` is only there for `usermod`/`groupmod`, which the entrypoint runs as root; the bits would be a local privilege-escalation path. Changing a password inside the container as a non-root user therefore does not work |
+| **php-fpm in `phpweb` listens on loopback only** | see [nginx template](#nginx-template-instead-of-an-nginx-image): FastCGI has no authentication. Whoever needs the pool from outside uses `phpfpm` |
 | **There is no `headgent/nginx`** | the replacement is the template in this repository plus the unmodified official image |
