@@ -40,6 +40,22 @@ with the same tag set.
 - **FPM pool from ENV** (fpm/web): `FPM_PM*` variables generate the pool at
   start; `/ping`→pong and `/status` are always on.
 
+## Security posture (what a project can rely on)
+
+- **FastCGI exposure differs by image.** `phpweb`: php-fpm listens on
+  `127.0.0.1:9000` only — nothing outside the container reaches the pool.
+  `phpfpm`: listens on all interfaces (the sidecar nginx needs it); FastCGI
+  has no authentication, so restrict port 9000 at the network level (K8s
+  `NetworkPolicy` admitting only the nginx pod).
+- **No setuid/setgid binaries** in any image; changing a password inside the
+  container as non-root does not work by design.
+- **Production needs `APP_ENV=prod` explicitly** — the images ship with
+  `dev`. `prod` with active Xdebug aborts startup.
+- No `sshd`; `expose_php=Off`, `server_tokens off`; CI blocks publishing on
+  fixable CRITICAL/HIGH CVEs (Trivy). Alpine/PHP patches arrive with each
+  rebuild (merge to `main`, monthly schedule) — pin `:<ver>-<date>` and bump
+  it to take them.
+
 ## nginx: one template, two consumption modes
 
 The parameterised vhost template ships in `src/shared/nginx/` (template +

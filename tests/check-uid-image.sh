@@ -3,8 +3,8 @@
 # check-uid-image.sh <cli-image> — UID/GID alignment on the built image
 # ---------------------------------------------------------------------------
 # Distinction from check-user-alignment.sh: that one checks lib-user.sh in
-# isolation, in alpine:3.23, against directories created inside the
-# container. Here the same logic runs in the REAL image against REAL Docker
+# isolation, in alpine:$ALPINE_VERSION, against directories created inside
+# the container. Here the same logic runs in the REAL image against REAL Docker
 # volumes.
 #
 # This holds up on macOS too: a named volume lives in the Linux VM and
@@ -44,7 +44,7 @@ bad() { echo "  ❌ $1"; FAIL=$((FAIL + 1)); }
 prepare_volume() { # [owner]
   docker volume rm -f "$VOLUME" >/dev/null 2>&1 || true
   docker volume create "$VOLUME" >/dev/null
-  docker run --rm -v "$VOLUME:/app" alpine:3.23 \
+  docker run --rm -v "$VOLUME:/app" "alpine:${ALPINE_VERSION:?ALPINE_VERSION is not set (normally exported from .env by make)}" \
     sh -c 'touch /app/.keep'"${1:+ && chown -R $1 /app}"
 }
 

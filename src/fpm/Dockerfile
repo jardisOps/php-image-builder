@@ -36,6 +36,11 @@ ENV FPM_PM=${FPM_PM} \
     FPM_PM_MAX_SPARE_SERVERS=${FPM_PM_MAX_SPARE_SERVERS} \
     FPM_PM_MAX_REQUESTS=${FPM_PM_MAX_REQUESTS}
 
+# All interfaces: in the sidecar pattern nginx runs in its own container and
+# reaches the pool over the network. Restrict access there at the network
+# level (e.g. a K8s NetworkPolicy) — FastCGI itself has no authentication.
+ENV FPM_LISTEN=9000
+
 # cgi-fcgi drives the healthcheck below. Deliberately only here, not in base —
 # cli does not need it.
 RUN apk add --no-cache fcgi && rm -rf /var/cache/apk/*
