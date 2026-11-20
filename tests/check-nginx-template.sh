@@ -23,7 +23,7 @@
 set -eu
 
 FPM_IMAGE=${1:?Usage: check-nginx-template.sh <fpm-image> [nginx-image]}
-NGINX_IMAGE=${2:-nginx:1.28-alpine}
+NGINX_IMAGE=${2:-nginx:1.30-alpine}
 
 REPO_ROOT=$(CDPATH='' cd -- "$(dirname -- "$0")/.." && pwd)
 TEMPLATES="$REPO_ROOT/src/shared/nginx/templates"
