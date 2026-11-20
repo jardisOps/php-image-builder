@@ -23,7 +23,7 @@ start.
 
 > **The detailed version lives in the [handbook](support/HANDBOOK.md)** — every
 > target, all `.env` groups, the `APP_ENV` profiles, runtime UID/GID, the nginx
-> template, the fifteen test stages and CI.
+> template, running without root, the sixteen test stages and CI.
 
 ---
 
@@ -42,7 +42,7 @@ start.
 make help          # every target with its help text
 make info          # the resolved build configuration
 make build         # cli + fpm + web for PHP_VERSION from .env, loaded locally
-make test-all      # the full test run (fifteen stages)
+make test-all      # the full test run (sixteen stages)
 make demo-up       # demo stack: mariadb + fpm + official nginx
 ```
 
@@ -54,7 +54,7 @@ make demo-up       # demo stack: mariadb + fpm + official nginx
 |---|---|
 | `make build` / `build-all` | one PHP version from `.env` / the whole matrix |
 | `make bake-print` | the resolved bake definition, builds nothing |
-| `make test-all` | the test run, fifteen stages — stages can be run individually |
+| `make test-all` | the test run, sixteen stages — stages can be run individually |
 | `make demo-up` / `demo-down` | demo stack on `http://localhost:8088` |
 | `make disk-usage` | what Docker occupies and how much of it comes from this repo — **deletes nothing** |
 | `make clean` / `clean-all` | clean up; `clean-system` is global and guarded by `CONFIRM=ja` |
@@ -105,8 +105,8 @@ php-image-builder/
 │   ├── base/Dockerfile
 │   ├── cli/Dockerfile            # four effective lines on FROM base
 │   ├── fpm/                      # Dockerfile + fpm-pool.sh
-│   └── web/                      # Dockerfile + nginx rendering + s6 service dirs
-├── tests/                        # twelve check scripts, runnable individually
+│   └── web/                      # Dockerfile + runtime dir + nginx rendering + s6 service dirs
+├── tests/                        # fifteen check scripts, runnable individually
 │   └── demo/                     # demo stack and its sample application
 ├── support/
 │   ├── makefiles/                # the make modules
@@ -157,8 +157,12 @@ tag set and architectures.
 - **`make build-all` needs disk space** — bake builds all three PHP versions
   simultaneously.
 - **`make test-all` requires `--privileged`** — `test-uid-linux` starts a
-  `docker:28-dind` container. Without that capability the remaining thirteen stages
-  can still be run individually.
+  `docker:28-dind` container. Without that capability the remaining stages can
+  still be run individually.
+- **`phpweb` also runs without root** — under Pod Security "restricted", on a
+  read-only root filesystem with three writable paths (`/tmp`,
+  `/home/appuser/php-config`, `/run/web`). The root start stays the default;
+  see [Running without root](support/HANDBOOK.md#running-without-root).
 - **The demo stack listens on port 8088**, the test run additionally uses 18080.
 
 The complete list is in the [handbook](support/HANDBOOK.md).

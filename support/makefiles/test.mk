@@ -43,6 +43,7 @@ SHELL_FILES = src/shared/entrypoint/entrypoint.sh \
               src/shared/entrypoint/lib-phpini.sh \
               src/shared/php-extensions.env \
               src/fpm/fpm-pool.sh \
+              src/web/15-web-runtime.sh \
               src/web/20-nginx-config.sh \
               src/web/s6/php-fpm/run src/web/s6/php-fpm/finish \
               src/web/s6/nginx/run src/web/s6/nginx/finish \
@@ -141,6 +142,10 @@ test-hardening: test-images ## Attack surface: no setuid/setgid files, web FastC
 	@bash $(TESTS_DIR)/check-hardening.sh $(CLI_TEST_IMAGE) $(FPM_TEST_IMAGE) $(WEB_TEST_IMAGE)
 .PHONY: test-hardening
 
+test-restricted: test-images ## web image without root: restricted conditions, read-only root filesystem, log switch
+	@bash $(TESTS_DIR)/check-restricted.sh $(WEB_TEST_IMAGE)
+.PHONY: test-restricted
+
 test-boot: test-images ## Start cli and fpm; fpm becomes healthy (FastCGI ping)
 	@echo ">>> Starting cli and fpm"
 	@docker run --rm --entrypoint php $(CLI_TEST_IMAGE) --version >/dev/null \
@@ -173,7 +178,7 @@ test-boot: test-images ## Start cli and fpm; fpm becomes healthy (FastCGI ping)
 # CLI/FPM_TEST_IMAGE, no test-images dependency). TEST_IMAGE_STAGES is
 # everything else, unchanged in order.
 TEST_STATIC_STAGES = test-lint test-bake
-TEST_IMAGE_STAGES  = test-phpini test-user test-boot test-labels test-extensions test-app-env test-uid test-uid-linux test-opcache test-nginx test-web test-hardening test-demo
+TEST_IMAGE_STAGES  = test-phpini test-user test-boot test-labels test-extensions test-app-env test-uid test-uid-linux test-opcache test-nginx test-web test-hardening test-restricted test-demo
 
 test-static: $(TEST_STATIC_STAGES) ## Version-independent checks only (no image)
 .PHONY: test-static

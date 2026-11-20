@@ -2,7 +2,7 @@
 # ---------------------------------------------------------------------------
 # check-hardening.sh <cli-image> <fpm-image> <web-image> - attack surface
 # ---------------------------------------------------------------------------
-# Two claims, both measured on the running image:
+# Three claims, all measured on the running image:
 #
 #   1. No setuid/setgid file in any published image (base strips them;
 #      a target that installs packages later must not bring new ones).
@@ -10,6 +10,8 @@
 #      container, the fpm image's pool IS (sidecar pattern). The fpm half is
 #      the positive control — it proves the probe can succeed at all, so a
 #      refused connection on web is not just a broken probe.
+#   3. Under the root start the worker identity cannot modify the runtime
+#      state the root processes of the web image run on.
 set -eu
 
 CLI_IMAGE=${1:?Usage: check-hardening.sh <cli-image> <fpm-image> <web-image>}
@@ -82,6 +84,20 @@ if wait_healthy "$C_WEB"; then
     *pong*) bad "web: pool reachable from another container — FastCGI exposed beyond loopback" ;;
     *)      ok "web: pool not reachable from another container" ;;
   esac
+
+  # Under the root start s6 runs as root on a scan directory below
+  # WEB_RUNTIME_DIR. The worker identity must not be able to replace it.
+  # The /tmp write is the positive control for the probe itself.
+  PROBE=$(docker exec --user appuser "$C_WEB" sh -c '
+    touch /tmp/probe && echo control-ok
+    mv "$WEB_RUNTIME_DIR/s6" "$WEB_RUNTIME_DIR/s6.moved" 2>/dev/null && echo scan-dir-moved
+    touch "$WEB_RUNTIME_DIR/s6/probe" 2>/dev/null && echo scan-dir-written
+    touch "$WEB_RUNTIME_DIR/nginx/default.conf" 2>/dev/null && echo vhost-written' || true)
+  if [ "$PROBE" = control-ok ]; then
+    ok "web: the worker identity cannot modify the s6 scan directory or the vhost (root start)"
+  else
+    bad "web: the worker identity can modify runtime state of root processes: $(echo "$PROBE" | tr '\n' ' ')"
+  fi
 else
   bad "web did not become healthy"; docker logs "$C_WEB" 2>&1 | tail -20
 fi
