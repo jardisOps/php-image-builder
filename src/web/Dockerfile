@@ -39,10 +39,41 @@ COPY src/web/nginx-health.conf /etc/nginx/http.d/health.conf
 # collects everything from entrypoint.d without knowing this target.
 COPY src/web/20-nginx-config.sh /usr/local/lib/entrypoint.d/20-nginx-config.sh
 
-# s6 service directories: one per process, plus the svscan control dir.
+# s6 service definitions: one per process, plus the svscan control dir.
 # A finish script tells s6-svscan to take the container down when either
 # process dies — no half-alive state where nginx answers 502 forever.
-COPY src/web/s6 /etc/s6
+# They are the read-only originals; s6 runs on the scan directory that
+# 15-web-runtime.sh assembles from them under WEB_RUNTIME_DIR.
+COPY src/web/s6 /etc/s6.d
+
+# Everything this target writes at start or while running lives under this
+# one directory: the rendered vhost, nginx pid/logs/temp files and the s6
+# scan directory. The fixed paths nginx and s6 expect become symlinks into
+# it, so the image runs without root and on a read-only root filesystem with
+# a single writable mount here. Not a tunable: the symlinks are baked.
+ENV WEB_RUNTIME_DIR=/run/web
+
+# /var/lib/nginx is 0750 nginx:nginx in the package; o+x lets a non-root
+# identity reach the tmp and logs links below it without owning anything.
+RUN set -eux; \
+    mkdir -p "${WEB_RUNTIME_DIR}"; \
+    chown "${APP_USER}:${APP_USER}" "${WEB_RUNTIME_DIR}"; \
+    rm -rf /run/nginx /var/log/nginx /var/lib/nginx/tmp /etc/nginx/http.d/default.conf; \
+    ln -s "${WEB_RUNTIME_DIR}/nginx/run" /run/nginx; \
+    ln -s "${WEB_RUNTIME_DIR}/nginx/log" /var/log/nginx; \
+    ln -s "${WEB_RUNTIME_DIR}/nginx/tmp" /var/lib/nginx/tmp; \
+    ln -s "${WEB_RUNTIME_DIR}/nginx/default.conf" /etc/nginx/http.d/default.conf; \
+    ln -s "${WEB_RUNTIME_DIR}/s6" /etc/s6; \
+    chmod o+x /var/lib/nginx
+
+# Prepares WEB_RUNTIME_DIR before the pool and the vhost are generated
+# (lexical order: 10-fpm-pool, 15-web-runtime, 20-nginx-config).
+COPY src/web/15-web-runtime.sh /usr/local/lib/entrypoint.d/15-web-runtime.sh
+
+# Where nginx writes its access and error log: "file" keeps them under
+# /var/log/nginx, "stdio" sends them to the container's stdout/stderr — the
+# choice for orchestrators that collect logs from there.
+ENV NGINX_LOG_OUTPUT=file
 
 # In one image the upstream is always local; overrides the asset default
 # ("app") the sidecar pattern uses. An explicit ENV wins over the defaults

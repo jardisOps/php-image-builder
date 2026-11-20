@@ -10,12 +10,16 @@
 # the variables named in the defaults file are substituted, so nginx runtime
 # variables ($uri, $realpath_root, ...) pass through untouched.
 #
+# NGINX_CONF_OUT and NGINX_LOG_DIR are links into WEB_RUNTIME_DIR, prepared
+# by 15-web-runtime.sh.
+#
 # Expected from the core: log_info/die
 # ---------------------------------------------------------------------------
 
 NGINX_TEMPLATE='/etc/nginx/templates/default.conf.template'
 NGINX_DEFAULTS='/etc/nginx/nginx-defaults.env'
 NGINX_CONF_OUT='/etc/nginx/http.d/default.conf'
+NGINX_LOG_DIR='/var/log/nginx'
 
 [ -f "$NGINX_TEMPLATE" ] || die "nginx template missing: $NGINX_TEMPLATE"
 [ -f "$NGINX_DEFAULTS" ] || die "nginx defaults missing: $NGINX_DEFAULTS"
@@ -38,6 +42,20 @@ while IFS= read -r _ng_line; do
 done < "$NGINX_DEFAULTS"
 
 envsubst "$_ng_vars" < "$NGINX_TEMPLATE" > "$NGINX_CONF_OUT"
+
+# Log destination. nginx opens the two files below in every case; "stdio"
+# turns them into links to the container's own streams, the mechanism the
+# official nginx image uses.
+case "${NGINX_LOG_OUTPUT:?is not set — this value must come as an ENV from the image (src/web/Dockerfile).}" in
+    file) ;;
+    stdio)
+        ln -sf /dev/stdout "$NGINX_LOG_DIR/access.log" \
+            || die "Could not link $NGINX_LOG_DIR/access.log to stdout."
+        ln -sf /dev/stderr "$NGINX_LOG_DIR/error.log" \
+            || die "Could not link $NGINX_LOG_DIR/error.log to stderr."
+        ;;
+    *) die "NGINX_LOG_OUTPUT='$NGINX_LOG_OUTPUT' is invalid. Allowed: file, stdio." ;;
+esac
 
 # Fail at start, not at first request: a template/values mismatch must abort
 # the container visibly (no silent swallowing).
