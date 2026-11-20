@@ -521,6 +521,8 @@ Such a finding means our image is behind the patch level — so the gate is
 actionable. Findings **without** a fix sit in the official base image and cannot
 be fixed by us; they would keep the pipeline permanently red and are therefore
 reported in full in the job summary instead of blocking.
+The gate runs against all three images; `web` has its own because it adds
+nginx and s6 on top of `fpm`. The full report is taken from `web`, the superset.
 
 It scans the **test** image, not the pushed one. That is a second object built
 from the same source — amd64 only, no attestations, its own name — whose
