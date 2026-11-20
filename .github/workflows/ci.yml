@@ -237,18 +237,29 @@ jobs:
           ignore-unfixed: true
           exit-code: '1'
 
+      # web carries packages the other two do not (nginx, s6,
+      # gettext-envsubst), so it gets a gate of its own.
+      - name: Trivy — blocking gate, web
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          image-ref: php-image-builder-test/phpweb:${{ matrix.php_version }}
+          format: table
+          severity: CRITICAL,HIGH
+          ignore-unfixed: true
+          exit-code: '1'
+
       # The rest — CVEs without an available fix. Doesn't block, but doesn't
       # disappear either: `if: always()` makes sure this report still runs
       # even if the gate above already failed.
       #
-      # Only fpm, not cli too: both images are identical except for one
-      # metadata layer (ENV, STOPSIGNAL, HEALTHCHECK, CMD), so a second report
-      # would list the same findings. The gate above still runs against both.
+      # web, not cli or fpm: it builds on fpm, and cli differs from fpm by one
+      # metadata layer only (ENV, STOPSIGNAL, HEALTHCHECK, CMD), so its report
+      # covers all three. The gate above still runs against each.
       - name: Trivy — report on ALL CRITICAL/HIGH (including unfixable)
         if: always()
         uses: aquasecurity/trivy-action@v0.36.0
         with:
-          image-ref: php-image-builder-test/phpfpm:${{ matrix.php_version }}
+          image-ref: php-image-builder-test/phpweb:${{ matrix.php_version }}
           format: table
           severity: CRITICAL,HIGH
           exit-code: '0'

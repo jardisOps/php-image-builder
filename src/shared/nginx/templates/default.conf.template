@@ -12,7 +12,7 @@
 #
 #   services:
 #     web:
-#       image: nginx:1.28-alpine                   # NGINX_VERSION from .env
+#       image: nginx:1.30-alpine                   # NGINX_VERSION from .env
 #       env_file:
 #         - ./src/shared/nginx/nginx-defaults.env       # defaults
 #       environment:

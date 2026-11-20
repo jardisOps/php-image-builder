@@ -8,6 +8,7 @@ conditions.
 - [Configuration](#configuration)
 - [`APP_ENV` — one switch for the environment](#app_env--one-switch-for-the-environment)
 - [Runtime UID/GID](#runtime-uidgid)
+- [Running without root](#running-without-root)
 - [nginx template instead of an nginx image](#nginx-template-instead-of-an-nginx-image)
 - [Demo stack](#demo-stack)
 - [The test run](#the-test-run)
@@ -199,6 +200,116 @@ route provably does not work there.
 
 ---
 
+## Running without root
+
+The root start described above stays the default and is what local development
+uses. `phpweb` has a second operating mode next to it: started under a non-root
+identity, nothing in the container runs as root — s6, the nginx master and the
+php-fpm master included. This is what a Kubernetes namespace enforcing Pod
+Security **"restricted"** requires. The entrypoint needs no switch for it; it
+recognises the mode by its own UID and then skips every adjustment.
+
+```yaml
+# Pod
+securityContext:
+  runAsNonRoot: true
+  runAsUser: 1000          # appuser; the image's USER stays root, so a number is required
+  runAsGroup: 1000
+  fsGroup: 1000
+  seccompProfile: { type: RuntimeDefault }
+# Container
+securityContext:
+  allowPrivilegeEscalation: false
+  capabilities: { drop: [ALL] }
+  readOnlyRootFilesystem: true
+```
+
+The `docker run` equivalent is `--user 1000:1000 --cap-drop ALL
+--security-opt no-new-privileges`, plus `--read-only`.
+
+**Port 80 stays.** nginx binds it without root and without any capability as
+long as the runtime sets `net.ipv4.ip_unprivileged_port_start=0` for the
+container. Docker does (since 20.10); K3s v1.36.6 does (containerd
+`enable_unprivileged_ports = true`, measured under "restricted"). Where it is
+not set, the start aborts with `bind() to 0.0.0.0:80 failed (13: Permission
+denied)` — visibly, not half-alive.
+
+### Writable paths on a read-only root filesystem
+
+| Path | Holds | Needed by |
+|---|---|---|
+| `/tmp` | PHP temp files, uploads in transit, sessions | every target |
+| `/home/appuser/php-config` | the runtime INI and the FPM pool file, generated at start | every target |
+| `/run/web` | rendered nginx vhost, nginx pid/logs/temp files, the s6 scan directory | `phpweb` only |
+
+Everything `phpweb` writes besides the two shared paths lives under `/run/web`
+(`WEB_RUNTIME_DIR`); `/etc/s6`, `/run/nginx`, `/var/log/nginx`,
+`/var/lib/nginx/tmp` and `/etc/nginx/http.d/default.conf` are links into it. A
+missing mount aborts the start with an error naming the path.
+
+Without root there is one identity in the container: s6, nginx and the PHP
+worker share it, and with it the write access to `/run/web`. The separation
+between a root master and an unprivileged worker exists only under the root
+start.
+
+A Kubernetes `emptyDir` works as is. A Docker `--tmpfs` over the two image
+directories needs an owner, because it takes over the directory's mode but
+belongs to root: `--tmpfs /run/web:uid=1000,gid=1000` (same for
+`php-config`).
+
+### nginx logs: `NGINX_LOG_OUTPUT`
+
+| Value | Access and error log |
+|---|---|
+| `file` (default) | `/var/log/nginx/access.log` and `error.log`, as before |
+| `stdio` | the container's stdout and stderr — what `docker logs` and `kubectl logs` read |
+
+Any other value aborts the start. With `file`, the logs grow inside `/run/web`
+until the container is replaced; in a cluster `stdio` is the right choice.
+
+### Code the worker cannot modify
+
+The base image creates `/app` owned by `appuser`. A deploy image that only
+copies files into it leaves that directory writable for the PHP worker, even
+with root-owned files. Both lines are needed:
+
+```dockerfile
+COPY --chown=root:root . /app
+RUN chown root:root /app
+```
+
+Under the root start the entrypoint would hand a root-owned `/app` back to
+`appuser` (see [Runtime UID/GID](#runtime-uidgid)); the protection therefore
+holds in the non-root mode, which is where a deploy image runs.
+
+### Another command on the same image
+
+A worker, a cron job or a migration step usually runs on the same deploy image
+with a different command. Pass it as **arguments** (Kubernetes `args`, the
+command after the image name in `docker run`), not as a replaced entrypoint
+(Kubernetes `command`, `--entrypoint`):
+
+| | as arguments | entrypoint replaced |
+|---|---|---|
+| runtime INI (`memory_limit`, OPcache, …) | applied | **missing** — PHP defaults, e.g. `memory_limit=128M` |
+| `APP_ENV` profile | applied | **not applied** — Xdebug stays loaded even with `APP_ENV=prod` |
+| nginx vhost | rendered and checked, nginx is not started | untouched |
+| writable paths | the same three as above | none |
+
+The entrypoint adds about 20 ms to a start.
+
+### `phpfpm` and `phpcli`
+
+Both already start under a non-root identity. On a read-only root filesystem
+they need `/tmp` and `/home/appuser/php-config` writable, nothing else.
+
+`phpfpm` listens on port 9000 on every interface by design (sidecar pattern),
+and FastCGI has no authentication; `/status` is reachable through the same
+port. In a cluster, restrict 9000 to the web server's pods with a
+NetworkPolicy.
+
+---
+
 ## nginx template instead of an nginx image
 
 `src/shared/nginx/templates/default.conf.template` runs with the **unmodified**
@@ -287,7 +398,7 @@ make test-all                     # PHP_VERSION from .env
 make test-all PHP_VERSION=8.5     # check a different version
 ```
 
-Fifteen stages, ordered by runtime — whatever needs no image runs first:
+Sixteen stages, ordered by runtime — whatever needs no image runs first:
 
 | Stage | Scope |
 |---|---|
@@ -304,7 +415,8 @@ Fifteen stages, ordered by runtime — whatever needs no image runs first:
 | `test-opcache` | 14 cases, including revalidation in a running FPM |
 | `test-nginx` | 55 cases against the unmodified official nginx image, in two instances: defaults only / everything overridden |
 | `test-web` | four cases against the combined `web` image: healthy chain, PHP answers through nginx → fpm, a dead php-fpm or nginx takes the container down |
-| `test-hardening` | five cases: no setuid/setgid file in `cli`, `fpm` and `web`; the `web` pool is not reachable from a neighbouring container, the `fpm` pool is (positive control) |
+| `test-hardening` | six cases: no setuid/setgid file in `cli`, `fpm` and `web`; the `web` pool is not reachable from a neighbouring container, the `fpm` pool is (positive control); under the root start the worker identity cannot modify the s6 scan directory or the vhost |
+| `test-restricted` | 14 cases against `web` without root: healthy with no capabilities and no root process, `/health` on port 80, code under `/app` not modifiable, read-only root filesystem with the three writable paths, abort without `/run/web`, `NGINX_LOG_OUTPUT`, another command as arguments |
 | `test-demo` | 21 cases against the running demo stack, including residue-free teardown |
 
 The scripts live in `tests/` and also run individually, without make. Test images
@@ -402,13 +514,15 @@ property of the arriving run, not of the one being cancelled.
 `test-static` and `test-image-suite` (`support/makefiles/test.mk`) split
 `make test-all` into its version-independent and per-version halves so the
 former doesn't rerun in every matrix job. Locally, `make test-all` still runs
-all fifteen stages in one go.
+all sixteen stages in one go.
 
 **Trivy blocks** on CRITICAL/HIGH **with an available fix** (`ignore-unfixed`).
 Such a finding means our image is behind the patch level — so the gate is
 actionable. Findings **without** a fix sit in the official base image and cannot
 be fixed by us; they would keep the pipeline permanently red and are therefore
 reported in full in the job summary instead of blocking.
+The gate runs against all three images; `web` has its own because it adds
+nginx and s6 on top of `fpm`. The full report is taken from `web`, the superset.
 
 It scans the **test** image, not the pushed one. That is a second object built
 from the same source — amd64 only, no attestations, its own name — whose
@@ -505,8 +619,8 @@ That is not a design flaw but an operating condition — if in doubt run
 `make build` per version, or `make build-cache-delete` beforehand.
 
 **`make test-all` requires `--privileged`.** The `test-uid-linux` stage starts a
-`docker:28-dind` container. Without that capability the remaining twelve stages
-can still be run individually.
+`docker:28-dind` container. Without that capability the remaining stages can
+still be run individually.
 
 **The demo stack listens on port 8088**, not 8080 — that one is frequently taken
 on development machines. The test run additionally uses 18080.
@@ -517,7 +631,8 @@ fails on name resolution rather than on the template. That is why `test-nginx`
 checks against a real stack.
 
 **Two NOTICEs when starting with `--user`** come from the `www.conf` of the
-official base image and are purely informational.
+official base image and are purely informational. `phpweb` adds an nginx
+warning of the same kind: the `user` directive is ignored without root.
 
 ---
 
@@ -538,4 +653,5 @@ can run into without warning.
 | **`EXPOSE 9000` also appears in the cli image** | inherited metadata without effect; Docker has no "unexpose" |
 | **No setuid/setgid programs** (`passwd`, `chsh`, `gpasswd`, … are present but without the bit) | `shadow` is only there for `usermod`/`groupmod`, which the entrypoint runs as root; the bits would be a local privilege-escalation path. Changing a password inside the container as a non-root user therefore does not work |
 | **php-fpm in `phpweb` listens on loopback only** | see [nginx template](#nginx-template-instead-of-an-nginx-image): FastCGI has no authentication. Whoever needs the pool from outside uses `phpfpm` |
+| **`phpweb` writes only below `/run/web`** | `/etc/s6`, `/run/nginx`, `/var/log/nginx` and the rendered vhost are links into it, so one writable mount is enough on a read-only root filesystem. The s6 service definitions themselves live in `/etc/s6.d`; a derived image that adds a service puts its directory there. Under the root start `/run/web` belongs to root, so the worker cannot touch what s6 and nginx run on |
 | **There is no `headgent/nginx`** | the replacement is the template in this repository plus the unmodified official image |
